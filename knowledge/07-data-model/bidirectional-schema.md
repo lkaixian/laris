@@ -2,7 +2,7 @@
 type: data-model
 retrieved: 2026-10-22
 updated: 2026-10-22
-status: proposed (design only, not yet run against Postgres)
+status: db/schema.sql loads cleanly on Postgres (PGlite); triggers, transitions seed and staff role still to write
 confidence: design decision, no external facts
 ---
 # Bidirectional quote schema (Postgres)

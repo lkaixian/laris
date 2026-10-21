@@ -1,6 +1,6 @@
 -- ENUMS
 CREATE TYPE doc_direction AS ENUM ('in','out');
-CREATE TYPE doc_kind      AS ENUM ('quotation','receipt','invoice');   -- in: quotation|receipt|invoice ; out: quotation
+CREATE TYPE doc_kind      AS ENUM ('quotation','receipt','invoice','estimate','proforma');   -- in: quotation|receipt|invoice ; out: quotation
 CREATE TYPE doc_status AS ENUM (
   -- shared / entry
   'received','draft',
@@ -11,6 +11,7 @@ CREATE TYPE doc_status AS ENUM (
   -- shared terminal
   'expired','rejected','cancelled','superseded'
 );
+CREATE TYPE field_type   AS ENUM ('text','number','integer','date','select','boolean');
 CREATE TYPE party_role   AS ENUM ('supplier','customer');
 CREATE TYPE user_role    AS ENUM ('owner','staff');
 CREATE TYPE channel_t    AS ENUM ('telegram','whatsapp','web','upload');
@@ -24,7 +25,11 @@ CREATE TABLE tenants (
   trade_template text NOT NULL,            -- filename key of config/templates/<key>.yaml, validated in app at startup
   currency char(3) NOT NULL DEFAULT 'MYR',
   min_margin_pct numeric(5,2) NOT NULL,    -- margin guard floor (owner-set)
-  max_discount_pct numeric(5,2) NOT NULL DEFAULT 5.00
+  max_discount_pct numeric(5,2) NOT NULL DEFAULT 5.00,
+  drift_alert_pct numeric(5,2) NOT NULL DEFAULT 5.00,   -- cost move that raises a stale-cost alert
+  ssm_no text, address text, bank_details text,         -- issuer identity for the quote PDF
+  sst_registered boolean NOT NULL DEFAULT false,        -- SST shown only if registered
+  sst_no text
 );
 CREATE TABLE users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -39,6 +44,7 @@ CREATE TABLE parties (
   role party_role NOT NULL,
   name text NOT NULL,
   contact text,
+  ssm_no text, sst_no text, address text, attention text,
   UNIQUE (tenant_id, role, name)
 );
 
@@ -63,6 +69,15 @@ CREATE TABLE documents (
   issued_on date,                           -- date on the paper; becomes cost_items.effective_date
   valid_until date,                         -- drives 'expired'
   currency char(3) NOT NULL DEFAULT 'MYR',
+  customer_ref text,                        -- customer PO / reference
+  deposit_pct numeric(5,2) CHECK (deposit_pct BETWEEN 0 AND 100),
+  payment_terms text, lead_time_days int CHECK (lead_time_days >= 0),
+  terms_text text,                          -- warranty, inclusions, exclusions
+  tax_inclusive boolean,                    -- in docs: do stated prices include SST? NULL = unknown
+  tax_total numeric(14,4),
+  stated_total numeric(14,4),               -- total printed on an 'in' paper, for OCR cross-check
+  decision_reason text,                     -- why accepted/rejected/lost
+  extraction jsonb,                         -- raw LLM/OCR output incl. prices; ai_actions stays price-free
   source_channel channel_t,
   source_object_key text,                   -- Replit Object Storage key (photo/pdf/audio)
   parent_id uuid REFERENCES documents,      -- out: revision of; in: re-quote of
@@ -72,7 +87,7 @@ CREATE TABLE documents (
   sent_at timestamptz, read_at timestamptz, decided_at timestamptz,
   created_by uuid REFERENCES users,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT kind_by_direction CHECK (direction='in' OR kind='quotation'),
+  CONSTRAINT kind_by_direction CHECK (direction='in' OR kind IN ('quotation','estimate','proforma')),
   CONSTRAINT approval_pair CHECK ((approved_by IS NULL) = (approved_at IS NULL)),
   CONSTRAINT out_sent_needs_approval CHECK (direction='in' OR status NOT IN ('approved','sent','read','job_created') OR approved_by IS NOT NULL),
   CONSTRAINT in_has_issue_date CHECK (direction='out' OR status IN ('received','parsed') OR issued_on IS NOT NULL),
@@ -87,14 +102,53 @@ CREATE TABLE document_lines (
   line_no int NOT NULL,
   description text NOT NULL,
   item_key text,                            -- normalised material/service key, e.g. 'pla_1kg_black'; nullable until reviewed
-  qty numeric(14,3) NOT NULL CHECK (qty > 0),
+  qty numeric(14,3) CHECK (qty > 0),        -- NULL allowed only while needs_review
   uom text NOT NULL,
   unit_price numeric(14,4) CHECK (unit_price >= 0),    -- in: supplier price. out: rules-engine price
   price_source price_src,                   -- out lines only
   ocr_confidence numeric(4,3),              -- in lines from OCR
   needs_review boolean NOT NULL DEFAULT false,
+  discount_pct numeric(5,2) CHECK (discount_pct BETWEEN 0 AND 100),
+  tax_rate numeric(5,2),
+  section text, is_header boolean NOT NULL DEFAULT false, is_provisional boolean NOT NULL DEFAULT false,
+  price_override_reason text,
+  attrs jsonb NOT NULL DEFAULT '{}',          -- approved trade fields (see tenant_fields)
+  attrs_unmapped jsonb NOT NULL DEFAULT '{}', -- fields seen but not approved yet
   UNIQUE (document_id, line_no),
+  CONSTRAINT qty_null_needs_review CHECK (qty IS NOT NULL OR needs_review OR is_header),
+  CONSTRAINT attrs_are_objects CHECK (jsonb_typeof(attrs)='object' AND jsonb_typeof(attrs_unmapped)='object'),
   CONSTRAINT out_price_has_source CHECK (price_source IS NULL OR unit_price IS NOT NULL)
+);
+
+CREATE INDEX document_lines_attrs_gin ON document_lines USING GIN (attrs jsonb_path_ops);
+
+-- DYNAMIC FIELDS: owner-approved registry; the AI can only propose, never alter
+CREATE TABLE tenant_fields (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants,
+  key text NOT NULL CHECK (key ~ '^[a-z][a-z0-9_]{0,40}$'),
+  label text NOT NULL,
+  type field_type NOT NULL,
+  unit text,
+  options jsonb,
+  applies_to doc_direction[] NOT NULL DEFAULT '{in,out}',
+  show_in_grid boolean NOT NULL DEFAULT true,
+  owner_only boolean NOT NULL DEFAULT false,   -- hidden from staff views
+  sort_order int NOT NULL DEFAULT 100,
+  approved_by uuid REFERENCES users,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, key)
+);
+CREATE TABLE field_proposals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants,
+  key text NOT NULL,
+  sample_values jsonb NOT NULL,
+  source_line_id uuid REFERENCES document_lines,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','ignored')),
+  decided_by uuid REFERENCES users,
+  decided_at timestamptz,
+  UNIQUE (tenant_id, key)
 );
 
 -- COST BOOK (fed ONLY by accepted 'in' lines)
@@ -209,3 +263,8 @@ LEFT JOIN LATERAL (
    WHERE c2.tenant_id=ci.tenant_id AND c2.item_key=ci.item_key AND c2.uom=ci.uom AND c2.superseded_by IS NULL
    ORDER BY effective_date DESC LIMIT 1) cur ON true
 WHERE q.direction='out';
+
+-- Long-form view of line attributes for the grid and BI-style queries
+CREATE VIEW v_line_attrs AS
+SELECT l.id AS line_id, l.document_id, a.key, a.value
+FROM document_lines l, LATERAL jsonb_each_text(l.attrs) a;

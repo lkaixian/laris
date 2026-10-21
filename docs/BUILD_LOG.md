@@ -23,3 +23,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 16 | PRD, Tech & Tools Declaration, demo script, pitch outline (38 REAL DATA placeholders to fill; no em dashes, checked by grep) | docs/ | 3a01fc5 |
 | 17 | Fixed .gitignore bug that excluded web/package.json (would have broken npm ci on Replit) | git ls-files web shows package files | 7e415fe |
 | 18 | Replit Reserved VM config, run.sh, deploy guide, real README (nothing run on Replit yet) | bash syntax check only | 2783ee6 |
+| 19 | FastAPI layer: all contract endpoints, staff scrubbing, ingest and enquiry pipelines, webhooks (fail closed), scheduler, v_quote_margin and stale view; stale alert margin_delta -400 | pytest 71 passed (PGlite socket); nothing run against real ILMU, WhatsApp, Telegram or Postgres | 951e003 |

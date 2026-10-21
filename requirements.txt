@@ -7,3 +7,7 @@ pypdf==5.1.0
 pillow
 pytesseract
 reportlab
+psycopg[binary]==3.3.6
+openpyxl==3.1.5
+APScheduler==3.11.3
+python-multipart==0.0.32

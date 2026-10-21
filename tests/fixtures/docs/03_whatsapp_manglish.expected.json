@@ -1,0 +1,30 @@
+{
+  "supplier_name": "SAMPLE Supplier B Filament Sdn Bhd",
+  "doc_no": null,
+  "issued_on": "2026-10-20",
+  "valid_until": "2026-10-31",
+  "currency": "MYR",
+  "lines": [
+    {
+      "line_no": 1,
+      "description": "PLA hitam",
+      "qty": 10,
+      "uom": "kg",
+      "unit_price": 55.0,
+      "amount": 550.0
+    },
+    {
+      "line_no": 2,
+      "description": "Skru M4",
+      "qty": 200,
+      "uom": "pcs",
+      "unit_price": 0.15,
+      "amount": 30.0
+    }
+  ],
+  "totals": {
+    "subtotal": 580.0,
+    "sst": 46.4,
+    "grand_total": 626.4
+  }
+}

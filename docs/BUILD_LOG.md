@@ -18,3 +18,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 11 | Pricing engine, margin guard, extraction validator, templates | pytest 41 passed | 029a714 |
 | 12 | React frontend draft, mock mode | npm run build passes, not viewed in browser | 7ef1fef |
 | 13 | DESIGN.md direction, contract: org branding, item_key, line_id | docs updated | f69e92a |
+| 14 | Synthetic SAMPLE quotation documents, enquiry texts, expected JSON; OCR overlap 0.98 clean, 0.88 degraded (Tesseract eng, hand-measured) | pytest tests/test_samples.py 15 passed | fad8cd4 |

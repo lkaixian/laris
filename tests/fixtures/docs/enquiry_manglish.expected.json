@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "item_key": "signboard_60x30",
+      "qty": 40,
+      "uom": "pcs"
+    },
+    {
+      "item_key": "vinyl_roll",
+      "qty": 20,
+      "uom": "m"
+    }
+  ]
+}

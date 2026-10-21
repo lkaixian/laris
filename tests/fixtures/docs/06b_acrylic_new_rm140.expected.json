@@ -1,0 +1,22 @@
+{
+  "supplier_name": "SAMPLE Supplier A Acrylic Sdn Bhd",
+  "doc_no": "QA-2026-0161",
+  "issued_on": "2026-10-19",
+  "valid_until": "2026-11-19",
+  "currency": "MYR",
+  "lines": [
+    {
+      "line_no": 1,
+      "description": "SAMPLE acrylic 3mm sheet",
+      "qty": 10,
+      "uom": "sheet",
+      "unit_price": 140.0,
+      "amount": 1400.0
+    }
+  ],
+  "totals": {
+    "subtotal": 1400.0,
+    "sst": 112.0,
+    "grand_total": 1512.0
+  }
+}

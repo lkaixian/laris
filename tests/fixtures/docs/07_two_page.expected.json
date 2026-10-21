@@ -1,0 +1,174 @@
+{
+  "supplier_name": "SAMPLE Supplier B Filament Sdn Bhd",
+  "doc_no": "QB-0310",
+  "issued_on": "2026-10-15",
+  "valid_until": "2026-11-15",
+  "currency": "MYR",
+  "lines": [
+    {
+      "line_no": 1,
+      "description": "Skru M3",
+      "qty": 10,
+      "uom": "pcs",
+      "unit_price": 0.1,
+      "amount": 1.0
+    },
+    {
+      "line_no": 2,
+      "description": "Skru M4",
+      "qty": 20,
+      "uom": "pcs",
+      "unit_price": 0.15,
+      "amount": 3.0
+    },
+    {
+      "line_no": 3,
+      "description": "Skru M5",
+      "qty": 30,
+      "uom": "pcs",
+      "unit_price": 0.22,
+      "amount": 6.6
+    },
+    {
+      "line_no": 4,
+      "description": "Nat M4",
+      "qty": 40,
+      "uom": "pcs",
+      "unit_price": 0.05,
+      "amount": 2.0
+    },
+    {
+      "line_no": 5,
+      "description": "Washer M4",
+      "qty": 50,
+      "uom": "pcs",
+      "unit_price": 0.03,
+      "amount": 1.5
+    },
+    {
+      "line_no": 6,
+      "description": "PLA putih",
+      "qty": 10,
+      "uom": "kg",
+      "unit_price": 52.0,
+      "amount": 520.0
+    },
+    {
+      "line_no": 7,
+      "description": "PLA hitam",
+      "qty": 20,
+      "uom": "kg",
+      "unit_price": 55.0,
+      "amount": 1100.0
+    },
+    {
+      "line_no": 8,
+      "description": "PETG jernih",
+      "qty": 30,
+      "uom": "kg",
+      "unit_price": 68.0,
+      "amount": 2040.0
+    },
+    {
+      "line_no": 9,
+      "description": "Nozzle 0.4mm",
+      "qty": 40,
+      "uom": "pcs",
+      "unit_price": 6.5,
+      "amount": 260.0
+    },
+    {
+      "line_no": 10,
+      "description": "Heater cartridge",
+      "qty": 50,
+      "uom": "pcs",
+      "unit_price": 12.0,
+      "amount": 600.0
+    },
+    {
+      "line_no": 11,
+      "description": "Thermistor",
+      "qty": 10,
+      "uom": "pcs",
+      "unit_price": 4.5,
+      "amount": 45.0
+    },
+    {
+      "line_no": 12,
+      "description": "Belt GT2",
+      "qty": 20,
+      "uom": "m",
+      "unit_price": 3.2,
+      "amount": 64.0
+    },
+    {
+      "line_no": 13,
+      "description": "Bearing 608",
+      "qty": 30,
+      "uom": "pcs",
+      "unit_price": 1.8,
+      "amount": 54.0
+    },
+    {
+      "line_no": 14,
+      "description": "Glue stick",
+      "qty": 40,
+      "uom": "pcs",
+      "unit_price": 4.0,
+      "amount": 160.0
+    },
+    {
+      "line_no": 15,
+      "description": "Skru M3 (pack B)",
+      "qty": 5,
+      "uom": "pcs",
+      "unit_price": 0.11,
+      "amount": 0.55
+    },
+    {
+      "line_no": 16,
+      "description": "Skru M4 (pack B)",
+      "qty": 5,
+      "uom": "pcs",
+      "unit_price": 0.17,
+      "amount": 0.85
+    },
+    {
+      "line_no": 17,
+      "description": "Skru M5 (pack B)",
+      "qty": 5,
+      "uom": "pcs",
+      "unit_price": 0.24,
+      "amount": 1.2
+    },
+    {
+      "line_no": 18,
+      "description": "Nat M4 (pack B)",
+      "qty": 5,
+      "uom": "pcs",
+      "unit_price": 0.06,
+      "amount": 0.3
+    },
+    {
+      "line_no": 19,
+      "description": "Washer M4 (pack B)",
+      "qty": 5,
+      "uom": "pcs",
+      "unit_price": 0.03,
+      "amount": 0.15
+    },
+    {
+      "line_no": 20,
+      "description": "PLA putih (pack B)",
+      "qty": 5,
+      "uom": "kg",
+      "unit_price": 57.2,
+      "amount": 286.0
+    }
+  ],
+  "totals": {
+    "subtotal": 5146.15,
+    "sst": 411.69,
+    "grand_total": 5557.84
+  }
+}

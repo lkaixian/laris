@@ -1,0 +1,30 @@
+{
+  "supplier_name": "SAMPLE Supplier A Acrylic Sdn Bhd",
+  "doc_no": "QA-2026-0188",
+  "issued_on": "2026-10-20",
+  "valid_until": "2026-11-20",
+  "currency": "MYR",
+  "lines": [
+    {
+      "line_no": 1,
+      "description": "SAMPLE acrylic 3mm sheet",
+      "qty": 10,
+      "uom": "sheet",
+      "unit_price": 100.0,
+      "amount": 1800.0
+    },
+    {
+      "line_no": 2,
+      "description": "SAMPLE vinyl roll",
+      "qty": 5,
+      "uom": "m",
+      "unit_price": 8.0,
+      "amount": 40.0
+    }
+  ],
+  "totals": {
+    "subtotal": 1040.0,
+    "sst": 83.2,
+    "grand_total": 1123.2
+  }
+}

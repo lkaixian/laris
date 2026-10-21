@@ -1,0 +1,108 @@
+{
+  "01_clean_quote": {
+    "file": "01_clean_quote.pdf",
+    "kind": "pdf-bordered-table-sst",
+    "watermark": true,
+    "expected": "01_clean_quote.expected.json",
+    "validate": "ok"
+  },
+  "01_clean_quote_raster": {
+    "file": "01_clean_quote_raster.png",
+    "kind": "png-bordered-table-sst",
+    "watermark": true,
+    "expected": "01_clean_quote_raster.expected.json",
+    "validate": "ok",
+    "text": [
+      "SAMPLE Supplier A Acrylic Sdn Bhd",
+      "QUOTATION",
+      "No: QA-2026-0107   Date: 2026-09-07   Valid until: 2026-10-07",
+      "Currency: MYR",
+      "No Description Qty UOM Unit Price (RM) Amount (RM)",
+      "1 SAMPLE acrylic 3mm sheet 10 sheet 100.00 1,000.00",
+      "2 SAMPLE vinyl roll 5 m 8.00 40.00",
+      "Subtotal 1,040.00",
+      "SST 8% 83.20",
+      "Grand Total 1,123.20"
+    ]
+  },
+  "02_borderless_bilingual": {
+    "file": "02_borderless_bilingual.png",
+    "kind": "png-bm-en-borderless",
+    "watermark": true,
+    "expected": "02_borderless_bilingual.expected.json",
+    "validate": "ok"
+  },
+  "03_whatsapp_manglish": {
+    "file": "03_whatsapp_manglish.png",
+    "kind": "png-whatsapp-text",
+    "watermark": true,
+    "expected": "03_whatsapp_manglish.expected.json",
+    "validate": "ok"
+  },
+  "04_phone_photo_degraded": {
+    "file": "04_phone_photo_degraded.png",
+    "kind": "png-degraded-copy-of-01",
+    "watermark": true,
+    "expected": "04_phone_photo_degraded.expected.json",
+    "validate": "ok"
+  },
+  "05_thermal_receipt": {
+    "file": "05_thermal_receipt.png",
+    "kind": "png-thermal-narrow",
+    "watermark": true,
+    "expected": "05_thermal_receipt.expected.json",
+    "validate": "ok"
+  },
+  "06a_acrylic_old_rm100": {
+    "file": "06a_acrylic_old_rm100.png",
+    "kind": "png-stale-cost-old",
+    "watermark": true,
+    "expected": "06a_acrylic_old_rm100.expected.json",
+    "validate": "ok"
+  },
+  "06b_acrylic_new_rm140": {
+    "file": "06b_acrylic_new_rm140.png",
+    "kind": "png-stale-cost-new",
+    "watermark": true,
+    "expected": "06b_acrylic_new_rm140.expected.json",
+    "validate": "ok"
+  },
+  "07_two_page": {
+    "file": "07_two_page.pdf",
+    "kind": "pdf-two-page",
+    "watermark": true,
+    "expected": "07_two_page.expected.json",
+    "validate": "ok",
+    "pages": 2
+  },
+  "08_wrong_digit": {
+    "file": "08_wrong_digit.png",
+    "kind": "png-wrong-digit",
+    "watermark": true,
+    "expected": "08_wrong_digit.expected.json",
+    "validate": "flag",
+    "expected_flags": {
+      "line_failed": [
+        "arith_mismatch"
+      ],
+      "doc_flags": [
+        "subtotal_mismatch:misread_digit?"
+      ]
+    }
+  },
+  "enquiry_bm": {
+    "file": "enquiry_bm.txt",
+    "kind": "enquiry-text",
+    "expected": "enquiry_bm.expected.json"
+  },
+  "enquiry_en": {
+    "file": "enquiry_en.txt",
+    "kind": "enquiry-text",
+    "expected": "enquiry_en.expected.json"
+  },
+  "enquiry_manglish": {
+    "file": "enquiry_manglish.txt",
+    "kind": "enquiry-text",
+    "expected": "enquiry_manglish.expected.json"
+  }
+}

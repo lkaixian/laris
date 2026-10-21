@@ -1,0 +1,20 @@
+# Replit config. Dev Run and Reserved VM deployment both use run.sh (single uvicorn worker).
+# Unverified on Replit: deploymentTarget value, [nix] channel, port mapping. Check in the Deployments pane.
+run = "bash run.sh"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+deploymentTarget = "vm"
+build = ["bash", "-c", "pip install -q -r requirements.txt && cd web && npm ci && npm run build"]
+run = ["bash", "run.sh"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+# Non-secret flags only. Secrets go in Replit Secrets, never here.
+# SEED=1 is NOT set here: set it in Secrets for the one demo bootstrap, then remove it.
+[env]
+SCHEDULER = "1"

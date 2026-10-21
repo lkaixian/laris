@@ -1,0 +1,29 @@
+key: fnb_catering
+min_margin_pct: 30
+followup_hours: 24
+required_enquiry_fields: [event_date, pax, venue, halal_required]
+item_catalog:
+  - {item_key: rice_kg, uom: kg, aliases: [rice, beras, nasi beras]}
+  - {item_key: chicken_kg, uom: kg, aliases: [chicken, ayam, ayam segar]}
+  - {item_key: sambal_kg, uom: kg, aliases: [sambal, sambal tumis]}
+  - {item_key: packaging_box, uom: pcs, aliases: [food box, kotak makanan, box]}
+rate_card:            # RM/hour
+  labour_hour: 15.00
+recipes:
+  nasi_ayam_set:
+    description: Nasi ayam set (per pax)
+    uom: pax
+    markup_pct: 80
+    bom:
+      - {item_key: rice_kg, qty: 0.15}
+      - {item_key: chicken_kg, qty: 0.12}
+      - {item_key: sambal_kg, qty: 0.02}
+      - {item_key: packaging_box, qty: 1}
+    hours: {labour_hour: 0.1}
+  service_staff:
+    description: Service staff (per hour)
+    uom: hour
+    fixed_rate: labour_hour
+fields:
+  - {key: per_pax, label: Per pax, type: number, applies_to: [out]}
+  - {key: halal, label: Halal, type: boolean, applies_to: [in, out]}

@@ -1,0 +1,9 @@
+{
+  "comment": "synthetic: plywood_shelf x10; plywood 40.00/sheet, screws 0.10/pcs; plywood later rises to 52.00",
+  "costs": {
+    "plywood_12mm_sheet": ["40.00", 1],
+    "screw_m4": ["0.10", 2]
+  },
+  "items": [{"item_key": "plywood_shelf", "qty": 10, "attrs": {"finishing": "sanded"}}],
+  "new_costs": {"plywood_12mm_sheet": "52.00"}
+}

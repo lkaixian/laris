@@ -1,0 +1,37 @@
+key: made_to_order
+min_margin_pct: 25
+followup_hours: 48
+required_enquiry_fields: [item, qty, material, deadline]
+item_catalog:
+  - {item_key: pla_1kg_black, uom: kg, aliases: [pla black, pla hitam, black pla filament, filamen pla hitam]}
+  - {item_key: pla_1kg_white, uom: kg, aliases: [pla white, pla putih, white pla filament]}
+  - {item_key: plywood_12mm_sheet, uom: sheet, aliases: [plywood 12mm, papan lapis 12mm, 12mm ply]}
+  - {item_key: screw_m4, uom: pcs, aliases: [m4 screw, skru m4, screw m4]}
+  - {item_key: packaging_box, uom: pcs, aliases: [box, kotak, carton box, kotak kadbod]}
+rate_card:            # RM/hour
+  machine_hour: 8.00
+  labour_hour: 18.00
+recipes:
+  print_part_small:
+    description: 3D printed part (small)
+    uom: pcs
+    markup_pct: 60
+    bom:
+      - {item_key: pla_1kg_black, qty: 0.05}
+      - {item_key: packaging_box, qty: 1}
+    hours: {machine_hour: 2}
+  plywood_shelf:
+    description: Plywood shelf 12mm
+    uom: pcs
+    markup_pct: 50
+    bom:
+      - {item_key: plywood_12mm_sheet, qty: 0.5}
+      - {item_key: screw_m4, qty: 8}
+    hours: {labour_hour: 1}
+  design_service:
+    description: Design work (per hour)
+    uom: hour
+    fixed_rate: labour_hour
+fields:
+  - {key: finishing, label: Finishing, type: select, options: [raw, sanded, painted], applies_to: [in, out]}
+  - {key: lead_time_days, label: Lead time (days), type: integer, unit: days, applies_to: [in]}

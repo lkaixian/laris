@@ -1,0 +1,12 @@
+{
+  "supplier_name": "Syarikat Contoh Sdn Bhd",
+  "doc_no": "Q-0042",
+  "issued_on": "2026-10-01",
+  "valid_until": "2026-10-31",
+  "currency": "MYR",
+  "lines": [
+    {"line_no": 1, "description": "PLA hitam", "qty": 10, "uom": "kg", "unit_price": 55.00, "amount": 550.00, "ocr_confidence": 0.97},
+    {"line_no": 2, "description": "Skru M4", "qty": 200, "uom": "pcs", "unit_price": 0.15, "amount": 30.00, "ocr_confidence": 0.95}
+  ],
+  "totals": {"subtotal": 580.00, "sst": 46.40, "grand_total": 626.40}
+}

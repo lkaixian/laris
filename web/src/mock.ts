@@ -1,131 +1,177 @@
 // SAMPLE data only. Synthetic, invented for demo; no real suppliers, customers or prices.
-// Mimics docs/api-contract.md including role stripping (staff never gets cost, margin or owner_only attrs).
+// Mirrors docs/demo-script.md and db/seed_made_to_order.sql: acrylic RM100/sheet (SAMPLE-A-001), quote SAMPLE-QT-0001
+// (40 signboards at RM60 = RM2,400, sent). Upload a newer acrylic quote (RM140), approve it and add it to the cost
+// book: the quote goes stale, margin down RM400. Staff never get cost, margin or owner_only attrs.
 import { ApiError, NEXT } from './api'
-import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Alert } from './api'
+import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Alert, Provenance } from './api'
 
 const money = (n: number) => n.toFixed(4)
-const sup = { id: 'p1', name: 'SAMPLE Kayu Timur Supplies' }
-const sup2 = { id: 'p2', name: 'SAMPLE Besi Jaya Hardware' }
-const cust = { id: 'p3', name: 'SAMPLE Customer: Cabinet Works A' }
+const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
+const cust = { id: 'p3', name: 'SAMPLE Customer Cafe (synthetic)' }
+const REVIEWABLE = ['received', 'parsed']
+const live = ['draft', 'approved', 'sent', 'read']
+const ago = (days: number) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
 
 const L = (id: string, n: number, description: string, qty: number | null, uom: string, price: number | null, extra: Partial<Line> = {}): Line => ({
   id, line_no: n, description, qty: qty === null ? null : money(qty), uom, unit_price: price === null ? null : money(price),
   discount_pct: null, tax_rate: null, section: null, is_header: false, needs_review: false, ocr_confidence: null,
   attrs: {}, attrs_unmapped: {}, item_key: null, ...extra,
 })
-const D = (id: string, direction: 'in' | 'out', doc_no: string, party: { id: string; name: string }, status: string, total: number, issued_on: string, flags = { cost_is_stale: false, needs_review: false }): DocSummary => ({
-  id, direction, kind: 'quotation', doc_no, party, status, issued_on, valid_until: '2026-11-30', total: money(total), currency: 'MYR', updated_at: '2026-10-21T09:00:00+08:00', flags,
+const D = (id: string, direction: 'in' | 'out', doc_no: string, party: { id: string; name: string }, status: string, total: number, issued_on: string | null, flags = { cost_is_stale: false, needs_review: false }): DocSummary => ({
+  id, direction, kind: 'quotation', doc_no, party, status, issued_on, valid_until: ago(-30), total: money(total), currency: 'MYR', updated_at: new Date().toISOString(), flags,
 })
 
 const fields: (Field & { owner_only?: boolean })[] = [
-  { key: 'finishing', label: 'Finishing', type: 'select', unit: null, options: ['raw', 'sanded', 'painted'], show_in_grid: true, sort_order: 10 },
+  { key: 'finishing', label: 'Finishing', type: 'select', unit: null, options: ['gloss', 'matt'], show_in_grid: true, sort_order: 10 },
   { key: 'lead_time_days', label: 'Lead time', type: 'integer', unit: 'days', options: null, show_in_grid: true, sort_order: 20 },
   { key: 'supplier_grade', label: 'Supplier grade', type: 'text', unit: null, options: null, show_in_grid: true, sort_order: 30, owner_only: true },
 ]
-let proposals: Proposal[] = [{ id: 'fp1', key: 'thickness_mm', sample_values: ['12', '18', '12'], status: 'pending' }]
+const proposals: Proposal[] = [{ id: 'fp1', key: 'thickness_mm', sample_values: ['3', '5', '3'], status: 'pending' }]
+
+// Current supplier cost per item key (what the cost book would answer). Raised by promoting a newer quote.
+const costs: Record<string, number> = { acrylic_3mm_sheet: 100, vinyl_roll: 8 }
+// Cost basis of each out line: item, qty consumed per unit sold, cost at pricing time, where it came from.
+const basis = [
+  { line: 'o1l1', item: 'acrylic_3mm_sheet', per: 0.25, snap: 100, src: 'in-1', srcLine: 'i1l1' },
+  { line: 'o1l1', item: 'vinyl_roll', per: 0.5, snap: 8, src: 'in-1', srcLine: 'i1l2' },
+]
+const OTHER = 8.5 // machine and labour per signboard
 
 const docs: Record<string, DocDetail> = {
-  'out-1': {
-    doc: { ...D('out-1', 'out', 'QT-2026-0007', cust, 'sent', 4146.0, '2026-10-12', { cost_is_stale: true, needs_review: false }), terms: { payment: '50% deposit' } },
+  'in-1': {
+    doc: D('in-1', 'in', 'SAMPLE-A-001', supA, 'in_cost_book', 108, ago(45)),
     lines: [
-      L('o1l1', 1, 'Plywood 18mm, cabinet carcass', 40, 'sheet', 98, { item_key: 'plywood_18mm', attrs: { finishing: 'sanded', lead_time_days: 5, supplier_grade: 'B' } }),
-      L('o1l2', 2, 'Edge banding 22mm', 120, 'm', 1.8, { item_key: 'edge_band_22', attrs: { finishing: 'raw' } }),
-      L('o1l3', 3, 'Workshop labour', 1, 'day', 10, { item_key: 'labour_day' }),
+      L('i1l1', 1, 'SAMPLE acrylic 3mm sheet', 1, 'sheet', 100, { item_key: 'acrylic_3mm_sheet', attrs: { lead_time_days: 5, supplier_grade: 'A' } }),
+      L('i1l2', 2, 'SAMPLE vinyl roll', 1, 'm', 8, { item_key: 'vinyl_roll' }),
     ],
-    provenance: [{
-      cost_item_id: 'c1', line_id: 'o1l1', supplier: sup.name, source_doc_id: 'in-1', source_doc_no: 'SQ-SAMPLE-101', source_line_id: 'i1l1',
-      cost_date: '2026-10-18', unit_cost: money(71.5), cost_snapshot: money(62), current_unit_cost: money(71.5), cost_is_stale: true, line_margin: money(1060),
-    }, {
-      cost_item_id: 'c2', line_id: 'o1l2', supplier: sup2.name, source_doc_id: 'in-3', source_doc_no: 'SQ-SAMPLE-110', source_line_id: 'i3l1',
-      cost_date: '2026-09-20', unit_cost: money(1.1), cost_snapshot: money(1.1), current_unit_cost: money(1.1), cost_is_stale: false, line_margin: money(84),
-    }],
-    messages: [{ direction: 'out', channel: 'whatsapp', body: 'SAMPLE message: quotation QT-2026-0007 sent.', at: '2026-10-12T10:00:00+08:00' }],
-  },
-  'out-2': {
-    doc: { ...D('out-2', 'out', 'QT-2026-0008', { id: 'p4', name: 'SAMPLE Customer: Kedai Perabot B' }, 'draft', 530.0, '2026-10-21') },
-    lines: [L('o2l1', 1, 'Edge banding 22mm', 200, 'm', 1.8, { item_key: 'edge_band_22' }), L('o2l2', 2, 'Delivery', 1, 'trip', 170, { item_key: 'delivery' })],
-    provenance: [{
-      cost_item_id: 'c2', line_id: 'o2l1', supplier: sup2.name, source_doc_id: 'in-3', source_doc_no: 'SQ-SAMPLE-110', source_line_id: 'i3l1',
-      cost_date: '2026-09-20', unit_cost: money(1.1), cost_snapshot: money(1.1), current_unit_cost: money(1.1), cost_is_stale: false, line_margin: money(140),
-    }],
     messages: [],
   },
-  'out-3': {
-    doc: D('out-3', 'out', 'QT-2026-0005', { id: 'p5', name: 'SAMPLE Customer: Reno Studio C' }, 'accepted', 2200.0, '2026-10-02'),
-    lines: [L('o3l1', 1, 'Plywood 18mm', 20, 'sheet', 110, { item_key: 'plywood_18mm' })],
-    provenance: [], messages: [],
-  },
-  'in-1': {
-    doc: D('in-1', 'in', 'SQ-SAMPLE-101', sup, 'in_cost_book', 1430.0, '2026-10-18'),
-    lines: [L('i1l1', 1, 'Plywood 18mm BB/CC', 20, 'sheet', 71.5, { item_key: 'plywood_18mm', attrs: { lead_time_days: 3, supplier_grade: 'A' } })],
-    provenance: [], messages: [],
-  },
-  'in-3': {
-    doc: D('in-3', 'in', 'SQ-SAMPLE-110', sup2, 'parsed', 330.0, '2026-10-20', { cost_is_stale: false, needs_review: true }),
-    lines: [
-      L('i3l1', 1, 'Edge band PVC 22mm roll', 300, 'm', 1.1, { item_key: 'edge_band_22', ocr_confidence: 0.97 }),
-      L('i3l2', 2, 'Hinge soft close (hand-written qty unclear)', null, 'pc', 4.2, { needs_review: true, ocr_confidence: 0.58, attrs_unmapped: { thickness_mm: '12' } }),
-    ],
-    provenance: [], messages: [],
+  'out-1': {
+    doc: D('out-1', 'out', 'SAMPLE-QT-0001', cust, 'sent', 2400, null),
+    lines: [L('o1l1', 1, 'SAMPLE acrylic signboard 60x30', 40, 'pcs', 60, { item_key: 'signboard_60x30', attrs: { finishing: 'gloss' } })],
+    messages: [{ direction: 'out', channel: 'telegram', body: 'SAMPLE message: quotation SAMPLE-QT-0001 sent.', at: new Date().toISOString() }],
   },
 }
 
-const audit: AuditEvent[] = [
-  { id: 1, at: '2026-10-18T09:00:00+08:00', actor: 'system', entity: 'document', entity_id: 'in-1', event: 'SAMPLE: supplier quote SQ-SAMPLE-101 added to cost book' },
-  { id: 2, at: '2026-10-18T09:00:01+08:00', actor: 'system', entity: 'document', entity_id: 'out-1', event: 'SAMPLE: cost rose on plywood_18mm, QT-2026-0007 flagged stale' },
-]
+const audit: AuditEvent[] = []
 const log = (actor: string, entity_id: string, event: string) => audit.push({ id: audit.length + 1, at: new Date().toISOString(), actor, entity: 'document', entity_id, event })
+log('SAMPLE Staff', 'in-1', 'SAMPLE-A-001: uploaded')
+log('SAMPLE Owner', 'in-1', 'SAMPLE-A-001: accepted, added to cost book (acrylic_3mm_sheet RM100)')
+log('SAMPLE Owner', 'out-1', 'SAMPLE-QT-0001: approved and sent')
 
-const summary = (d: DocDetail): DocSummary => d.doc
-const live = ['draft', 'approved', 'sent', 'read']
+// Provenance and margin are computed from the basis and the current costs, so they move when a quote is promoted.
+const prov = (d: DocDetail): Provenance[] => basis.filter(b => d.lines.some(l => l.id === b.line)).map(b => {
+  const line = d.lines.find(l => l.id === b.line)!
+  const cost = basis.filter(x => x.line === b.line).reduce((a, x) => a + x.per * costs[x.item], 0) + OTHER
+  const src = docs[b.src]
+  return {
+    line_id: b.line, cost_item_id: b.item, supplier: src.doc.party.name, source_doc_id: b.src, source_doc_no: src.doc.doc_no!,
+    source_line_id: b.srcLine, cost_date: src.doc.issued_on!, unit_cost: money(b.snap), cost_snapshot: money(b.snap),
+    current_unit_cost: money(costs[b.item]), cost_is_stale: costs[b.item] > b.snap, line_margin: money(Number(line.qty) * (Number(line.unit_price) - cost)),
+    qty_consumed: money(b.per),
+  }
+})
+const withProv = (d: DocDetail): DocDetail => {
+  if (d.doc.direction !== 'out') return d
+  const provenance = prov(d)
+  d.doc.flags.cost_is_stale = provenance.some(p => p.cost_is_stale)
+  return { ...d, provenance }
+}
 const staffView = (d: DocDetail): DocDetail => ({
   doc: { ...d.doc, flags: { cost_is_stale: false, needs_review: d.doc.flags.needs_review } },
-  lines: d.lines.map(l => ({ ...l, attrs: Object.fromEntries(Object.entries(l.attrs).filter(([k]) => !fields.find(f => f.key === k)?.owner_only)) })),
+  lines: d.lines.map(l => ({
+    ...l,
+    unit_price: d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status) ? l.unit_price : null,
+    attrs: Object.fromEntries(Object.entries(l.attrs).filter(([k]) => !fields.find(f => f.key === k)?.owner_only)),
+  })),
   messages: d.messages,
 })
 const alerts = (): Alert[] => Object.values(docs).filter(d => d.doc.direction === 'out' && live.includes(d.doc.status)).flatMap(d =>
-  (d.provenance ?? []).filter(p => p.cost_is_stale).map(p => {
+  prov(d).filter(p => p.cost_is_stale).map(p => {
     const line = d.lines.find(l => l.id === p.line_id)!
-    return { quote_id: d.doc.id, quote_no: d.doc.doc_no!, customer: d.doc.party.name, item_key: line.item_key ?? line.description,
-      old_cost: p.cost_snapshot, current_cost: p.current_unit_cost, margin_delta: money((Number(p.cost_snapshot) - Number(p.current_unit_cost)) * Number(line.qty)), status: d.doc.status }
+    return { quote_id: d.doc.id, quote_no: d.doc.doc_no!, customer: d.doc.party.name, item_key: p.cost_item_id,
+      old_cost: p.cost_snapshot, current_cost: p.current_unit_cost,
+      margin_delta: money((Number(p.cost_snapshot) - Number(p.current_unit_cost)) * Number(p.qty_consumed) * Number(line.qty)), status: d.doc.status }
   }))
+
+const down = (t: string) => { if (/ilmu down/i.test(t)) throw new ApiError(502, 'ilmu_unavailable', 'AI extraction failed (SAMPLE: simulated outage); key the lines in manually') }
 
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
-  const need = () => { if (!owner) throw new ApiError(403, 'forbidden', 'Owner role required.') }
+  const who = owner ? 'SAMPLE Owner' : 'SAMPLE Staff'
+  const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
-  if (p === '/me') return { role, name: owner ? 'SAMPLE Owner' : 'SAMPLE Staff', org: { name: 'SAMPLE Trading Sdn Bhd', logo_url: null } }
+  if (p === '/me') return { id: owner ? 'sample-owner' : 'sample-staff', role, name: who, org: { name: 'SAMPLE Signage Works (synthetic)', logo_url: null } }
   if (p === '/tracker') {
-    const all = Object.values(docs).map(summary).map(s => owner ? s : { ...s, flags: { ...s.flags, cost_is_stale: false } })
+    const all = Object.values(docs).map(withProv).map(d => d.doc).map(s => owner ? s : { ...s, flags: { ...s.flags, cost_is_stale: false } })
     return { received: all.filter(d => d.direction === 'in'), sent: all.filter(d => d.direction === 'out') }
+  }
+  if (p === '/documents/ingest' && method === 'POST') {
+    // Supplier upload: the file or pasted text is not really read. Any upload becomes the newer acrylic quote (RM140).
+    const text = String(body.get('text') ?? body.get('file')?.name ?? '')
+    down(text)
+    if (Object.values(docs).some(d => d.doc.doc_no === 'SAMPLE-A-002')) throw new ApiError(409, 'duplicate', 'document SAMPLE-A-002 already recorded for this supplier')
+    const supplier = String(body.get('supplier') || supA.name)
+    docs['in-2'] = {
+      doc: D('in-2', 'in', 'SAMPLE-A-002', { ...supA, name: supplier }, 'parsed', 140, ago(3), { cost_is_stale: false, needs_review: true }),
+      lines: [
+        L('i2l1', 1, 'SAMPLE acrylic 3mm sheet', 1, 'sheet', 140, { item_key: 'acrylic_3mm_sheet', ocr_confidence: '0.970' }),
+        L('i2l2', 2, 'SAMPLE vinyl roll (quantity unclear on the photo)', null, 'm', 8, { needs_review: true, ocr_confidence: '0.580', attrs_unmapped: { thickness_mm: '3' } }),
+      ],
+      messages: [],
+    }
+    log(who, 'in-2', 'SAMPLE-A-002: uploaded')
+    return docs['in-2'].doc
+  }
+  if (p === '/enquiries/simulate' && method === 'POST') {
+    down(body.text)
+    const qty = Number((String(body.text).match(/\d+/) ?? [])[0])
+    if (!qty) throw new ApiError(422, 'no_items', 'could not find any items in the enquiry')
+    const n = Object.values(docs).filter(d => d.doc.direction === 'out').length + 1
+    const id = `out-${n}`
+    docs[id] = {
+      doc: D(id, 'out', `SAMPLE-QT-${String(n).padStart(4, '0')}`, cust, 'draft', qty * 60, null),
+      lines: [L(`o${n}l1`, 1, 'SAMPLE acrylic signboard 60x30', qty, 'pcs', 60, { item_key: 'signboard_60x30', attrs: { finishing: 'gloss' } })],
+      messages: [],
+    }
+    basis.push({ line: `o${n}l1`, item: 'acrylic_3mm_sheet', per: 0.25, snap: costs.acrylic_3mm_sheet, src: 'in-1', srcLine: 'i1l1' },
+      { line: `o${n}l1`, item: 'vinyl_roll', per: 0.5, snap: costs.vinyl_roll, src: 'in-1', srcLine: 'i1l2' })
+    log(who, id, `${docs[id].doc.doc_no}: draft created from a simulated ${body.channel} enquiry`)
+    return docs[id].doc
   }
   if ((m = p.match(/^\/documents\/([^/]+)$/))) {
     const d = docs[m[1]]
     if (!d) throw new ApiError(404, 'not_found', 'Document not found.')
-    return owner ? d : staffView(d)
+    return owner ? withProv(d) : staffView(withProv(d))
   }
   if ((m = p.match(/^\/documents\/([^/]+)\/transition$/)) && method === 'POST') {
     const d = docs[m[1]]
     if (!d) throw new ApiError(404, 'not_found', 'Document not found.')
     const a = (NEXT[d.doc.direction][d.doc.status] ?? []).find(x => x.to === body.to)
-    if (!a) throw new ApiError(409, 'transition_not_allowed', `Cannot move from ${d.doc.status} to ${body.to}.`)
+    if (!a) throw new ApiError(409, 'conflict', `Cannot move from ${d.doc.status} to ${body.to}.`)
     if (a.owner) need()
-    log(owner ? 'owner' : 'staff', d.doc.id, `${d.doc.doc_no}: ${d.doc.status} to ${body.to}${body.reason ? ` (${body.reason})` : ''}`)
+    log(who, d.doc.id, `${d.doc.doc_no}: ${d.doc.status} to ${body.to}${body.reason ? ` (${body.reason})` : ''}`)
     d.doc.status = body.to
     d.doc.updated_at = new Date().toISOString()
+    if (d.doc.direction === 'in' && body.to === 'in_cost_book') {
+      for (const l of d.lines) if (l.item_key && l.unit_price) costs[l.item_key] = Number(l.unit_price)
+      Object.values(docs).forEach(withProv)
+      log('system', d.doc.id, `${d.doc.doc_no}: cost book updated, ${alerts().length} open quote(s) flagged stale`)
+    }
     return d.doc
   }
   if ((m = p.match(/^\/documents\/([^/]+)\/lines\/([^/]+)$/)) && method === 'POST') {
     const d = docs[m[1]]; const l = d?.lines.find(x => x.id === m![2])
     if (!l) throw new ApiError(404, 'not_found', 'Line not found.')
-    if (body.unit_price !== undefined && d.doc.direction === 'out') throw new ApiError(403, 'forbidden', 'Prices on quotes come from the rules engine.')
+    if (d.doc.direction === 'out') throw new ApiError(403, 'rules_only', 'out lines are rules-engine output; only the owner may clear needs_review')
+    if (!REVIEWABLE.includes(d.doc.status)) throw new ApiError(409, 'locked', `document is ${d.doc.status}; lines can only be edited while received/parsed`)
     if (body.item_key !== undefined) l.item_key = body.item_key
     if (body.qty !== undefined) l.qty = money(Number(body.qty))
     l.needs_review = body.needs_review ?? (l.qty === null || !l.item_key)
     d.doc.flags.needs_review = d.lines.some(x => x.needs_review)
-    log(owner ? 'owner' : 'staff', d.doc.id, `${d.doc.doc_no}: line ${l.line_no} edited`)
-    return l
+    log(who, d.doc.id, `${d.doc.doc_no}: line ${l.line_no} edited`)
+    return owner ? l : staffView({ ...d, lines: [l] }).lines[0]
   }
   if (p === '/alerts/stale-costs') { need(); return alerts() }
   if (p === '/cost-items') { need(); return [] }
@@ -140,7 +186,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
       fields.push({ key: pr.key, label: body.label || pr.key, type: body.type || 'text', unit: null, options: null, show_in_grid: true, sort_order: 100 })
       Object.values(docs).flatMap(d => d.lines).forEach(l => { if (pr.key in l.attrs_unmapped) { l.attrs[pr.key] = l.attrs_unmapped[pr.key]; delete l.attrs_unmapped[pr.key] } })
     }
-    log('owner', pr.id, `Field "${pr.key}" ${pr.status}`)
+    log('SAMPLE Owner', pr.id, `Field "${pr.key}" ${pr.status}`)
     return pr
   }
   if (p === '/audit') {

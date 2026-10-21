@@ -13,18 +13,18 @@ export interface DocSummary {
 export interface Line {
   id: string; line_no: number; description: string; qty: string | null; uom: string
   unit_price: string | null; discount_pct: string | null; tax_rate: string | null
-  section: string | null; is_header: boolean; needs_review: boolean; ocr_confidence: number | null
+  section: string | null; is_header: boolean; needs_review: boolean; ocr_confidence: string | number | null
   attrs: Record<string, unknown>; attrs_unmapped: Record<string, unknown>
   item_key: string | null
 }
 export interface Provenance {
   cost_item_id: string; supplier: string; source_doc_id: string; source_doc_no: string
-  line_id: string; source_line_id: string; cost_date: string; unit_cost: string; cost_snapshot: string
+  line_id: string; source_line_id: string; qty_consumed?: string; cost_date: string; unit_cost: string; cost_snapshot: string
   current_unit_cost: string; cost_is_stale: boolean; line_margin: string
 }
-export interface Me { role: Role; name: string; org: { name: string; logo_url: string | null } }
+export interface Me { id: string; role: Role; name: string; org: { name: string; logo_url: string | null } }
 export interface DocDetail {
-  doc: DocSummary & { terms?: Record<string, unknown> }
+  doc: DocSummary
   lines: Line[]
   provenance?: Provenance[]
   messages: { direction: string; channel: string; body: string; at: string }[]
@@ -61,29 +61,37 @@ export const NEXT: Record<Direction, Record<string, Action[]>> = {
 }
 
 export const MOCK = import.meta.env.VITE_MOCK === '1'
-const USER = '00000000-0000-0000-0000-000000000001' // simulated X-User
 
 let role: Role = (() => { try { return localStorage.getItem('role') === 'staff' ? 'staff' : 'owner' } catch { return 'owner' } })()
 export const getRole = () => role
-export const setRole = (r: Role) => { role = r; try { localStorage.setItem('role', r) } catch { /* storage blocked */ } }
+export const setRole = (r: Role) => { role = r; userId = ''; try { localStorage.setItem('role', r) } catch { /* storage blocked */ } }
+
+// Simulated user id: resolved from GET /api/me (sent with X-Role only), kept in memory, never persisted.
+let userId = ''
+export async function resolveMe(r: Role): Promise<Me> {
+  userId = ''
+  const me = await call<Me>('GET', '/me', r, undefined, false)
+  if (r === role) userId = me.id
+  return me
+}
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
 
-export async function api<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unknown, withUser: boolean): Promise<T> => {
   if (MOCK) {
     const { mock } = await import('./mock')
-    await new Promise(r => setTimeout(r, 120))
-    return mock(method, path, role, body) as T
+    await new Promise(res => setTimeout(res, 120))
+    return mock(method, path, r, body) as T
   }
+  const form = body instanceof FormData
+  const headers: Record<string, string> = { 'X-Role': r }
+  if (!form) headers['Content-Type'] = 'application/json'
+  if (withUser && userId) headers['X-User'] = userId
   let res: Response
   try {
-    res = await fetch('/api' + path, {
-      method,
-      headers: { 'Content-Type': 'application/json', 'X-Role': role, 'X-User': USER },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
   } catch {
     throw new ApiError(0, 'network', 'Cannot reach the server.')
   }
@@ -91,3 +99,5 @@ export async function api<T>(method: 'GET' | 'POST', path: string, body?: unknow
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
   return data as T
 }
+
+export const api = <T,>(method: 'GET' | 'POST', path: string, body?: unknown) => call<T>(method, path, role, body, true)

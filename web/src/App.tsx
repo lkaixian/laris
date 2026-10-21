@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, getRole, setRole, MOCK, NEXT } from './api'
+import { api, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
 const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const label = (s: string) => s.replace(/_/g, ' ')
 const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+const REVIEWABLE = ['received', 'parsed'] // 'in' statuses where the API still allows line edits (src/api/routes.py)
+// Stable focus target after an action or a route change: the page h1, else the main landmark.
+const focusTop = () => (document.querySelector<HTMLElement>('main h1') ?? document.getElementById('main'))?.focus()
 
 function useFetch<T>(path: string) {
   const [s, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true })
@@ -18,6 +21,31 @@ function useFetch<T>(path: string) {
     return () => { live = false }
   }, [path, n])
   return { ...s, reload: () => setN(x => x + 1) }
+}
+
+// One in-flight action with a shared error shape. Retry is offered when the failure is the AI service or the network.
+function useAction() {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<{ text: string; retry: boolean }>()
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return
+    setBusy(true); setErr(undefined)
+    try { await fn() } catch (e) {
+      const ai = e instanceof ApiError && e.code === 'ilmu_unavailable'
+      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
+    } finally { setBusy(false) }
+  }
+  return { busy, err, run }
+}
+
+function ActionError({ err, onRetry, label }: { err?: { text: string; retry: boolean }; onRetry: () => void; label: string }) {
+  if (!err) return null
+  return (
+    <div role="alert" className="card mt-3 border-warn bg-warn-bg text-warn">
+      <p>{err.text}</p>
+      {err.retry && <button type="button" className="btn mt-3" onClick={onRetry}>{label}</button>}
+    </div>
+  )
 }
 
 function Async({ s, empty, emptyText, children }: { s: { loading: boolean; error?: string; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string; children: ReactNode }) {
@@ -85,21 +113,113 @@ function DocCard({ d, owner }: { d: DocSummary; owner: boolean }) {
   )
 }
 
+function UploadQuote({ onDone }: { onDone: () => void }) {
+  const [text, setText] = useState('')
+  const [supplier, setSupplier] = useState('')
+  const [formErr, setFormErr] = useState('')
+  const [res, setRes] = useState<{ doc: DocSummary; review: Line[] }>()
+  const file = useRef<HTMLInputElement>(null)
+  const out = useRef<HTMLDivElement>(null)
+  const a = useAction()
+  useEffect(() => { if (res) out.current?.focus() }, [res])
+  const submit = () => {
+    const f = file.current?.files?.[0]
+    if (!f && !text.trim()) return setFormErr('Choose a file or paste the quote text.')
+    if (f && text.trim()) return setFormErr('Use either a file or pasted text, not both.')
+    setFormErr('')
+    const fd = new FormData()
+    if (f) fd.append('file', f); else fd.append('text', text.trim())
+    if (supplier.trim()) fd.append('supplier', supplier.trim())
+    a.run(async () => {
+      const doc = await api<DocSummary>('POST', '/documents/ingest', fd)
+      const d = await api<DocDetail>('GET', `/documents/${doc.id}`)
+      setRes({ doc, review: d.lines.filter(l => l.needs_review) })
+      setText(''); if (file.current) file.current.value = ''
+      onDone()
+    })
+  }
+  return (
+    <details className="card mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Upload supplier quote</summary>
+      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Quote file (PDF, photo or text)
+          <input ref={file} type="file" accept=".pdf,.txt,image/*" className="input py-2 font-normal" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Or paste the quote text
+          <textarea className="input min-h-24 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Supplier name (optional)
+          <input className="input font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} />
+        </label>
+        {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
+        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Reading the quote...' : 'Read quote and add to tracker'}</button></div>
+      </form>
+      <ActionError err={a.err} onRetry={submit} label="Retry reading the quote" />
+      {res && (
+        <div ref={out} tabIndex={-1} className="card mt-3" aria-labelledby="up-res">
+          <h3 id="up-res" className="font-semibold">Added {res.doc.doc_no ?? 'supplier quote'} from {res.doc.party.name}</h3>
+          <p className="text-sm">Status: {label(res.doc.status)}. <a className="link" href={`#/doc/${res.doc.id}`}>Open the supplier quote</a></p>
+          {res.review.length > 0
+            ? <><p className="mt-2 text-sm font-semibold">{res.review.length} {res.review.length === 1 ? 'line needs' : 'lines need'} review</p>
+                <ul className="list-disc pl-5 text-sm">{res.review.map(l => <li key={l.id}>Line {l.line_no}: {l.description}</li>)}</ul></>
+            : <p className="mt-2 text-sm text-muted">No lines need review.</p>}
+        </div>
+      )}
+    </details>
+  )
+}
+
+const CHANNELS = [['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'], ['web', 'Web'], ['upload', 'Upload']]
+function SimulateEnquiry() {
+  const [channel, setChannel] = useState('telegram')
+  const [text, setText] = useState('')
+  const [formErr, setFormErr] = useState('')
+  const a = useAction()
+  const submit = () => {
+    if (!text.trim()) return setFormErr('Type the customer enquiry first.')
+    setFormErr('')
+    a.run(async () => {
+      const doc = await api<DocSummary>('POST', '/enquiries/simulate', { channel, text: text.trim() })
+      location.hash = `#/doc/${doc.id}`
+    })
+  }
+  return (
+    <details className="card mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Simulate customer enquiry</summary>
+      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Channel it arrived on
+          <select className="input w-fit font-normal" value={channel} onChange={e => setChannel(e.target.value)}>
+            {CHANNELS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Enquiry text
+          <textarea className="input min-h-24 py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
+        </label>
+        {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
+        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Pricing the enquiry...' : 'Create draft quote from enquiry'}</button></div>
+      </form>
+      <ActionError err={a.err} onRetry={submit} label="Retry pricing the enquiry" />
+    </details>
+  )
+}
+
 function TrackerView({ owner }: { owner: boolean }) {
   const s = useFetch<Tracker>('/tracker')
   const [filter, setFilter] = useState('')
   const all = [...(s.data?.received ?? []), ...(s.data?.sent ?? [])]
   const statuses = [...new Set(all.map(d => d.status))].sort()
   const pick = (l: DocSummary[]) => l.filter(d => !filter || d.status === filter)
-  const lane = (title: string, hint: string, l: DocSummary[]) => (
+  const shown = pick(all).length
+  const lane = (title: string, hint: string, l: DocSummary[], extra: ReactNode) => (
     <section aria-labelledby={title} className="min-w-0">
       <h2 id={title} className="border-b-2 border-accent pb-1 text-lg font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
-      {l.length ? <ul className="divide-y divide-soft border-b border-soft bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul> : <p className="py-3 text-muted">No documents{filter ? ` with status ${label(filter)}` : ''}.</p>}
+      {extra}
+      {l.length ? <ul className="mt-3 divide-y divide-soft border-b border-soft bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul> : <p className="py-3 text-muted">{filter ? `No documents with status ${label(filter)}.` : 'No documents yet.'}</p>}
     </section>
   )
   return (
     <>
-      <h1 className="mb-3 text-2xl font-semibold">Quote tracker</h1>
+      <h1 tabIndex={-1} className="mb-3 text-2xl font-semibold">Quote tracker</h1>
       <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-semibold">
         Filter by status
         <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
@@ -107,10 +227,11 @@ function TrackerView({ owner }: { owner: boolean }) {
           {statuses.map(x => <option key={x} value={x}>{label(x)}</option>)}
         </select>
       </label>
-      <Async s={s} empty={!all.length} emptyText="No quotes yet. Supplier quotes and customer quotes appear here once uploaded or created.">
+      <p role="status" className="sr-only">{s.data ? `Showing ${shown} ${shown === 1 ? 'document' : 'documents'}` : ''}</p>
+      <Async s={s}>
         <div className="grid gap-8 md:grid-cols-2">
-          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []))}
-          {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []))}
+          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), <UploadQuote onDone={s.reload} />)}
+          {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry />)}
         </div>
       </Async>
     </>
@@ -124,16 +245,19 @@ function cell(f: Field, v: unknown): ReactNode {
   return `${String(v)}${f.unit ? ' ' + f.unit : ''}`
 }
 
-function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: () => void }) {
+function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: (n: number) => void }) {
   const [key, setKey] = useState(l.item_key ?? '')
   const [qty, setQty] = useState(l.qty ? String(Number(l.qty)) : '')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const errId = `line-err-${l.id}`
+  const bad = err ? { 'aria-invalid': true, 'aria-describedby': errId } : {}
   const save = async () => {
+    if (busy) return
     setBusy(true); setErr('')
     try {
       await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty })
-      onSaved()
+      onSaved(l.line_no)
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   if (l.is_header) return <tr><th colSpan={6 + cols.length} scope="colgroup" className="bg-soft text-ink">{l.description}</th></tr>
@@ -143,20 +267,20 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
       <td>{l.line_no}</td>
       <td>
         {l.description}
-        {l.needs_review && <span className="badge badge-warn ml-2">Needs review{l.ocr_confidence !== null ? `, OCR ${Math.round(l.ocr_confidence * 100)}%` : ''}</span>}
+        {l.needs_review && <span className="badge badge-warn ml-2">Needs review{l.ocr_confidence !== null ? `, OCR ${Math.round(Number(l.ocr_confidence) * 100)}%` : ''}</span>}
         {unmapped.length > 0 && <p className="text-xs text-muted">Unmapped field: {unmapped.map(([k, v]) => `${k} = ${String(v)}`).join(', ')}</p>}
-        {err && <p role="alert" className="text-xs text-warn">{err}</p>}
+        {err && <p id={errId} role="alert" className="text-xs text-warn">{err}</p>}
       </td>
       <td>
-        {edit ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} /> : l.item_key ?? <span className="text-muted">Not set</span>}
+        {edit ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} {...bad} /> : l.item_key ?? <span className="text-muted">Not set</span>}
       </td>
       <td>
-        {edit ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
+        {edit ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} {...bad} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
       </td>
       <td>{l.uom}</td>
       <td>{showPrice ? rm(l.unit_price) : <span className="text-muted">Hidden for staff</span>}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
-      {edit && <td><button className="btn" disabled={busy} onClick={save}>{busy ? 'Saving...' : `Save line ${l.line_no}`}</button></td>}
+      {edit && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? 'Saving...' : `Save line ${l.line_no}`}</button></td>}
     </tr>
   )
 }
@@ -166,15 +290,23 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
   const f = useFetch<Field[]>('/fields')
   const [reason, setReason] = useState('')
   const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const d = s.data
   const cols = (f.data ?? []).filter(x => x.show_in_grid).sort((a, b) => a.sort_order - b.sort_order)
   const actions = d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []
-  const edit = !!d && d.doc.direction === 'in' && ['received', 'parsed', 'reviewed'].includes(d.doc.status)
+  const edit = !!d && d.doc.direction === 'in' && REVIEWABLE.includes(d.doc.status)
+  const docNo = d?.doc.id === id ? d.doc.doc_no ?? 'Document' : undefined
+  useEffect(() => { document.title = `${docNo ?? 'Loading document'} · LARIS` }, [docNo])
+  // Arrived by navigation (focus is parked on main): move it to the heading once the document is there.
+  useEffect(() => { if (docNo && document.activeElement === document.getElementById('main')) focusTop() }, [docNo])
   const move = async (to: string) => {
-    setBusy(true); setErr('')
-    try { await api('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined }); setReason(''); s.reload() }
-    catch (e) { setErr(msg(e)) } finally { setBusy(false) }
+    if (busy) return
+    setBusy(true); setErr(''); setNote('')
+    try {
+      await api('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined })
+      setReason(''); setNote(`${docNo} moved to ${label(to)}.`); s.reload(); focusTop()
+    } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   const lineOf = (lineId?: string) => d?.lines.find(l => l.id === lineId)
   return (
@@ -183,7 +315,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
       <Async s={s} empty={false}>
         {d && (
           <>
-            <h1 className="text-2xl font-semibold">{d.doc.doc_no ?? 'No document number'}</h1>
+            <h1 tabIndex={-1} className="text-2xl font-semibold">{d.doc.doc_no ?? 'No document number'}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
               <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
               <Status v={d.doc.status} />
@@ -192,9 +324,30 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             </p>
 
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+            <div className="min-w-0 lg:order-1">
+            <h2 className="mb-1 text-lg font-semibold">Lines</h2>
+            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. Lines marked Needs review are unclear on the source document.</p>}
+            {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
+            {d.lines.length === 0 ? <p className="card text-muted">This document has no lines.</p> : (
+              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Lines" tabIndex={0}>
+                <table className="w-full min-w-max">
+                  <caption className="sr-only">Lines of {d.doc.doc_no ?? 'this document'}</caption>
+                  <thead><tr>
+                    <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col">Qty</th><th scope="col">Unit</th>
+                    <th scope="col">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
+                    {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
+                    {edit && <th scope="col">Action</th>}
+                  </tr></thead>
+                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={owner || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { setNote(`Line ${n} saved.`); s.reload() }} />)}</tbody>
+                </table>
+              </div>
+            )}
+            </div>
+
             <aside className="grid gap-6 lg:order-2">
             <section className="card border-l-4 border-l-accent" aria-labelledby="actions">
               <h2 id="actions" className="font-semibold">Decision</h2>
+              <p role="status" className="text-sm">{note}</p>
               {!actions.length && <p className="text-sm text-muted">This document is {label(d.doc.status)}. No further actions.</p>}
               {actions.length > 0 && !owner && !actions.some(a => !a.owner) && <p className="text-sm text-muted">Only the owner can decide on this quote. Switch the simulated role to owner to try it.</p>}
               {actions.some(a => !a.owner || owner) && (
@@ -204,7 +357,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                   </label>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {actions.filter(a => !a.owner || owner).map(a => (
-                      <button key={a.to} disabled={busy} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{a.label}</button>
+                      <button key={a.to} aria-disabled={busy || undefined} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{a.label}</button>
                     ))}
                   </div>
                 </>
@@ -220,7 +373,8 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                     {d.provenance.map(p => {
                       const ln = lineOf(p.line_id)
                       const perUnit = Number(p.cost_snapshot) - Number(p.current_unit_cost)
-                      const total = ln?.qty ? perUnit * Number(ln.qty) : null
+                      // margin impact = cost change x qty of the cost item per unit sold x units sold
+                      const total = ln?.qty ? perUnit * Number(p.qty_consumed ?? 1) * Number(ln.qty) : null
                       return (
                         <li key={p.cost_item_id + p.line_id} className="card">
                           <p className="font-semibold">{ln ? `Line ${ln.line_no}: ${ln.description}` : `Cost item ${p.cost_item_id}`}</p>
@@ -244,26 +398,6 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             )}
             {!owner && <p className="text-sm text-muted">Cost and margin are visible to the owner role only.</p>}
             </aside>
-
-            <div className="min-w-0 lg:order-1">
-            <h2 className="mb-1 text-lg font-semibold">Lines</h2>
-            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. Lines marked Needs review are unclear on the source document.</p>}
-            {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
-            {d.lines.length === 0 ? <p className="card text-muted">This document has no lines.</p> : (
-              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Lines table, scrolls sideways on narrow screens" tabIndex={0}>
-                <table className="w-full min-w-max">
-                  <thead><tr>
-                    <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col">Qty</th><th scope="col">Unit</th>
-                    <th scope="col">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
-                    {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
-                    {edit && <th scope="col">Action</th>}
-                  </tr></thead>
-                  <tbody>{d.lines.map(l => <LineRow key={l.id + (l.item_key ?? '') + l.qty} docId={id} l={l} cols={cols} edit={edit} showPrice={owner || d.doc.direction === 'out'} onSaved={s.reload} />)}</tbody>
-                </table>
-              </div>
-            )}
-
-            </div>
             </div>
           </>
         )}
@@ -279,7 +413,7 @@ function Proposals() {
   const [type, setType] = useState<Record<string, string>>({})
   const decide = async (p: Proposal, decision: 'approve' | 'ignore') => {
     setErr('')
-    try { await api('POST', `/field-proposals/${p.id}/decide`, { decision, type: type[p.id] ?? 'text', label: p.key.replace(/_/g, ' ') }); s.reload() }
+    try { await api('POST', `/field-proposals/${p.id}/decide`, { decision, type: type[p.id] ?? 'text', label: p.key.replace(/_/g, ' ') }); s.reload(); focusTop() }
     catch (e) { setErr(msg(e)) }
   }
   return (
@@ -312,15 +446,15 @@ function Proposals() {
 
 function AlertsView({ owner }: { owner: boolean }) {
   const s = useFetch<Alert[]>('/alerts/stale-costs')
-  if (!owner) return <><h1 className="text-2xl font-semibold">Stale-cost alerts</h1><p className="card mt-3 text-muted">Owner only. Staff do not see supplier cost or margin. Switch the simulated role to owner to view alerts.</p></>
+  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1><p className="card mt-3 text-muted">Owner only. Staff do not see supplier cost or margin. Switch the simulated role to owner to view alerts.</p></>
   const n = s.data?.length ?? 0
   const lost = (s.data ?? []).reduce((a, x) => a + Number(x.margin_delta), 0)
   return (
     <>
-      <h1 className="text-2xl font-semibold">Stale-cost alerts</h1>
+      <h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1>
       <p className="mb-6 text-muted">Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically.</p>
+      <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
       <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost.">
-        <p className="mb-4 border-l-4 border-amber pl-3 text-xl font-semibold" role="status">{n} open {n === 1 ? 'quote' : 'quotes'} affected, margin down {rm(String(Math.abs(lost)))} in total</p>
         <ul className="grid gap-2">
           {s.data?.map(a => (
             <li key={a.quote_id + a.item_key} className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-l-4 border-l-amber">
@@ -345,19 +479,25 @@ function ActivityView() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [checked, setChecked] = useState('')
+  const [announce, setAnnounce] = useState('')
   const cursor = useRef(0)
+  const first = useRef(true)
   const poll = async () => {
     try {
       const rows = await api<AuditEvent[]>('GET', `/audit?after=${cursor.current}`)
-      if (rows.length) { cursor.current = Math.max(...rows.map(r => r.id)); setEvents(e => [...rows.reverse(), ...e]) }
+      if (rows.length) {
+        cursor.current = Math.max(...rows.map(r => r.id)); setEvents(e => [...rows.reverse(), ...e])
+        if (!first.current) setAnnounce(`${rows.length} new ${rows.length === 1 ? 'event' : 'events'}`)
+      }
       setError(''); setChecked(new Date().toLocaleTimeString())
-    } catch (e) { setError(msg(e)) } finally { setLoading(false) }
+    } catch (e) { setError(msg(e)) } finally { setLoading(false); first.current = false }
   }
   useEffect(() => { poll(); const t = setInterval(poll, 4000); return () => clearInterval(t) }, [])
   return (
     <>
-      <h1 className="text-2xl font-semibold">Activity log</h1>
+      <h1 tabIndex={-1} className="text-2xl font-semibold">Activity log</h1>
       <p className="mb-3 text-sm text-muted">Checks for new events every 4 seconds.{checked && ` Last checked ${checked}.`}</p>
+      <p role="status" className="sr-only">{announce}</p>
       {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button className="btn mt-3" onClick={poll}>Retry loading</button></div>}
       {loading ? <p role="status" className="text-muted">Loading...</p> : events.length === 0 && !error ? <p className="card text-muted">No activity yet.</p> : (
         <ol className="grid gap-2">
@@ -374,17 +514,30 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
+const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log' }
+
 export default function App() {
   const [hash, setHash] = useState(location.hash)
   const [role, setRoleState] = useState<Role>(getRole())
+  const [roleNote, setRoleNote] = useState('')
   useEffect(() => { const h = () => setHash(location.hash); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h) }, [])
   const [dark, setDark] = useState(document.documentElement.dataset.theme === 'dark')
-  const [org, setOrg] = useState<Me['org']>()
-  useEffect(() => { api<Me>('GET', '/me').then(m => setOrg(m.org), () => {}) }, [])
+  // The user id comes from GET /api/me (X-Role only). Re-resolved whenever the simulated role changes; nothing renders before it.
+  const [me, setMe] = useState<Me>()
+  const [meErr, setMeErr] = useState('')
+  const [tries, setTries] = useState(0)
+  useEffect(() => {
+    let live = true
+    setMe(undefined); setMeErr('')
+    resolveMe(role).then(m => live && setMe(m), e => live && setMeErr(msg(e)))
+    return () => { live = false }
+  }, [role, tries])
   const owner = role === 'owner'
   const [, page, arg] = hash.split('/')
   const route = page || (owner ? 'alerts' : 'tracker')
-  useEffect(() => { document.title = `LARIS, ${route === 'doc' ? 'document' : route}` }, [route])
+  useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
+  const firstNav = useRef(true)
+  useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
   const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['activity', 'Activity']]
   return (
     <>
@@ -393,12 +546,12 @@ export default function App() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
           <div className="flex min-w-0 flex-1 basis-60 items-center gap-3">
             <span className="shrink-0"><Brand dark={dark} /></span>
-            {org && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line" /><OrgMark org={org} /></>}
+            {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line" /><OrgMark org={me.org} /></>}
           </div>
           <ThemeToggle dark={dark} setDark={setDark} />
           <label className="flex items-center gap-2 text-sm font-semibold">
             Role (simulated)
-            <select className="input" value={role} onChange={e => { setRole(e.target.value as Role); setRoleState(e.target.value as Role) }}>
+            <select className="input" value={role} onChange={e => { const r = e.target.value as Role; setRole(r); setRoleState(r); setRoleNote(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }}>
               <option value="owner">Owner</option><option value="staff">Staff</option>
             </select>
           </label>
@@ -407,13 +560,21 @@ export default function App() {
           {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') ? 'page' : undefined}>{t}</a>)}
         </nav>
       </header>
+      <p role="status" className="sr-only">{roleNote}</p>
       {MOCK && <p className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</p>}
       <main id="main" tabIndex={-1} key={role} className="mx-auto max-w-6xl px-4 py-5">
-        {route === 'alerts' && <AlertsView owner={owner} />}
-        {route === 'tracker' && <TrackerView owner={owner} />}
-        {route === 'activity' && <ActivityView />}
-        {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-        {!['alerts', 'tracker', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+        {meErr ? (
+          <div role="alert" className="card border-warn bg-warn-bg text-warn">
+            <p>Could not identify the signed-in user: {meErr}</p>
+            <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
+          </div>
+        ) : !me ? <p role="status" className="text-muted">Loading...</p> : <>
+          {route === 'alerts' && <AlertsView owner={owner} />}
+          {route === 'tracker' && <TrackerView owner={owner} />}
+          {route === 'activity' && <ActivityView />}
+          {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
+          {!['alerts', 'tracker', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+        </>}
       </main>
     </>
   )

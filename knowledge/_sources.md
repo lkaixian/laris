@@ -1,0 +1,54 @@
+---
+type: source-list
+updated: 2026-10-22
+---
+# Master source list
+
+Every note links its own `source_url`. Agents append here: `- [[note]] | title | URL | retrieved`.
+- [[orbyte]] | Orbyte home/modules/pricing | https://www.orbyte.my | 2026-10-22
+- [[bukku]] | Bukku pricing | https://www.bukku.my/pricing | 2026-10-22
+- [[autocount]] | AutoCount home | https://www.autocountsoft.com | 2026-10-22
+- [[zoho-books]] | Zoho Books pricing | https://www.zoho.com/books/pricing/ | 2026-10-22
+- [[xero-quickbooks]] | Xero MY quotes and pricing | https://www.xero.com/my/accounting-software/send-quotes/ | 2026-10-22
+- [[whatsapp-business-app]] | WhatsApp Business features (ChatDaddy blog) | https://www.chatdaddy.tech/blog/whatsapp-business-features | 2026-10-22
+- [[jobber-wave-joist]] | Wave pricing | https://www.waveapps.com/pricing | 2026-10-22
+- [[whatsapp-commerce-tools]] | SleekFlow WhatsApp catalogue MY | https://sleekflow.io/blog/malaysia-whatsapp-catalogue.md | 2026-10-22
+- [[msme-gdp-share-2025]] | MSME share of GDP 2025 | https://www.dosm.gov.my/portal-main/release-content/micro-small--medium-enterprises-msmes-performance-2025 | 2026-10-22
+- [[msme-employment-2025]] | MSME employment 2025 | https://www.dosm.gov.my/portal-main/release-content/micro-small--medium-enterprises-msmes-performance-2025 | 2026-10-22
+- [[msme-exports-2025]] | MSME exports 2025 | https://www.dosm.gov.my/portal-main/release-content/micro-small--medium-enterprises-msmes-performance-2025 | 2026-10-22
+- [[msme-count-dosm-ec2023]] | MSME establishments, DOSM Economic Census 2023 profile | https://www.dosm.gov.my/portal-main/release-content/economic-census-2023-profile-of-small-and-medium-enterprises | 2026-10-22
+- [[msme-count-by-size-2023]] | MSME count by size, SME Corp 2023 | https://smecorp.gov.my/index.php/en/policies/2020-02-11-08-01-24/profile-and-importance-to-the-economy | 2026-10-22
+- [[msme-count-2025-minister]] | MSME count 2025 (ministerial statement) | https://www.malaymail.com/news/malaysia/2026/07/31/govt-shifts-focus-to-scaling-up-msmes-after-resilient-2025-says-minister/229726 | 2026-10-22
+- [[msme-wholesale-retail-fnb-count]] | MSME counts for wholesale/retail and F&B | https://www.dosm.gov.my/portal-main/release-content/economic-census-2023-profile-of-small-and-medium-enterprises | 2026-10-22
+- [[sme-ict-use-2024]] | Establishment ICT use 2024 (DOSM) | https://www.dosm.gov.my/portal-main/release-content/usage-of-ict-and-e-commerce-by-establishment2025 | 2026-10-22
+- [[sme-social-media-use-2024]] | Social media use by establishments 2024 | https://theedgemalaysia.com/node/808791 | 2026-10-22
+- [[sme-whatsapp-sales-use]] | SMEs using WhatsApp for sales/customer communication | https://thesun.my/business/local-business/whatsapp-overtakes-email-as-malaysian-smes-rethink-customer-engagement/ | 2026-10-22
+- [[sme-accounting-software-use]] | MSME use of online finance/accounting solutions (Visa, Nov 2025) | https://www.visa.com.my/about-visa/newsroom/press-releases/over-80-percent-of-malaysian-msmes-embrace-digitalisation-visa-whitepaper-identifies-four-pathways-to-accelerate-expansion.html | 2026-10-22
+- [[sme-manual-paper-excel-share]] | SMEs still on paper/Excel | https://www.visa.com.my/about-visa/newsroom/press-releases/over-80-percent-of-malaysian-msmes-embrace-digitalisation-visa-whitepaper-identifies-four-pathways-to-accelerate-expansion.html | 2026-10-22
+- [[einvoice-readiness-xero-2025]] | SME e-invoicing readiness (Xero whitepaper) | https://www.businesstoday.com.my/2025/05/26/malaysian-smes-face-readiness-gap-ahead-of-e-invoicing-mandate-xero-whitepaper-reveals/ | 2026-10-22
+- [[late-payment-experian-2025]] | Business payment delays (Experian, 2025) | https://ringgitplus.com/en/blog/tag/state-of-credit-2025-report/ | 2026-10-22
+- [[sme-cost-pressure-2026]] | SME rising-cost concern (Airwallex outlook 2026) | https://www.thestar.com.my/business/business-news/2026/10/01/rising-costs-top-concern-for-malaysian-smes-as-growth-remains-priority | 2026-10-22
+- [[quotation-response-pain]] | Quotation / follow-up / slow-response pain and stale-cost margin loss | https://www.thestar.com.my/business/business-news/2026/10/01/rising-costs-top-concern-for-malaysian-smes-as-growth-remains-priority | 2026-10-22
+- [[ppi-local-production-2026-06]] | DOSM PPI local production, June 2026 | https://www.dosm.gov.my/portal-main/release-content/producer-price-index--local-production-june2026 | 2026-10-22
+- [[cpi-2026-09]] | DOSM CPI, September 2026 | https://www.bernama.com/tv/news.php?id=2622347 | 2026-10-22
+- [[minimum-wage-2025]] | Malaysia minimum wage | https://www.skrine.com/insights/alerts/july-2025/minimum-wage-throughout-malaysia-aligned-from-1-au | 2026-10-22
+- [[sdg-8-2]] | SDG target 8.2 | https://unstats.un.org/sdgs/files/metadata-compilation/metadata-goal-8.pdf | 2026-10-22
+- [[sdg-8-3]] | SDG target 8.3 | https://metadata.un.org/sdg/8.3 | 2026-10-22
+- [[sdg-9-3]] | SDG target 9.3 | https://sdgs.un.org/goals/goal9 | 2026-10-22
+- [[made-to-order-share]] | derived from EC2023 profile | https://www.dosm.gov.my/portal-main/release-content/economic-census-2023-profile-of-small-and-medium-enterprises | 2026-10-22
+- [[pdpa-malaysia]] | PDPA Amendment Act 2024 implementation (DFDL) | https://www.dfdl.com/insights/legal-and-tax-updates/malaysia-implementation-of-the-personal-data-protection-amendment-act-2024/ | 2026-10-22
+- [[pdpa-malaysia]] | Data breach guideline summary (DLA Piper) | https://privacymatters.dlapiper.com/2025/03/malaysia-guidelines-issued-on-data-breach-notification-and-data-protection-officer-appointment/ | 2026-10-22
+- [[e-invoice-myinvois]] | LHDN raises e-invoice threshold RM3M (The Star) | https://thestar.com.my/news/nation/2026/08/30/over-11-million-businesses-to-benefit-from-higher-e-invoicing-threshold-says-lhdn | 2026-10-22
+- [[e-invoice-myinvois]] | Phase 4 / RM10k guide (beancount.io) | https://beancount.io/blog/2026/09/16/malaysia-e-invoicing-phase-4-rm3m-exemption-rm10000-rule-guide | 2026-10-22
+- [[sst-and-quotation-docs]] | Malaysia SST guide 2026 (Kintsugi) | https://trykintsugi.com/sales-tax-guides/apac/malaysia | 2026-10-22
+- [[whatsapp-cloud-api]] | WhatsApp Business Platform pricing (Meta) | https://developers.facebook.com/docs/whatsapp/pricing/ | 2026-10-22
+- [[whatsapp-cloud-api]] | WhatsApp API pricing Malaysia (ChatMaxima) | https://chatmaxima.com/whatsapp-api-pricing/malaysia/ | 2026-10-22
+- [[telegram-bot-api]] | Telegram Bots FAQ | https://core.telegram.org/bots/faq | 2026-10-22
+- [[adr-ilmu-api]] | ILMU site / console pricing | https://console.ilmu.ai/pricing | 2026-10-22
+- [[adr-mesolitica-whisper]] | HF mesolitica whisper models | https://huggingface.co/api/models?author=mesolitica&search=whisper | 2026-10-22
+- [[adr-ocr-paddle-tesseract]] | PP-OCRv5 multilingual | https://www.paddleocr.ai/latest/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5_multi_languages.html | 2026-10-22
+- [[adr-qwen3-vllm-runpod]] | RunPod endpoint configurations | https://docs.runpod.io/serverless/endpoints/endpoint-configurations | 2026-10-22
+- [[adr-qwen3-vllm-runpod]] | vLLM structured outputs | https://docs.vllm.ai/en/latest/features/structured_outputs/ | 2026-10-22
+- [[adr-replit-hosting]] | Replit deployment repricing | https://docs.replit.com/billing/deployment-repricing | 2026-10-22
+- [[adr-pricecatcher]] | OpenDOSM PriceCatcher | https://open.dosm.gov.my/data-catalogue/pricecatcher | 2026-10-22
+- [[pricing-numbers]] | Compiled numbers | see linked notes | 2026-10-22

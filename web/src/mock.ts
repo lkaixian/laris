@@ -95,7 +95,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   const owner = role === 'owner'
   const need = () => { if (!owner) throw new ApiError(403, 'forbidden', 'Owner role required.') }
   let m: RegExpMatchArray | null
-  if (p === '/me') return { role, name: owner ? 'SAMPLE Owner' : 'SAMPLE Staff' }
+  if (p === '/me') return { role, name: owner ? 'SAMPLE Owner' : 'SAMPLE Staff', org: { name: 'SAMPLE Trading Sdn Bhd', logo_url: null } }
   if (p === '/tracker') {
     const all = Object.values(docs).map(summary).map(s => owner ? s : { ...s, flags: { ...s.flags, cost_is_stale: false } })
     return { received: all.filter(d => d.direction === 'in'), sent: all.filter(d => d.direction === 'out') }

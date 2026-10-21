@@ -1,43 +1,61 @@
 @import "tailwindcss";
 
 /*
-  ALL styling decisions live here. Draft without direction: dials ENERGY 1 / RHYTHM 1 / MOTION 1
-  (calm, uniform, hover states only). A later DESIGN.md should only need to swap the tokens below.
-  Typeface reason: the system UI stack is used so the demo loads offline with no font fetch and reads clearly at small sizes.
+  ALL styling decisions live here. DESIGN.md: green and white, light and dark, ENERGY 1 / RHYTHM 2 / MOTION 1.
+  Typeface: system UI stack so the app loads offline with no font fetch and reads clearly at small sizes.
+  Two palettes keyed on <html data-theme>. Measured WCAG contrast is listed in the hand-off report; keep pairs >= 4.5:1 (text) and >= 3:1 (borders, focus ring).
 */
-@theme {
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f8f5; --surface: #ffffff; --ink: #16231d; --muted: #475a50; --amber: #8a5a00;
+  --line: #6a7d72; --soft: #dce7e0; --tint: #e1f0e8;
+  --accent: #0f5c47; --accent-hover: #0a4434; --on-accent: #ffffff;
+  --warn: #8f2a1a; --warn-bg: #fbeeea;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1914; --surface: #12251e; --ink: #f3f1e6; --muted: #a9bbb1; --amber: #f2ad2e;
+  --line: #6f8a7d; --soft: #244036; --tint: #1a3a2f;
+  --accent: #45b98d; --accent-hover: #68cca6; --on-accent: #06140f;
+  --warn: #ffa391; --warn-bg: #3a1b16;
+}
+
+@theme inline {
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --color-bg: #f7f6f2;
-  --color-surface: #ffffff;
-  --color-ink: #1d1d1b;
-  --color-muted: #575752;
-  --color-line: #8a8880;
-  --color-soft: #e4e2d9;
-  --color-accent: #1d5c63;
-  --color-accent-hover: #154349;
-  --color-on-accent: #ffffff;
-  --color-warn: #8f2a1a;
-  --color-warn-bg: #fbeeea;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-soft: var(--soft);
+  --color-tint: var(--tint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-amber: var(--amber);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
   --radius-ui: 4px;
 }
 
 @layer base {
   body { @apply bg-bg text-ink font-sans text-base; }
-  :focus-visible { outline: 3px solid var(--color-accent); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 }
 
 @layer components {
-  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-soft disabled:opacity-50; }
-  .btn-primary { @apply border-accent bg-accent text-on-accent hover:bg-accent-hover; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50; }
+  .btn-primary { @apply border-accent bg-accent text-on-accent hover:bg-accent-hover hover:border-accent-hover; }
   .btn-danger { @apply border-warn text-warn hover:bg-warn-bg; }
   .input { @apply min-h-11 rounded-ui border border-line bg-surface px-3 text-sm text-ink; }
   .card { @apply rounded-ui border border-soft bg-surface p-4; }
   .badge { @apply inline-block rounded-ui border border-line px-2 py-0.5 text-xs font-semibold text-ink; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
-  .link { @apply text-accent underline underline-offset-2 hover:text-accent-hover; }
-  .navlink { @apply inline-flex min-h-11 items-center px-3 text-sm font-semibold text-ink underline-offset-4 hover:underline; }
-  .navlink[aria-current="page"] { @apply underline decoration-2; }
+  .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }
+  .navlink { @apply inline-flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-semibold text-muted transition-colors hover:text-ink; }
+  .navlink[aria-current="page"] { @apply border-accent text-ink; }
+  .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
   th { @apply px-3 py-2 text-left text-xs font-semibold text-muted; }
   td { @apply px-3 py-2 align-top text-sm; }
   tbody tr { @apply border-t border-soft; }

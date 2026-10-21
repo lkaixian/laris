@@ -15,15 +15,14 @@ export interface Line {
   unit_price: string | null; discount_pct: string | null; tax_rate: string | null
   section: string | null; is_header: boolean; needs_review: boolean; ocr_confidence: number | null
   attrs: Record<string, unknown>; attrs_unmapped: Record<string, unknown>
-  // Not in contract v0 but the POST accepts item_key, so a read value is needed; absent = not mapped.
-  item_key?: string | null
+  item_key: string | null
 }
 export interface Provenance {
   cost_item_id: string; supplier: string; source_doc_id: string; source_doc_no: string
-  source_line_id: string; cost_date: string; unit_cost: string; cost_snapshot: string
+  line_id: string; source_line_id: string; cost_date: string; unit_cost: string; cost_snapshot: string
   current_unit_cost: string; cost_is_stale: boolean; line_margin: string
-  line_id?: string // not in contract v0: lets the UI attach the panel to its quote line
 }
+export interface Me { role: Role; name: string; org: { name: string; logo_url: string | null } }
 export interface DocDetail {
   doc: DocSummary & { terms?: Record<string, unknown> }
   lines: Line[]
@@ -64,9 +63,9 @@ export const NEXT: Record<Direction, Record<string, Action[]>> = {
 export const MOCK = import.meta.env.VITE_MOCK === '1'
 const USER = '00000000-0000-0000-0000-000000000001' // simulated X-User
 
-let role: Role = localStorage.getItem('role') === 'staff' ? 'staff' : 'owner'
+let role: Role = (() => { try { return localStorage.getItem('role') === 'staff' ? 'staff' : 'owner' } catch { return 'owner' } })()
 export const getRole = () => role
-export const setRole = (r: Role) => { role = r; localStorage.setItem('role', r) }
+export const setRole = (r: Role) => { role = r; try { localStorage.setItem('role', r) } catch { /* storage blocked */ } }
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }

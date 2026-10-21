@@ -28,3 +28,5 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 21 | Architecture review: 4 P0 demo blockers (UI user id, no static serving, seed/template key mismatch, no upload/enquiry control and routing), P1 list | knowledge/14-reviews/architecture-review.md | 4063e1c |
 | 22 | Code review: 4 High, 13 Medium, 8 Low; most reproduced against PGlite; pytest 71 pass | knowledge/14-reviews/code-review.md | ec97436 |
 | 23 | Accessibility review in headless Edge: contrast and reflow pass; focus lost after actions (High), tab order, live regions (Medium) | knowledge/14-reviews/accessibility-review.md | ed4eea9 |
+| 24 | QA end-to-end run: suites green; API drive passes; demo path blocked by 3 P0 issues | knowledge/14-reviews/qa-report.md | b86e131 |
+| 25 | Consolidated, de-duplicated fix list (7 P0, 13 P1, 5 P2) from all five reviews | knowledge/14-reviews/fix-list.md | b86e131 |

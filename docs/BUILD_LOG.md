@@ -20,3 +20,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 13 | DESIGN.md direction, contract: org branding, item_key, line_id | docs updated | f69e92a |
 | 14 | Synthetic SAMPLE quotation documents, enquiry texts, expected JSON; OCR overlap 0.98 clean, 0.88 degraded (Tesseract eng, hand-measured) | pytest tests/test_samples.py 15 passed | fad8cd4 |
 | 15 | Frontend restyled per DESIGN.md: green/white, light and dark toggle, LARIS logo plus org slot; contrast measured by script (all pairs pass); viewed in headless Edge, not clicked through | npm run build passes | 3762679 |
+| 16 | PRD, Tech & Tools Declaration, demo script, pitch outline (38 REAL DATA placeholders to fill; no em dashes, checked by grep) | docs/ | 3a01fc5 |

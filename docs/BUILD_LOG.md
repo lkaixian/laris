@@ -26,3 +26,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 19 | FastAPI layer: all contract endpoints, staff scrubbing, ingest and enquiry pipelines, webhooks (fail closed), scheduler, v_quote_margin and stale view; stale alert margin_delta -400 | pytest 71 passed (PGlite socket); nothing run against real ILMU, WhatsApp, Telegram or Postgres | 951e003 |
 | 20 | Security audit: 24 findings recorded (1 High for real use, 10 Medium, rest Low/Info); git history scanned for key patterns, 0 matches | knowledge/14-reviews/security-audit.md | 89bdd5e |
 | 21 | Architecture review: 4 P0 demo blockers (UI user id, no static serving, seed/template key mismatch, no upload/enquiry control and routing), P1 list | knowledge/14-reviews/architecture-review.md | 4063e1c |
+| 22 | Code review: 4 High, 13 Medium, 8 Low; most reproduced against PGlite; pytest 71 pass | knowledge/14-reviews/code-review.md | ec97436 |

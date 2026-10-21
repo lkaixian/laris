@@ -1,9 +1,12 @@
 """Inbound channels. WhatsApp: verify HMAC on the RAW body before parsing. Telegram: secret-token header.
-Known supplier contact -> supplier-document pipeline; anyone else -> customer enquiry pipeline."""
+A staff/owner handle (users.channel_handle) or a supplier party -> supplier-document pipeline; anyone else -> customer
+enquiry pipeline only, rate-limited so spam cannot burn ILMU credit."""
 import hmac
 import json
 import logging
 import os
+import time
+from collections import defaultdict, deque
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
@@ -16,7 +19,20 @@ from .deps import JR
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
+LIMIT, WINDOW = 10, 600  # enquiries per sender per 10 minutes
+# ponytail: in-memory, per process (run.sh forces 1 worker), keys never pruned; move to Redis/DB if we scale out
+_HITS = defaultdict(deque)
 SORRY = "Sorry, we could not process that message. Our team will follow up."
+
+
+def _limited(sender) -> bool:
+    now, q = time.monotonic(), _HITS[sender]
+    while q and now - q[0] > WINDOW:
+        q.popleft()
+    if len(q) >= LIMIT:
+        return True
+    q.append(now)
+    return False
 
 
 def _handle(conn, s, m):
@@ -27,22 +43,35 @@ def _handle(conn, s, m):
     digits = "".join(ch for ch in m.sender if ch.isdigit())
     if not digits:
         return None
-    # ponytail: single-tenant routing (sender's party, else the first tenant); add phone-number-id -> tenant for multi-tenant
-    p = conn.execute(r"""select id, tenant_id, role from parties
-                         where regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s
-                         order by (role = 'supplier') desc limit 1""", (digits,)).fetchone()
-    if p:
-        tid = p["tenant_id"]
+    # ponytail: single-tenant routing; WHATSAPP_TENANT_ID (else the first tenant) owns every unknown sender
+    u = conn.execute(r"""select id, tenant_id from users where regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %s
+                         limit 1""", (digits,)).fetchone()
+    if u:  # our own staff/owner forwarding a supplier document
+        tid, actor, p = u["tenant_id"], u["id"], {"id": None, "role": "supplier"}
     else:
-        tid = conn.execute("select id from tenants order by name, id limit 1").fetchone()["id"]
-        p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
+        actor = None
+        p = conn.execute(r"""select id, tenant_id, role from parties
+                             where regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s
+                             order by (role = 'supplier') desc limit 1""", (digits,)).fetchone()
+        if p and p["role"] == "supplier":
+            tid = p["tenant_id"]
+        else:
+            if _limited(digits):
+                log.warning("inbound from %s rate-limited", digits)
+                return None
+            tid = p["tenant_id"] if p else None
+            if tid is None:
+                t = conn.execute("select id from tenants where id::text = %s", (os.environ.get("WHATSAPP_TENANT_ID", ""),)).fetchone() \
+                    or conn.execute("select id from tenants order by name, id limit 1").fetchone()
+                tid = t["id"]
+                p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
     if p["role"] == "supplier":
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
-            res = pipeline.ingest_supplier_document(conn, tid, data=data, mime=mime, party_id=p["id"], channel=m.channel,
+            res = pipeline.ingest_supplier_document(conn, tid, data=data, mime=mime, party_id=p["id"], channel=m.channel, actor=actor,
                                                     external_id=m.external_id, ilmu_client=s.ilmu, ocr=s.ocr)
         elif m.text and not m.media_kind:
-            res = pipeline.ingest_supplier_document(conn, tid, text=m.text, party_id=p["id"], channel=m.channel,
+            res = pipeline.ingest_supplier_document(conn, tid, text=m.text, party_id=p["id"], channel=m.channel, actor=actor,
                                                     external_id=m.external_id, ilmu_client=s.ilmu)
         else:
             raise ApiError(415, "unsupported_media", "supplier documents: send a PDF, photo or text")

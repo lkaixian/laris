@@ -223,9 +223,10 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
         attrs, unmapped = route_attrs(conn, tenant_id, "out", l["attrs"])
         lid = conn.execute(
             """insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price,price_source,
-                   needs_review,attrs,attrs_unmapped) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
+                   needs_review,attrs,attrs_unmapped,other_cost_per_unit) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
             (doc_id, l["line_no"], tpl["recipes"][l["item_key"]].get("description", l["item_key"]), l["item_key"],
-             l["qty"], l["uom"], l["unit_price"], l["price_source"], l["line_no"] in flagged, Jsonb(attrs), Jsonb(unmapped))
+             l["qty"], l["uom"], l["unit_price"], l["price_source"], l["line_no"] in flagged, Jsonb(attrs), Jsonb(unmapped),
+             sum((q * u for _, q, u, cid in l["basis"] if cid is None), Decimal(0)) / l["qty"])  # labour + machine per unit
         ).fetchone()["id"]
         propose(conn, tenant_id, unmapped, lid)
         for _, q, uc, cid in l["basis"]:

@@ -112,6 +112,7 @@ CREATE TABLE document_lines (
   tax_rate numeric(5,2),
   section text, is_header boolean NOT NULL DEFAULT false, is_provisional boolean NOT NULL DEFAULT false,
   price_override_reason text,
+  other_cost_per_unit numeric(14,4) NOT NULL DEFAULT 0,   -- out lines: labour + machine hours cost per unit (not in line_cost_basis)
   attrs jsonb NOT NULL DEFAULT '{}',          -- approved trade fields (see tenant_fields)
   attrs_unmapped jsonb NOT NULL DEFAULT '{}', -- fields seen but not approved yet
   UNIQUE (document_id, line_no),

@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import io
 import json
+import uuid
+from decimal import Decimal
 
 from openpyxl import load_workbook
 
@@ -44,6 +46,7 @@ def tr(e, doc, to, who=None, **kw):
 # ---------------------------------------------------------------- secrecy
 def test_staff_never_sees_cost_or_margin(env):
     e = env
+    e.shock()
     qid = seed_quote(e)
     e.sql("insert into tenant_fields(tenant_id,key,label,type,owner_only) select tenant_id,'internal_note','Note','text',true from users limit 1")
     e.sql("update document_lines set attrs = '{\"internal_note\":\"secret\"}' where document_id=%s", (qid,))
@@ -81,8 +84,8 @@ def test_me_auth_and_errors(env):
 
 
 def test_views_one_row_per_line(env):
-    rows = env.sql("select * from v_quote_margin")
-    assert len(rows) == 1 and str(rows[0]["line_cost"]) .startswith("1160") and str(rows[0]["line_margin"]).startswith("1240")
+    rows = env.sql("select * from v_quote_margin")  # 40 x (29 materials + 8.50 labour/machine) = 1500 of 2400
+    assert len(rows) == 1 and rows[0]["line_cost"] == 1500 and rows[0]["line_margin"] == 900 and rows[0]["margin_pct"] == Decimal("37.50")
 
 
 # ---------------------------------------------------------------- transitions + flow
@@ -148,6 +151,8 @@ def test_inbound_review_flow_and_line_rules(env):
 # ---------------------------------------------------------------- stale alerts
 def test_stale_alert_shows_400_delta(env):
     e = env
+    assert e.c.get("/api/alerts/stale-costs", headers=e.O).json() == []  # seed alone: nothing stale
+    e.shock()
     a = e.c.get("/api/alerts/stale-costs", headers=e.O).json()
     assert len(a) == 1
     assert (a[0]["item_key"], a[0]["old_cost"], a[0]["current_cost"], a[0]["margin_delta"], a[0]["status"]) == \
@@ -327,3 +332,65 @@ def test_scheduler_followup_then_expiry(env):
     assert scheduler.run_once()["expired"] == 1
     assert e.sql("select status from documents where id=%s", (q,))[0]["status"] == "expired"
     assert any(x["event"] == "status sent->expired" and x["actor"] == "system:scheduler" for x in e.c.get("/api/audit", headers=e.O).json())
+
+
+# ---------------------------------------------------------------- margin includes labour/machine (code-review H1)
+def test_margin_includes_machine_cost(env):
+    e = env
+    d = make_draft(e)  # print_part_small x10 @ RM32: materials 3.50 + 16 machine = 20/unit
+    row = e.sql("select * from v_quote_margin where quote_id=%s", (d,))[0]
+    assert (row["line_total"], row["line_cost"], row["line_margin"], row["margin_pct"]) == (320, 200, 120, Decimal("37.50"))
+    assert e.sql("select other_cost_per_unit o from document_lines where document_id=%s", (d,))[0]["o"] == 16
+    prov = e.c.get(f"/api/documents/{d}", headers=e.O).json()["provenance"]
+    assert {p["line_margin"] for p in prov} == {"120.0000"}
+
+
+def test_signboard_recipe_prices_like_the_seed(env):
+    e = env
+    r = e.enquire([{"item_key": "signboard_60x30", "qty": 40}])
+    assert r.status_code == 201, r.text
+    ln = e.c.get(f"/api/documents/{r.json()['id']}", headers=e.O).json()["lines"][0]
+    assert ln["unit_price"] == "60.0000"
+
+
+# ---------------------------------------------------------------- stale alerts: real margin loss only
+def test_stale_alerts_ignore_cost_drops_and_drafts(env):
+    e = env
+    e.enquire([{"item_key": "signboard_60x30", "qty": 40}])  # draft priced on RM100 acrylic
+    e.shock(price=60)  # cost DROP: no alert at all
+    assert e.c.get("/api/alerts/stale-costs", headers=e.O).json() == []
+    e.shock(price=140, doc_no="QA-2026-0162")  # rise: only the sent QT-0001 alerts, never the draft
+    assert [a["quote_no"] for a in e.c.get("/api/alerts/stale-costs", headers=e.O).json()] == ["SAMPLE-QT-0001"]
+
+
+# ---------------------------------------------------------------- webhook routing (fix 6)
+def test_staff_handle_routes_to_supplier_pipeline(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    e.sql("update users set channel_handle='+60 12-999 0001' where role='staff'")
+    parties = e.sql("select count(*) n from parties")[0]["n"]
+    e.ai.payload = {"supplier_name": "Forwarded Co", "doc_no": "FW-1", "issued_on": "2026-01-02", "lines": [
+        {"description": "plywood 12mm", "qty": 1, "uom": "sheet", "unit_price": 40, "amount": 40}]}
+    msg = {"entry": [{"changes": [{"value": {"messages": [
+        {"id": "wamid.s1", "from": "60129990001", "timestamp": "1", "type": "text", "text": {"body": "quote FW-1 ..."}}]}}]}]}
+    assert wa_post(e, msg).status_code == 200
+    rec = e.c.get("/api/tracker", headers=e.O).json()["received"]
+    assert any(x["doc_no"] == "FW-1" and x["status"] == "parsed" for x in rec)
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 0  # not treated as a customer enquiry
+    assert e.sql("select count(*) n from parties where role='customer'")[0]["n"] == 1  # only the seeded customer
+    assert e.sql("select count(*) n from parties")[0]["n"] == parties + 1  # the supplier party from the document
+    assert e.sql("select created_by from documents where doc_no='FW-1'")[0]["created_by"] == uuid.UUID(e.staff)
+
+
+def test_unknown_sender_is_rate_limited(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    monkeypatch.setenv("WHATSAPP_TENANT_ID", e.sql("select id from tenants")[0]["id"].__str__())
+    e.stock_costs()
+    e.ai.payload = {"items": [PART]}
+    before = e.ai.calls
+    for i in range(12):
+        assert wa_post(e, {"entry": [{"changes": [{"value": {"messages": [{"id": f"wamid.spam{i}", "from": "60188887777", "timestamp": "1",
+                                                                       "type": "text", "text": {"body": "10 small parts"}}]}}]}]}).status_code == 200
+    assert e.ai.calls - before == 10  # the other two never reached ILMU
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 10

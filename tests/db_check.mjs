@@ -47,7 +47,13 @@ ok((await q("select status from documents where id=$1",[p]))[0].status==='accept
 const p2=await doc('in','accepted');await db.query("insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price) values($1,1,'x',null,1,'kg',9)",[p2]);
 await throws('null item_key blocks promotion',"select promote_document($1)",[p2]);
 
-// seed: stale quote + delta
+// seed alone is not stale; promote the newer RM140 acrylic quote (the live demo step) -> stale + delta
+ok((await q("select count(*)::int c from v_quote_bom where cost_is_stale"))[0].c===0,'seed: nothing stale before the newer quote');
+const sa=(await q("select id from parties where name like 'SAMPLE Supplier A%'"))[0].id,a2=(await q(`insert into documents(tenant_id,direction,kind,party_id,doc_no,status,issued_on,valid_until,parent_id)
+  values($1,'in','quotation',$2,'SAMPLE-A-002','received',current_date-3,current_date+27,$3) returning id`,[T,sa,a1]))[0].id;
+await db.query("insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price) values($1,1,'SAMPLE acrylic 3mm sheet','acrylic_3mm_sheet',1,'sheet',140)",[a2]);
+for(const st of ['parsed','reviewed','accepted'])await db.query("update documents set status=$2 where id=$1",[a2,st]);
+await db.query("select promote_document($1)",[a2]);
 const s=await q("select cost_is_stale,cost_snapshot::float cs,current_unit_cost::float cur,item_key,qty::float qty,qty_consumed::float qc from v_quote_bom order by item_key");
 console.table(s);
 const ac=s.find(r=>r.item_key==='acrylic_3mm_sheet'),vi=s.find(r=>r.item_key==='vinyl_roll');

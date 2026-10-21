@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import db
+from src.api import webhooks
 from src.api.deps import Services
 from src.app import app
 
@@ -72,6 +73,21 @@ class Env:
             assert self.c.post(f"/api/documents/{doc}/transition", json={"to": to}, headers=who).status_code == 200
         return doc
 
+    def shock(self, price=140, desc="SAMPLE acrylic 3mm sheet", doc_no="QA-2026-0161"):
+        """The live demo: the newer acrylic quote (fixture 06b) arrives, staff confirm the fuzzy item match, owner accepts."""
+        self.ai.payload = {"supplier_name": "SAMPLE Supplier A Acrylic Sdn Bhd", "doc_no": doc_no,
+                           "issued_on": self.sql("select (current_date - 1)::text d")[0]["d"],
+                           "lines": [{"description": desc, "qty": 10, "uom": "sheet", "unit_price": price, "amount": 10 * price}]}
+        r = self.c.post("/api/documents/ingest", data={"text": "supplier quote text"}, headers=self.S)
+        assert r.status_code == 201, r.text
+        doc = r.json()["id"]
+        ln = self.c.get(f"/api/documents/{doc}", headers=self.S).json()["lines"][0]
+        assert self.c.post(f"/api/documents/{doc}/lines/{ln['id']}", json={"item_key": "acrylic_3mm_sheet", "needs_review": False},
+                           headers=self.S).status_code == 200
+        for who, to in ((self.S, "reviewed"), (self.O, "accepted"), (self.O, "in_cost_book")):
+            assert self.c.post(f"/api/documents/{doc}/transition", json={"to": to}, headers=who).status_code == 200
+        return doc
+
 
 @pytest.fixture
 def env(pg_url, monkeypatch):
@@ -84,5 +100,6 @@ def env(pg_url, monkeypatch):
     ai.payload, ai.fail, ai.calls = {}, False, 0
     svc = FakeSvc(ai)
     app.state.svc = svc
+    webhooks._HITS.clear()
     yield Env(TestClient(app), ai, svc)
     app.state.svc = Services()

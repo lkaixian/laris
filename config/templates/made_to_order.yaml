@@ -7,6 +7,8 @@ item_catalog:
   - {item_key: pla_1kg_white, uom: kg, aliases: [pla white, pla putih, white pla filament]}
   - {item_key: plywood_12mm_sheet, uom: sheet, aliases: [plywood 12mm, papan lapis 12mm, 12mm ply]}
   - {item_key: screw_m4, uom: pcs, aliases: [m4 screw, skru m4, screw m4]}
+  - {item_key: acrylic_3mm_sheet, uom: sheet, aliases: [acrylic, acrylic 3mm, acrylic sheet, akrilik, akrilik 3mm]}
+  - {item_key: vinyl_roll, uom: m, aliases: [vinyl, vinyl roll, vinil, sticker vinyl]}
   - {item_key: packaging_box, uom: pcs, aliases: [box, kotak, carton box, kotak kadbod]}
 rate_card:            # RM/hour
   machine_hour: 8.00
@@ -28,6 +30,14 @@ recipes:
       - {item_key: plywood_12mm_sheet, qty: 0.5}
       - {item_key: screw_m4, qty: 8}
     hours: {labour_hour: 1}
+  signboard_60x30:
+    description: Acrylic signboard 60x30 cm (papan tanda akrilik)
+    uom: pcs
+    markup_pct: 60
+    bom:
+      - {item_key: acrylic_3mm_sheet, qty: 0.25}
+      - {item_key: vinyl_roll, qty: 0.5}
+    hours: {machine_hour: 0.5, labour_hour: 0.25}   # RM8.50/unit: cost 29 + 8.50 = 37.50, +60% = RM60.00
   design_service:
     description: Design work (per hour)
     uom: hour

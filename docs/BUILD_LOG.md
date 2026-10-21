@@ -31,3 +31,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 24 | QA end-to-end run: suites green; API drive passes; demo path blocked by 3 P0 issues | knowledge/14-reviews/qa-report.md | b86e131 |
 | 25 | Consolidated, de-duplicated fix list (7 P0, 13 P1, 5 P2) from all five reviews | knowledge/14-reviews/fix-list.md | b86e131 |
 | 26 | Fix list items: .env.example cleaned and new vars documented (Telegram secret, CORS, org logo, scheduler); DESIGN.md logo note updated | fix-list 24 (partial) | 29bcada |
+| 27 | Fix list items 2,3,4,6,8,9,10 (backend): signboard recipe and seed match, only RM100 quote seeded so RM140 uploads live, SPA static serving, staff/supplier webhook routing with rate limit, margin includes machine and labour, fuzzy item matches always need review, stale alerts only for cost increases | pytest 78 passed, db_check ALL GREEN, schema_check OK | ec53965 |

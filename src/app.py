@@ -1,9 +1,11 @@
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import db, scheduler
@@ -52,3 +54,20 @@ async def _validation(_, e):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class SPA(StaticFiles):
+    """Built frontend; unknown non-API paths fall back to index.html so client-side routes survive a reload."""
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as e:
+            if e.status_code == 404 and not path.replace("\\", "/").startswith(("api/", "webhooks/")):
+                return await super().get_response("index.html", scope)
+            raise
+
+
+DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+if (DIST / "index.html").is_file():  # after every router so it never shadows /api, /webhooks, /health
+    app.mount("/", SPA(directory=DIST, html=True), name="web")

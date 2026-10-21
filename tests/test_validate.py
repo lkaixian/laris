@@ -81,3 +81,12 @@ def test_unknown_item_and_parse_error():
     assert l["item_key_suggestion"] is None and "no_item_match" in l["failed"]
     assert not validate_extraction("{not json", CAT)["ok"]
     assert validate_extraction(json.dumps(Q), CAT, today=TODAY)["ok"]
+
+
+def test_fuzzy_match_is_only_a_suggestion():
+    d = copy.deepcopy(Q)
+    d["lines"][1]["description"] = "M5 screw"  # fuzzy-matches screw_m4 at 0.875
+    l = run(d)["lines"][1]
+    assert l["item_key_suggestion"] == "screw_m4" and l["item_key_score"] < 1 and l["needs_review"] and "fuzzy_item_match" in l["failed"]
+    d["lines"][1]["description"] = "screw m4"  # exact alias passes
+    assert not run(d)["lines"][1]["needs_review"]

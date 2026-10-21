@@ -26,7 +26,7 @@ def _date(s):
 
 
 def match_item(description, catalog):
-    """-> (item_key, score, uom) best fuzzy alias match, or (None, score, None)."""
+    """-> (item_key, score, uom) best alias match, or (None, 0, None). score 1.0 = exact alias/item_key; fuzzy is always < 1."""
     if not catalog or not description:
         return None, 0.0, None
     names = {}
@@ -38,7 +38,8 @@ def match_item(description, catalog):
     if not hit:
         return None, 0.0, None
     it = names[hit[0]]
-    return it["item_key"], round(difflib.SequenceMatcher(None, d, hit[0]).ratio(), 3), it["uom"]
+    score = 1.0 if hit[0] == d else min(round(difflib.SequenceMatcher(None, d, hit[0]).ratio(), 3), 0.999)
+    return it["item_key"], score, it["uom"]
 
 
 def validate_extraction(data, catalog=None, today=None) -> dict:
@@ -77,8 +78,11 @@ def validate_extraction(data, catalog=None, today=None) -> dict:
         if catalog is not None:
             if key is None:
                 failed.append("no_item_match")
-            elif raw.get("uom") and raw["uom"].lower() != cat_uom.lower():
-                failed.append("uom_mismatch")
+            else:
+                if score < 1.0:
+                    failed.append("fuzzy_item_match")  # a fuzzy match is only a suggestion; a human confirms it
+                if raw.get("uom") and raw["uom"].lower() != cat_uom.lower():
+                    failed.append("uom_mismatch")
         if not raw.get("uom"):
             failed.append("null_uom")
         conf = min(float(ocr) if ocr is not None else 1.0, 1.0 if arith_ok else 0.0)

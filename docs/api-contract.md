@@ -5,11 +5,11 @@ Money is a string with 2-4 decimals (e.g. "123.4000"). Dates ISO-8601. Statuses 
 
 ## Types
 Doc summary: {id, direction:"in"|"out", kind, doc_no, party:{id,name}, status, issued_on, valid_until, total, currency, updated_at, flags:{cost_is_stale:bool, needs_review:bool}}
-Line: {id, line_no, description, qty|null, uom, unit_price|null, discount_pct|null, tax_rate|null, section|null, is_header, needs_review, ocr_confidence|null, attrs:{}, attrs_unmapped:{}}
-Provenance (owner only): {cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost, cost_snapshot, current_unit_cost, cost_is_stale, line_margin}
+Line: {id, line_no, item_key|null, description, qty|null, uom, unit_price|null, discount_pct|null, tax_rate|null, section|null, is_header, needs_review, ocr_confidence|null, attrs:{}, attrs_unmapped:{}}
+Provenance (owner only): {line_id, cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost, cost_snapshot, current_unit_cost, cost_is_stale, line_margin}
 
 ## Endpoints
-- GET  /api/me -> {role, name}
+- GET  /api/me -> {role, name, org:{name, logo_url|null}}   (org = tenant branding shown beside the LARIS logo; logo_url null = initials placeholder)
 - GET  /api/tracker -> {received:[DocSummary], sent:[DocSummary]}   (two lanes, shared states)
 - GET  /api/documents/{id} -> {doc:DocSummary+terms, lines:[Line], provenance?:[Provenance] (owner), messages:[{direction,channel,body,at}]}
 - POST /api/documents/{id}/transition {to:status, reason?} -> DocSummary   (owner for approve/accept/reject; 403 otherwise; 409 if transition not allowed)

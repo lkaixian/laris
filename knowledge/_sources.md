@@ -52,3 +52,27 @@ Every note links its own `source_url`. Agents append here: `- [[note]] | title |
 - [[adr-replit-hosting]] | Replit deployment repricing | https://docs.replit.com/billing/deployment-repricing | 2026-10-22
 - [[adr-pricecatcher]] | OpenDOSM PriceCatcher | https://open.dosm.gov.my/data-catalogue/pricecatcher | 2026-10-22
 - [[pricing-numbers]] | Compiled numbers | see linked notes | 2026-10-22
+- [[approaches-compared]] | GraphLayoutLM (LayoutLMv3 FUNSD/CORD figures) | https://arxiv.org/pdf/2308.07777 | 2026-10-22
+- [[approaches-compared]] | DocGraphLM | https://arxiv.org/pdf/2401.02823 | 2026-10-22
+- [[approaches-compared]] | DocParser (Donut/LayoutLMv3 speed on CORD) | https://arxiv.org/pdf/2304.12484 | 2026-10-22
+- [[approaches-compared]] | PaddleOCR 3.0 Technical Report (PP-StructureV3) | https://arxiv.org/pdf/2507.05595 | 2026-10-22
+- [[approaches-compared]] | Qwen2.5-VL-7B-Instruct model card (Apache-2.0, DocVQA 95.7, OCRBench 864) | https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct | 2026-10-22
+- [[approaches-compared]] | Qianfan-VL (independent Qwen2.5-VL doc figures) | https://arxiv.org/pdf/2509.18189 | 2026-10-22
+- [[approaches-compared]] | vLLM structured outputs docs v0.10.2 | https://docs.vllm.ai/en/v0.10.2/features/structured_outputs.html | 2026-10-22
+- [[how-the-ai-finds-values]] | Information redundancy and biases in public document IE benchmarks | https://arxiv.org/pdf/2304.14936 | 2026-10-22
+- [[dashboard-live-update]] | PostgreSQL NOTIFY | https://www.postgresql.org/docs/current/sql-notify.html | 2026-10-22
+- [[dynamic-fields-design]] | PostgreSQL JSON types (jsonb, GIN) | https://www.postgresql.org/docs/current/datatype-json.html | 2026-10-22
+- [[dynamic-fields-design]] | Baserow field overview | https://baserow.io/user-docs/baserow-field-overview | 2026-10-22
+- [[names-and-document-types]] | Niagawan Quotation guide | https://niagawan.com/quotation/ | 2026-10-22
+- [[names-and-document-types]] | WebToffee quotation vs proforma | https://www.webtoffee.com/blog/quotation-and-proforma-invoice/ | 2026-10-22
+- [[names-and-document-types]] | UTM PK2 kaedah perolehan | https://rmc.utm.my/wp-content/uploads/sites/79/2024/07/2.-PK2-KAEDAH-PEROLEHAN-BEKALAN-DAN-PERKHIDMATAN-ASAL.pdf | 2026-10-22
+- [[names-and-document-types]] | MOF taklimat perolehan bekalan perkhidmatan | https://mof.gov.my/portal/pdf/TPPA/03-taklimat-mekanisme-pelaksanaan-perolehan-pematuhan-PPPK-bekalan-perkhidmatan.pdf | 2026-10-22
+- [[anatomy-and-layout]] | Quotation Template (Malaysia) | https://forms-legal.com/malaysia/business/contracts/quotation-template-malaysia | 2026-10-22
+- [[anatomy-and-layout]] | Refrens SST invoice format | https://refrens.com/en-my/sst-invoice-format | 2026-10-22
+- [[malaysia-conventions]] | Kintsugi Malaysia SST guide 2026 | https://trykintsugi.com/sales-tax-guides/apac/malaysia | 2026-10-22
+- [[malaysia-conventions]] | WorldFirst SST registration | https://www.worldfirst.com/my/blog/global-business-tips/sst-registration/ | 2026-10-22
+- [[malaysia-conventions]] | Bernama e-invoice deferral | https://www.bernama.com/en/news.php?id=2431266 | 2026-10-22
+- [[malaysia-conventions]] | Malay Mail e-invoice exemption | https://www.malaymail.com/news/malaysia/2025/06/06/irb-malaysia-exempts-businesses-below-rm500000-from-e-invoicing-delays-mandate-for-rm1-5m-group-to-2026/179391 | 2026-10-22
+- [[malaysia-conventions]] | Info-tech e-invoice 2026 | https://www.info-tech.com.my/blog/?p=1938 | 2026-10-22
+- [[malaysia-conventions]] | Mondaq Malaysian stamp duty | https://www.mondaq.com/government-contracts-procurement--ppp/1229374/malaysian-tax-law---stamp-duty | 2026-10-22
+- [[summary]] | Quotation research compiled | see linked notes | 2026-10-22

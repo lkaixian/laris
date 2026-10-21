@@ -1,0 +1,371 @@
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { api, getRole, setRole, MOCK, NEXT } from './api'
+import type { Role, Tracker, DocDetail, DocSummary, Line, Alert, Field, Proposal, AuditEvent } from './api'
+
+// ---------- helpers ----------
+const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+const label = (s: string) => s.replace(/_/g, ' ')
+const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+
+function useFetch<T>(path: string) {
+  const [s, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true })
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    let live = true
+    set(p => ({ ...p, loading: true, error: undefined }))
+    api<T>('GET', path).then(data => live && set({ data, loading: false }), e => live && set({ loading: false, error: msg(e) }))
+    return () => { live = false }
+  }, [path, n])
+  return { ...s, reload: () => setN(x => x + 1) }
+}
+
+function Async({ s, empty, emptyText, children }: { s: { loading: boolean; error?: string; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string; children: ReactNode }) {
+  if (s.error) return (
+    <div role="alert" className="card border-warn bg-warn-bg text-warn">
+      <p>{s.error}</p>
+      <button className="btn mt-3" onClick={s.reload}>Retry loading</button>
+    </div>
+  )
+  if (s.loading && !s.data) return <p role="status" className="text-muted">Loading...</p>
+  if (empty) return <p className="card text-muted">{emptyText}</p>
+  return <>{children}</>
+}
+
+function Status({ v }: { v: string }) { return <span className="badge">{label(v)}</span> }
+
+// ---------- Tracker ----------
+function DocCard({ d, owner }: { d: DocSummary; owner: boolean }) {
+  return (
+    <li className="card">
+      <a className="link text-base font-semibold" href={`#/doc/${d.id}`}>{d.doc_no ?? 'No document number'}</a>
+      <p className="text-sm">{d.party.name}</p>
+      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <Status v={d.status} />
+        {d.flags.needs_review && <span className="badge badge-warn">Needs review</span>}
+        {owner && d.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
+        <span className="text-muted">{d.total ? rm(d.total) : ''}{d.valid_until ? `, valid until ${d.valid_until}` : ''}</span>
+      </p>
+    </li>
+  )
+}
+
+function TrackerView({ owner }: { owner: boolean }) {
+  const s = useFetch<Tracker>('/tracker')
+  const [filter, setFilter] = useState('')
+  const all = [...(s.data?.received ?? []), ...(s.data?.sent ?? [])]
+  const statuses = [...new Set(all.map(d => d.status))].sort()
+  const pick = (l: DocSummary[]) => l.filter(d => !filter || d.status === filter)
+  const lane = (title: string, hint: string, l: DocSummary[]) => (
+    <section aria-labelledby={title} className="min-w-0">
+      <h2 id={title} className="text-lg font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length})</span></h2>
+      <p className="mb-2 text-sm text-muted">{hint}</p>
+      {l.length ? <ul className="grid gap-2">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul> : <p className="card text-muted">No documents{filter ? ` with status ${label(filter)}` : ''}.</p>}
+    </section>
+  )
+  return (
+    <>
+      <h1 className="mb-3 text-2xl font-semibold">Quote tracker</h1>
+      <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-semibold">
+        Filter by status
+        <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          {statuses.map(x => <option key={x} value={x}>{label(x)}</option>)}
+        </select>
+      </label>
+      <Async s={s} empty={!all.length} emptyText="No quotes yet. Supplier quotes and customer quotes appear here once uploaded or created.">
+        <div className="grid gap-6 md:grid-cols-2">
+          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []))}
+          {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []))}
+        </div>
+      </Async>
+    </>
+  )
+}
+
+// ---------- Document detail ----------
+function cell(f: Field, v: unknown): ReactNode {
+  if (v === undefined || v === null || v === '') return <span className="text-muted">Not set</span>
+  if (f.type === 'boolean') return v ? 'Yes' : 'No'
+  return `${String(v)}${f.unit ? ' ' + f.unit : ''}`
+}
+
+function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: () => void }) {
+  const [key, setKey] = useState(l.item_key ?? '')
+  const [qty, setQty] = useState(l.qty ? String(Number(l.qty)) : '')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async () => {
+    setBusy(true); setErr('')
+    try {
+      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty })
+      onSaved()
+    } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
+  }
+  if (l.is_header) return <tr><th colSpan={6 + cols.length} scope="colgroup" className="bg-soft text-ink">{l.description}</th></tr>
+  const unmapped = Object.entries(l.attrs_unmapped)
+  return (
+    <tr>
+      <td>{l.line_no}</td>
+      <td>
+        {l.description}
+        {l.needs_review && <span className="badge badge-warn ml-2">Needs review{l.ocr_confidence !== null ? `, OCR ${Math.round(l.ocr_confidence * 100)}%` : ''}</span>}
+        {unmapped.length > 0 && <p className="text-xs text-muted">Unmapped field: {unmapped.map(([k, v]) => `${k} = ${String(v)}`).join(', ')}</p>}
+        {err && <p role="alert" className="text-xs text-warn">{err}</p>}
+      </td>
+      <td>
+        {edit ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} /> : l.item_key ?? <span className="text-muted">Not set</span>}
+      </td>
+      <td>
+        {edit ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
+      </td>
+      <td>{l.uom}</td>
+      <td>{showPrice ? rm(l.unit_price) : <span className="text-muted">Hidden for staff</span>}</td>
+      {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
+      {edit && <td><button className="btn" disabled={busy} onClick={save}>{busy ? 'Saving...' : `Save line ${l.line_no}`}</button></td>}
+    </tr>
+  )
+}
+
+function DetailView({ id, owner }: { id: string; owner: boolean }) {
+  const s = useFetch<DocDetail>(`/documents/${id}`)
+  const f = useFetch<Field[]>('/fields')
+  const [reason, setReason] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const d = s.data
+  const cols = (f.data ?? []).filter(x => x.show_in_grid).sort((a, b) => a.sort_order - b.sort_order)
+  const actions = d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []
+  const edit = !!d && d.doc.direction === 'in' && ['received', 'parsed', 'reviewed'].includes(d.doc.status)
+  const move = async (to: string) => {
+    setBusy(true); setErr('')
+    try { await api('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined }); setReason(''); s.reload() }
+    catch (e) { setErr(msg(e)) } finally { setBusy(false) }
+  }
+  const lineOf = (lineId?: string) => d?.lines.find(l => l.id === lineId)
+  return (
+    <>
+      <p className="mb-2"><a className="link inline-flex min-h-11 items-center" href="#/tracker">Back to tracker</a></p>
+      <Async s={s} empty={false}>
+        {d && (
+          <>
+            <h1 className="text-2xl font-semibold">{d.doc.doc_no ?? 'No document number'}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
+              <Status v={d.doc.status} />
+              {owner && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
+              <span className="text-muted">Total {rm(d.doc.total)}</span>
+            </p>
+
+            <section className="card mt-4" aria-labelledby="actions">
+              <h2 id="actions" className="font-semibold">Decision</h2>
+              {!actions.length && <p className="text-sm text-muted">This document is {label(d.doc.status)}. No further actions.</p>}
+              {actions.length > 0 && !owner && !actions.some(a => !a.owner) && <p className="text-sm text-muted">Only the owner can decide on this quote. Switch the simulated role to owner to try it.</p>}
+              {actions.some(a => !a.owner || owner) && (
+                <>
+                  {owner && <label className="mt-2 flex flex-col gap-1 text-sm font-semibold">Reason (optional, saved to the activity log)
+                    <input className="input max-w-md font-normal" value={reason} onChange={e => setReason(e.target.value)} />
+                  </label>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {actions.filter(a => !a.owner || owner).map(a => (
+                      <button key={a.to} disabled={busy} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{a.label}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
+            </section>
+
+            <h2 className="mt-6 mb-1 text-lg font-semibold">Lines</h2>
+            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. Lines marked Needs review are unclear on the source document.</p>}
+            {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
+            {d.lines.length === 0 ? <p className="card text-muted">This document has no lines.</p> : (
+              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Lines table, scrolls sideways on narrow screens" tabIndex={0}>
+                <table className="w-full min-w-max">
+                  <thead><tr>
+                    <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col">Qty</th><th scope="col">Unit</th>
+                    <th scope="col">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
+                    {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
+                    {edit && <th scope="col">Action</th>}
+                  </tr></thead>
+                  <tbody>{d.lines.map(l => <LineRow key={l.id + (l.item_key ?? '') + l.qty} docId={id} l={l} cols={cols} edit={edit} showPrice={owner || d.doc.direction === 'out'} onSaved={s.reload} />)}</tbody>
+                </table>
+              </div>
+            )}
+
+            {owner && d.provenance && (
+              <section className="mt-6" aria-labelledby="prov">
+                <h2 id="prov" className="text-lg font-semibold">Cost provenance <span className="text-sm font-normal text-muted">(owner only)</span></h2>
+                {d.provenance.length === 0 ? <p className="card mt-2 text-muted">No supplier cost is linked to this document.</p> : (
+                  <ul className="mt-2 grid gap-2 md:grid-cols-2">
+                    {d.provenance.map(p => {
+                      const ln = lineOf(p.line_id)
+                      const perUnit = Number(p.cost_snapshot) - Number(p.current_unit_cost)
+                      const total = ln?.qty ? perUnit * Number(ln.qty) : null
+                      return (
+                        <li key={p.cost_item_id + (p.line_id ?? '')} className="card">
+                          <p className="font-semibold">{ln ? `Line ${ln.line_no}: ${ln.description}` : `Cost item ${p.cost_item_id}`}</p>
+                          <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-sm">
+                            <dt className="text-muted">Supplier</dt><dd>{p.supplier}</dd>
+                            <dt className="text-muted">Source document</dt><dd><a className="link" href={`#/doc/${p.source_doc_id}`}>{p.source_doc_no}</a></dd>
+                            <dt className="text-muted">Cost date</dt><dd>{p.cost_date}</dd>
+                            <dt className="text-muted">Cost used in quote</dt><dd>{rm(p.cost_snapshot)}</dd>
+                            <dt className="text-muted">Current cost</dt><dd>{rm(p.current_unit_cost)}</dd>
+                            <dt className="text-muted">Line margin</dt><dd>{rm(p.line_margin)}</dd>
+                          </dl>
+                          {p.cost_is_stale && (
+                            <p className="badge badge-warn mt-2">Cost is stale: margin down {rm(String(Math.abs(total ?? perUnit)))}{total === null ? ' per unit' : ''}</p>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </section>
+            )}
+            {!owner && <p className="mt-6 text-sm text-muted">Cost and margin are visible to the owner role only.</p>}
+          </>
+        )}
+      </Async>
+    </>
+  )
+}
+
+// ---------- Stale-cost alerts + field proposals ----------
+function Proposals() {
+  const s = useFetch<Proposal[]>('/field-proposals')
+  const [err, setErr] = useState('')
+  const [type, setType] = useState<Record<string, string>>({})
+  const decide = async (p: Proposal, decision: 'approve' | 'ignore') => {
+    setErr('')
+    try { await api('POST', `/field-proposals/${p.id}/decide`, { decision, type: type[p.id] ?? 'text', label: p.key.replace(/_/g, ' ') }); s.reload() }
+    catch (e) { setErr(msg(e)) }
+  }
+  return (
+    <section className="mt-8" aria-labelledby="newf">
+      <h2 id="newf" className="text-lg font-semibold">New fields seen on documents</h2>
+      <p className="mb-2 text-sm text-muted">A field the extractor found that is not a column yet. Nothing becomes a column until you approve it.</p>
+      {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
+      <Async s={s} empty={!s.data?.length} emptyText="No unknown fields waiting for a decision.">
+        <ul className="grid gap-2 md:grid-cols-2">
+          {s.data?.map(p => (
+            <li key={p.id} className="card">
+              <p className="font-semibold">{p.key}</p>
+              <p className="text-sm text-muted">Sample values: {p.sample_values.map(String).join(', ')}</p>
+              <label className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold">Column type
+                <select className="input" value={type[p.id] ?? 'text'} onChange={e => setType({ ...type, [p.id]: e.target.value })}>
+                  {['text', 'number', 'integer', 'date', 'select', 'boolean'].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="btn btn-primary" onClick={() => decide(p, 'approve')}>Add {p.key} as column</button>
+                <button className="btn" onClick={() => decide(p, 'ignore')}>Ignore {p.key}</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Async>
+    </section>
+  )
+}
+
+function AlertsView({ owner }: { owner: boolean }) {
+  const s = useFetch<Alert[]>('/alerts/stale-costs')
+  if (!owner) return <><h1 className="text-2xl font-semibold">Stale-cost alerts</h1><p className="card mt-3 text-muted">Owner only. Staff do not see supplier cost or margin. Switch the simulated role to owner to view alerts.</p></>
+  const n = s.data?.length ?? 0
+  const lost = (s.data ?? []).reduce((a, x) => a + Number(x.margin_delta), 0)
+  return (
+    <>
+      <h1 className="text-2xl font-semibold">Stale-cost alerts</h1>
+      <p className="mb-3 text-muted">Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically.</p>
+      <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost.">
+        <p className="mb-3 text-lg font-semibold" role="status">{n} open {n === 1 ? 'quote' : 'quotes'} affected, margin down {rm(String(Math.abs(lost)))} in total</p>
+        <ul className="grid gap-3 md:grid-cols-2">
+          {s.data?.map(a => (
+            <li key={a.quote_id + a.item_key} className="card border-warn">
+              <p className="font-semibold"><a className="link" href={`#/doc/${a.quote_id}`}>{a.quote_no}</a> <span className="font-normal">for {a.customer}</span></p>
+              <p className="mt-1 text-sm">{a.item_key}: cost {rm(a.old_cost)} to {rm(a.current_cost)}</p>
+              <p className="mt-2 flex flex-wrap items-center gap-2"><span className="badge badge-warn">Margin down {rm(String(Math.abs(Number(a.margin_delta))))}</span><Status v={a.status} /></p>
+              <a className="btn btn-primary mt-3" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
+            </li>
+          ))}
+        </ul>
+      </Async>
+      <Proposals />
+    </>
+  )
+}
+
+// ---------- Activity ----------
+function ActivityView() {
+  const [events, setEvents] = useState<AuditEvent[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [checked, setChecked] = useState('')
+  const cursor = useRef(0)
+  const poll = async () => {
+    try {
+      const rows = await api<AuditEvent[]>('GET', `/audit?after=${cursor.current}`)
+      if (rows.length) { cursor.current = Math.max(...rows.map(r => r.id)); setEvents(e => [...rows.reverse(), ...e]) }
+      setError(''); setChecked(new Date().toLocaleTimeString())
+    } catch (e) { setError(msg(e)) } finally { setLoading(false) }
+  }
+  useEffect(() => { poll(); const t = setInterval(poll, 4000); return () => clearInterval(t) }, [])
+  return (
+    <>
+      <h1 className="text-2xl font-semibold">Activity log</h1>
+      <p className="mb-3 text-sm text-muted">Checks for new events every 4 seconds.{checked && ` Last checked ${checked}.`}</p>
+      {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button className="btn mt-3" onClick={poll}>Retry loading</button></div>}
+      {loading ? <p role="status" className="text-muted">Loading...</p> : events.length === 0 && !error ? <p className="card text-muted">No activity yet.</p> : (
+        <ol className="grid gap-2">
+          {events.map(e => (
+            <li key={e.id} className="card text-sm">
+              <p className="font-semibold">{e.event}</p>
+              <p className="text-muted"><time dateTime={e.at}>{new Date(e.at).toLocaleString()}</time>, by {e.actor}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
+  )
+}
+
+// ---------- Shell ----------
+export default function App() {
+  const [hash, setHash] = useState(location.hash)
+  const [role, setRoleState] = useState<Role>(getRole())
+  useEffect(() => { const h = () => setHash(location.hash); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h) }, [])
+  const owner = role === 'owner'
+  const [, page, arg] = hash.split('/')
+  const route = page || (owner ? 'alerts' : 'tracker')
+  useEffect(() => { document.title = `LARIS, ${route === 'doc' ? 'document' : route}` }, [route])
+  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['activity', 'Activity']]
+  return (
+    <>
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
+      <header className="border-b border-soft bg-surface">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
+          <strong className="text-lg">LARIS</strong>
+          <span className="badge" title="No DESIGN.md yet; styling is tokens in src/theme.css">Draft, no design direction yet</span>
+          <label className="ml-auto flex items-center gap-2 text-sm font-semibold">
+            Role (simulated)
+            <select className="input" value={role} onChange={e => { setRole(e.target.value as Role); setRoleState(e.target.value as Role) }}>
+              <option value="owner">Owner</option><option value="staff">Staff</option>
+            </select>
+          </label>
+        </div>
+        <nav aria-label="Main" className="mx-auto flex max-w-5xl flex-wrap px-1">
+          {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') ? 'page' : undefined}>{t}</a>)}
+        </nav>
+      </header>
+      {MOCK && <p className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</p>}
+      <main id="main" tabIndex={-1} key={role} className="mx-auto max-w-5xl px-4 py-5">
+        {route === 'alerts' && <AlertsView owner={owner} />}
+        {route === 'tracker' && <TrackerView owner={owner} />}
+        {route === 'activity' && <ActivityView />}
+        {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
+        {!['alerts', 'tracker', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+      </main>
+    </>
+  )
+}

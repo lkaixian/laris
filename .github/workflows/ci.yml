@@ -31,7 +31,15 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - run: npm ci # PGlite for the Postgres-backed tests
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q -rs
+      - name: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q -rs 2>&1 | tee pytest.out || {
+            code=$?
+            grep -E "^(E  |ERROR|FAILED|SKIPPED)" pytest.out | head -15 | while read -r l; do echo "::error::${l:0:200}"; done # annotations are readable without log access
+            exit $code
+          }
       - run: node tests/schema_check.mjs
       - run: node tests/db_check.mjs
       - run: pip-audit -r requirements.txt

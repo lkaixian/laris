@@ -501,3 +501,13 @@ def test_big_supplier_price_jump_is_flagged_for_review(env):
     d2 = e.c.post("/api/documents/ingest", data={"text": "small change"}, headers=e.S).json()["id"]
     f2 = e.sql("select extraction->'doc_flags' f from documents where id=%s", (d2,))[0]["f"]
     assert not any(x.startswith("price_jump") for x in f2)
+
+
+def test_quote_pdf_has_selling_price_and_no_cost(env):
+    e = env
+    q = seed_quote(e)
+    for who in (e.S, e.O):
+        r = e.c.get(f"/api/documents/{q}/pdf", headers=who)
+        assert r.status_code == 200 and r.content[:5] == b"%PDF-" and "SAMPLE-QT-0001" in r.headers["content-disposition"]
+    in_doc = e.sql("select id from documents where direction='in' limit 1")[0]["id"]
+    assert e.c.get(f"/api/documents/{in_doc}/pdf", headers=e.O).status_code == 404

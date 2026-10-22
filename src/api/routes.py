@@ -14,7 +14,7 @@ from openpyxl import Workbook
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import pipeline
+from .. import pipeline, quote_pdf
 from ..errors import ApiError
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, write_ctx
 
@@ -115,6 +115,21 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
                       cost_snapshot, current_unit_cost, cost_is_stale, line_margin
                from v_quote_provenance where quote_id=%s order by line_id, source_doc_no""", (doc_id,)).fetchall()
     return reply(ctx, out)
+
+
+@r.get("/documents/{doc_id}/pdf")
+def document_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    """Quotation PDF for the customer (selling prices only, so staff may download it too)."""
+    d = get_doc(ctx, doc_id)
+    if d["direction"] != "out":
+        raise ApiError(404, "not_found", "only customer quotes have a PDF")
+    doc = ctx.conn.execute("select doc_no, currency, issued_on, created_at, valid_until, payment_terms, terms_text from documents where id=%s",
+                           (doc_id,)).fetchone()
+    lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
+    org = ctx.conn.execute("select name from tenants where id=%s", (ctx.tenant_id,)).fetchone()["name"]
+    pdf = quote_pdf.render(org, doc, d["party_name"], lines)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{re.sub(r"[^A-Za-z0-9_-]", "_", doc["doc_no"] or "quote")}.pdf"'})
 
 
 class Transition(BaseModel, extra="forbid"):

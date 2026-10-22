@@ -108,4 +108,21 @@ const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unk
   return data as T
 }
 
+// File download (PDF, xlsx, csv): same identity headers as api(), result saved through a temporary link.
+export async function download(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = { 'X-Role': role }
+  if (userId) headers['X-User'] = userId
+  try { const t = sessionStorage.getItem('token'); if (t) headers['Authorization'] = 'Bearer ' + t } catch { /* storage blocked */ }
+  let res: Response
+  try { res = await fetch('/api' + path, { headers }) } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Download failed (${res.status})`)
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
 export const api = <T,>(method: 'GET' | 'POST', path: string, body?: unknown) => call<T>(method, path, role, body, true)

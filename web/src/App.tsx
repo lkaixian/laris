@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
+import { api, download, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
@@ -308,6 +308,10 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
       setReason(''); setNote(`${docNo} moved to ${label(to)}.`); s.reload(); focusTop()
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
+  const save = async (path: string, name: string) => {
+    setErr(''); setNote('')
+    try { await download(path, name); setNote(`${name} downloaded.`) } catch (e) { setErr(msg(e)) }
+  }
   const lineOf = (lineId?: string) => d?.lines.find(l => l.id === lineId)
   return (
     <>
@@ -322,6 +326,15 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
               {owner && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
               <span className="text-muted">Total {rm(d.doc.total)}</span>
             </p>
+            {d.doc.direction === 'out' && !MOCK && (
+              <p className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="btn" onClick={() => save(`/documents/${id}/pdf`, `${d.doc.doc_no}.pdf`)}>Download quote PDF</button>
+                {owner && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
+                  <button type="button" className="btn" onClick={() => save(`/export/bom.xlsx?quote_id=${id}`, `bom-${d.doc.doc_no}.xlsx`)}>Download BOM (xlsx)</button>
+                  <button type="button" className="btn" onClick={() => save(`/export/po.csv?quote_id=${id}`, `po-${d.doc.doc_no}.csv`)}>Download purchase list (csv)</button>
+                </>}
+              </p>
+            )}
 
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
             <div className="min-w-0 lg:order-1">

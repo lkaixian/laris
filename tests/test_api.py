@@ -676,3 +676,27 @@ def test_old_chat_text_is_purged_but_documents_stay(env, monkeypatch):
     assert e.sql("select count(*) n from messages where body <> '[expired]'")[0]["n"] == 0
     assert scheduler.run_once()["purged"] == 0  # idempotent
     assert e.sql("select count(*) n from documents where id=%s", (d,))[0]["n"] == 1
+
+
+# ---------------------------------------------------------------- per-tenant WhatsApp routing
+def test_whatsapp_number_decides_the_tenant(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    e.stock_costs()
+    e.sql("update tenants set wa_phone_number_id='PN1'")
+    e.sql("""insert into tenants(name, trade_template, min_margin_pct, wa_phone_number_id) values ('Other Shop', 'made_to_order', 20, 'PN2')""")
+    e.ai.payload = {"items": [PART]}
+
+    def send(pn, mid):
+        msg = wa_msg(id=mid, type="text", text={"body": "10 small parts"})
+        msg["entry"][0]["changes"][0]["value"]["metadata"] = {"phone_number_id": pn}
+        n = len(e.svc.sent)
+        assert wa_post(e, msg).status_code == 200
+        return e.svc.sent[n:] if len(e.svc.sent) > n else []
+
+    ok = send("PN1", "wamid.a")
+    assert ok and "received your enquiry" in ok[0][2]
+    other = send("PN2", "wamid.b")  # tenant 2 has no cost book: it must NOT borrow tenant 1's costs
+    assert other and "could not process" in other[0][2]
+    assert send("PN9", "wamid.c") == []  # a number nobody owns is ignored once numbers are mapped
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 1

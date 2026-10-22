@@ -11,3 +11,4 @@ class InboundMessage:
     media_kind: str | None = None  # audio | image | document
     media_ref: str | None = None  # WA media id / Telegram file_id
     at: datetime | None = None
+    to: str | None = None  # the business number it arrived on (WhatsApp phone_number_id)

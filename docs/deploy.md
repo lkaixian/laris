@@ -113,7 +113,7 @@ python scripts/setup_channels.py telegram-info              # last_error_message
 python scripts/setup_channels.py telegram-poll              # local only: long-poll and forward to localhost:5000
 ```
 
-`/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`. After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL set `APP_TOKEN`; the UI asks for it once per tab.
+`/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`. Several shops on one deployment: set `tenants.wa_phone_number_id` for each (the id shown in Meta's WhatsApp setup); inbound messages route by the number they arrived on and messages to an unmapped number are ignored once any is mapped. Replies still go out from `WHATSAPP_PHONE_NUMBER_ID`, so true multi-number sending needs per-tenant tokens (not built). After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL set `APP_TOKEN`; the UI asks for it once per tab.
 
 ## 10. RunPod endpoint (sponsor proof)
 

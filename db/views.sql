@@ -8,6 +8,10 @@ ALTER TABLE document_lines ADD COLUMN IF NOT EXISTS other_cost_per_unit numeric(
 DROP TRIGGER IF EXISTS tenant_fields_audit ON tenant_fields;
 CREATE TRIGGER tenant_fields_audit AFTER INSERT OR UPDATE ON tenant_fields FOR EACH ROW EXECUTE FUNCTION write_audit();
 
+-- Which tenant owns a WhatsApp business number (phone_number_id). Unmapped = single-tenant fallback.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;
+
 -- Provider retries / replays: one message per (channel, provider id).
 CREATE UNIQUE INDEX IF NOT EXISTS messages_channel_external_uq ON messages (channel, external_id) WHERE external_id IS NOT NULL;
 

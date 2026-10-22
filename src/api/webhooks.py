@@ -68,16 +68,23 @@ def _handle(conn, s, m):
     digits = "".join(ch for ch in m.sender if ch.isdigit())
     if not digits:
         return None
-    # ponytail: single-tenant routing; WHATSAPP_TENANT_ID (else the first tenant) owns every unknown sender
+    # Tenant: the one that owns the number the message arrived on. Once any tenant has a number mapped, a message to an
+    # unmapped number is dropped; with none mapped we keep the single-tenant fallback (WHATSAPP_TENANT_ID, else the first tenant).
+    own = conn.execute("select id from tenants where wa_phone_number_id = %s", (m.to,)).fetchone() if m.to else None
+    if m.to and not own and conn.execute("select 1 from tenants where wa_phone_number_id is not null limit 1").fetchone():
+        log.warning("inbound to unmapped number %s ignored", _h(m.to))
+        return None
+    scope = own["id"] if own else None
     u = conn.execute(r"""select id, tenant_id from users where regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %s
-                         limit 1""", (digits,)).fetchone()
+                         and (%s::uuid is null or tenant_id = %s) limit 1""", (digits, scope, scope)).fetchone()
     if u:  # our own staff/owner forwarding a supplier document
         tid, actor, p = u["tenant_id"], u["id"], {"id": None, "role": "supplier"}
     else:
         actor = None
         p = conn.execute(r"""select id, tenant_id, role from parties
                              where regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s
-                             order by (role = 'supplier') desc limit 1""", (digits,)).fetchone()
+                               and (%s::uuid is null or tenant_id = %s)
+                             order by (role = 'supplier') desc limit 1""", (digits, scope, scope)).fetchone()
         if p and p["role"] == "supplier":
             tid = p["tenant_id"]
         else:
@@ -86,7 +93,7 @@ def _handle(conn, s, m):
                 return None
             tid = p["tenant_id"] if p else None
             if tid is None:
-                t = conn.execute("select id from tenants where id::text = %s", (os.environ.get("WHATSAPP_TENANT_ID", ""),)).fetchone() \
+                t = own or conn.execute("select id from tenants where id::text = %s", (os.environ.get("WHATSAPP_TENANT_ID", ""),)).fetchone() \
                     or conn.execute("select id from tenants order by name, id limit 1").fetchone()
                 tid = t["id"]
                 p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}

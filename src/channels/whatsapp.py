@@ -46,11 +46,12 @@ def _values(payload: dict):
 def parse_inbound(payload: dict) -> list[InboundMessage]:
     out = []
     for v in _values(payload):
+        to = (v.get("metadata") or {}).get("phone_number_id")
         for m in v.get("messages", []):
             t = m.get("type")
             msg = InboundMessage(
                 "whatsapp", m["id"], m.get("from", ""),
-                at=_ts(m["timestamp"]) if "timestamp" in m else None,
+                at=_ts(m["timestamp"]) if "timestamp" in m else None, to=to,
             )
             if t == "text":
                 msg.text = m["text"]["body"]

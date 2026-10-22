@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import shutil
 import os
 import re
 from datetime import date
@@ -64,7 +65,7 @@ def test_enquiries_have_no_prices():
 
 
 def test_ocr_overlap_report():
-    if not os.path.isdir(r"C:\Program Files\Tesseract-OCR"):
+    if not (os.path.isdir(r"C:\Program Files\Tesseract-OCR") or shutil.which("tesseract")):
         pytest.skip("Tesseract not installed")
     from src.ocr import ocr_image
     m = MAN["01_clean_quote_raster"]

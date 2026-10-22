@@ -12,6 +12,5 @@ venv/
 .vscode/
 .idea/
 node_modules/
-/package*.json
 LARIS Logo.zip
 LARIS Logo/

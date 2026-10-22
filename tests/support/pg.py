@@ -18,7 +18,7 @@ def pg_url():
         return
     node = shutil.which("node")
     if not node or not (ROOT / "node_modules" / "@electric-sql" / "pglite-socket").exists():
-        pytest.skip("need node + `npm i @electric-sql/pglite @electric-sql/pglite-socket` (or set DATABASE_URL_TEST)")
+        (pytest.fail if os.environ.get("CI") else pytest.skip)("need node + `npm i @electric-sql/pglite @electric-sql/pglite-socket` (or set DATABASE_URL_TEST)")
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
@@ -26,7 +26,7 @@ def pg_url():
                          cwd=ROOT, stdout=subprocess.PIPE, text=True)
     try:
         if "READY" not in p.stdout.readline():
-            pytest.skip("pglite server failed to start")
+            (pytest.fail if os.environ.get("CI") else pytest.skip)("pglite server failed to start")
         yield f"postgresql://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable"
     finally:
         p.terminate()

@@ -51,7 +51,7 @@ One pipeline, one `documents` table with `direction` in or out (`db/schema.sql`,
 | 4 Human approval | Only the owner moves a quote from `draft` to `approved`. Out-line prices come only from the rules engine; staff cannot edit them. `sent` is impossible without `approved_by` (`out_sent_needs_approval` constraint) | `db/schema.sql`, `src/api/routes.py` (`rules_only`) |
 | 5 Outcome and log | Quote sent in chat, customer accepts, owner records it, "Sign and create job" creates a job row (eSign is simulated). If a newer supplier price lands, the sent quote is flagged with the RM margin change. All steps are in the audit log | `v_quote_bom` view, `jobs` table, `v_stale_alerts` view |
 
-Quote PDF generation, the 48-hour scheduler job and BOM/PO export are planned, not yet in the repo (see section 17 and the declaration).
+Quote PDF, BOM/PO export and the follow-up job (owner approves each chase message) are in the repo; the margin report is at `/api/reports/margin`.
 
 ## 4. The six must-haves mapped to repo evidence
 

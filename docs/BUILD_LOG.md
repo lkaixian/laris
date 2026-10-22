@@ -49,3 +49,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 42 | Vault notes updated: what the second pass closed, what stays open (needs the deployed DB or a real login) | docs only | f440af3 |
 | 43 | Follow-up feature: scheduler's pending follow-ups now listed with a suggested message (GET /api/followups); owner-only send or skip (POST /api/followups/{id}), failed send stays pending, never sent twice; Alerts page section with Send/Skip buttons | pytest 94 passed, npm run build passes; UI not clicked against the live API | bddb5b5 |
 | 44 | Margin report: GET /api/reports/margin (owner only: quotes, quoted value, cost, margin, won/lost, thinnest three, stale margin lost) with a Last 7 days block on the Alerts page | pytest 95 passed, npm run build passes; UI not clicked against the live API | df1100a |
+| 45 | Docs: README status table and PRD no longer list routes, exports, PDF, follow-ups as planned | docs only | ce9fae1 |

@@ -51,14 +51,15 @@ The idea is margin protection. The tracker is the plumbing.
 | LLM rule that blocks price fields from AI output | In repo (`src/pricing.py`) |
 | Trade templates as YAML (`made_to_order`, `fnb_catering`) | In repo (`config/templates/`) |
 | Database schema with status transitions, audit trigger, promote-to-cost-book function, synthetic seed | In repo (`db/`) |
-| WhatsApp Cloud API helpers: verify challenge, signature check, parse inbound, send text and template | In repo (`src/channels/whatsapp.py`). Routes not yet wired |
-| Telegram Bot API helpers: parse update, send, fetch file, long-poll helper | In repo (`src/channels/telegram.py`). Routes not yet wired |
+| WhatsApp Cloud API helpers: verify challenge, signature check, parse inbound, send text and template | In repo (`src/channels/whatsapp.py`). Routes wired (`/webhooks/whatsapp`), HMAC checked, template fallback outside 24h. Not yet run against Meta |
+| Telegram Bot API helpers: parse update, send, fetch file, long-poll helper | In repo (`src/channels/telegram.py`). Route wired (`/webhooks/telegram`, secret token), `scripts/setup_channels.py` sets the webhook or polls. Not yet run against Telegram |
 | OCR wrapper: PaddleOCR first, Tesseract fallback | In repo (`src/ocr.py`). Not tested on real quotes |
 | ILMU client: speech-to-text, JSON extraction, RunPod fallback | In repo (`src/ilmu.py`). Endpoints not verified |
-| React frontend: tracker, document view, theme toggle, mock mode | In repo (`web/`). Real API wiring pending |
-| Owner approval and staff view without margins | Designed in `docs/api-contract.md`. Not yet enforced end to end |
-| Quote PDF, BOM and PO exports (xlsx and csv) | Planned |
-| 48-hour follow-up job with APScheduler | Planned |
+| React frontend: tracker, document view, theme toggle, mock mode | In repo (`web/`). Wired to the API (user id from `/api/me`, optional `APP_TOKEN`); mock mode kept for demos |
+| Owner approval and staff view without margins | In repo: DB guard plus staff scrubbing on every response, tested in `tests/test_api.py`. Header identity is still simulated |
+| Quote PDF, BOM (xlsx) and PO (csv) exports | In repo (`src/quote_pdf.py`, `src/api/routes.py`) |
+| Follow-up job with APScheduler, suggested chase message, owner sends or skips | In repo (`src/scheduler.py`, `/api/followups`) |
+| Margin report for the last N days, customer erasure, AI call log | In repo (`/api/reports/margin`, `/api/parties/{id}/erase`, `ai_actions`) |
 
 ## Tech Stack
 

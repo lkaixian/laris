@@ -36,4 +36,4 @@ Applies once LARIS holds real customer or supplier data. The demo uses synthetic
 
 ## Known limits to state honestly
 
-Postgres row-level security is not enabled (the API scopes every query by tenant, the database does not enforce it). Outbound WhatsApp uses one token for every tenant (each tenant sends from its own number). Audio cannot be redacted before ILMU. A login screen is not built: access is by per-user bearer token.
+Postgres row-level security (`db/rls.sql`) keeps one tenant's rows from another's, but only when the app connects as `laris_app`; on the owner connection it is bypassed. Not tried on Replit's Postgres. Staff cost hiding is still done by the API. Outbound WhatsApp uses one token for every tenant (each tenant sends from its own number). Audio cannot be redacted before ILMU. Sign-in is by username and password (or a per-user bearer token).

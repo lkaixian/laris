@@ -115,7 +115,8 @@ def _open(request: Request, write: bool):
                 raise ApiError(401, "unknown_user", "unknown user")
             if role == "owner" and u["role"] != "owner":
                 raise ApiError(403, "not_owner", "this user is not an owner")
-        conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true)", (role, str(u["id"])))
+        conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
+                     (role, str(u["id"]), str(u["tenant_id"])))  # from here the database only shows this tenant's rows
         yield Ctx(conn, role, u["id"], u["tenant_id"], u["name"])
 
 

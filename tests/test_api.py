@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from openpyxl import load_workbook
 
-from src import scheduler
+from src import db, scheduler
 from src.api.deps import STAFF_HIDE
 from support.fixtures import env, pg_url  # noqa: F401
 
@@ -963,3 +963,19 @@ def test_contacts_csv_owner_only_and_formula_safe(env):
 
 def test_ready_checks_the_database(env):
     assert env.c.get("/ready").json() == {"status": "ready"} and env.c.get("/health").status_code == 200
+
+
+# ---------------------------------------------------------------- row-level security (the suite itself runs as laris_app)
+def test_database_hides_other_tenants_even_without_a_where_clause(env):
+    e = env
+    assert e.sql("select current_user u")[0]["u"] == "laris_app"  # the fixture really drops to the app role
+    other = e.sql("insert into tenants(name, trade_template, min_margin_pct) values ('Other Shop','made_to_order',20) returning id")[0]["id"]
+    e.sql("insert into parties(tenant_id, role, name) values (%s,'customer','Other Customer')", (other,))
+    mine = str(e.sql("select tenant_id from users where id=%s", (e.owner,))[0]["tenant_id"])
+    with db.tx("owner", e.owner, mine) as c:  # request scope, and the query forgets to filter by tenant
+        names = [r["name"] for r in c.execute("select name from parties")]
+        assert "Other Customer" not in names and names
+        assert c.execute("select count(*) n from tenants").fetchone()["n"] == 1
+    with db.tx("owner", e.owner, "") as c:  # no tenant set: nothing
+        assert c.execute("select count(*) n from documents").fetchone()["n"] == 0
+    assert "Other Customer" not in json.dumps(e.c.get("/api/contacts", headers=e.O).json())

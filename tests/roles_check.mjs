@@ -1,11 +1,31 @@
 // Run: node tests/roles_check.mjs  (db/roles.sql: the app role cannot weaken audit or guards)
 import {PGlite} from '@electric-sql/pglite';import fs from 'fs';
 const db=new PGlite(),rd=f=>fs.readFileSync(new URL('../db/'+f,import.meta.url),'utf8');
-for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
+for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
 let bad=0;const ok=(c,n)=>{console.log(c?'ok  ':'FAIL',n);if(!c)bad++};
 const refuses=async(n,s)=>{try{await db.exec(s);ok(false,n)}catch(e){ok(true,n+' -> '+e.message.slice(0,70))}};
+// a second tenant with one document and one cost, so isolation has something to hide
+const o=(await db.query("select id from tenants limit 1")).rows[0].id;
+await db.exec("insert into tenants(name,trade_template,min_margin_pct) values ('Other Shop','made_to_order',20)");
+const b=(await db.query("select id from tenants where name='Other Shop'")).rows[0].id;
+await db.exec(`insert into parties(tenant_id,role,name) values ('${b}','customer','Other Customer')`);
+const n=async q=>(await db.query(q)).rows[0].c;
 await db.exec("set role laris_app");
-ok((await db.query("select count(*)::int c from documents")).rows[0].c>0,'app role can read and write normal tables');
+await db.exec("select set_config('laris.tenant','*',false)");
+ok(await n("select count(*)::int c from documents")>0,'system scope (*) can read and write normal tables');
+await db.exec(`select set_config('laris.tenant','${o}',false)`);
+ok(await n("select count(*)::int c from documents")>0,'a tenant sees its own documents');
+ok(await n("select count(*)::int c from parties where name='Other Customer'")===0,'a tenant cannot see another tenant parties');
+ok(await n("select count(*)::int c from tenants")===1,'a tenant sees only its own tenant row');
+ok(await n("select count(*)::int c from document_lines")>0 && await n("select count(*)::int c from v_quote_margin")>=0,'child tables and views still work for the tenant');
+await refuses('a tenant cannot write a row into another tenant',`insert into parties(tenant_id,role,name) values ('${b}','customer','Sneaky')`);
+await db.exec(`select set_config('laris.tenant','${b}',false)`);
+ok(await n("select count(*)::int c from documents")===0,'the other tenant sees none of the first tenant documents');
+ok(await n("select count(*)::int c from document_lines")===0,'...nor their lines (child table follows the document)');
+ok(await n("select count(*)::int c from v_quote_margin")===0,'...nor the margin view (security_invoker)');
+await db.exec("select set_config('laris.tenant','',false)");
+ok(await n("select count(*)::int c from documents")===0,'no tenant set sees nothing (fails closed)');
+await db.exec("select set_config('laris.tenant','*',false)");
 await db.exec("update cost_items set unit_cost = unit_cost");
 await refuses('cannot disable the audit trigger',"alter table documents disable trigger documents_audit");
 await refuses('cannot delete audit rows',"delete from audit_log");

@@ -18,4 +18,4 @@ Second pass: supplier price jumps over 20% flagged for review (P1), contact deta
 
 Third pass: per-user API tokens stored as SHA-256 (identity from the DB row, `REQUIRE_USER_TOKEN=1` turns header demo mode off), WhatsApp messages routed by business number per tenant, retention job (`RETENTION_DAYS`), least-privilege `laris_app` role (`db/roles.sql`, checked by `tests/roles_check.mjs`).
 
-Still open: Postgres row-level security per tenant (the API scopes by tenant_id, the database does not enforce it), per-tenant outbound WhatsApp tokens and numbers, trying `db/roles.sql` on Replit's Postgres, a DPO contact and breach runbook, login UI and token rotation policy.
+Done since: row-level security per tenant (`db/rls.sql`, effective only as `laris_app`; the whole test suite runs as that role) and outbound WhatsApp from each tenant's own number. Still open: per-tenant WhatsApp tokens, trying `db/roles.sql` on Replit's Postgres, a DPO contact and breach runbook, login UI and token rotation policy.

@@ -49,7 +49,7 @@ No. We do not build leave, claims, overtime, attendance, hiring or e-sign. Orbyt
 Real in the repo: SQL schema with transitions guard and append-only audit log, pricing and margin guard, extraction validator, ILMU, RunPod, OCR, Telegram and WhatsApp clients (tested with mocked responses), React front end. Mocked or simulated: login and roles, eSign, Orbyte and Connect. Planned or unfinished at time of writing: FastAPI routes beyond `/health`, quote PDF, 48-hour scheduler, BOM export, WhatsApp live webhook. Update this answer from `docs/PRD.md` section 17 before pitching.
 
 **10. How do staff not see margin?**
-The API never returns cost or margin to staff, per our contract, and the UI hides it. This is API-level scoping, not database row-level security, and we do not claim otherwise.
+The API never returns cost or margin to staff, per our contract, and the UI hides it. Hiding cost from staff is API-level scoping, not row-level security, and we do not claim otherwise. Separately, tenants are kept apart in the database by row-level security when the app runs as the least-privilege role.
 
 **11. Can the model change a price?**
 No path exists: price-like keys are rejected in `src/pricing.py`, and the database has no AI value for price source and rejects price keys in model action payloads. Only the owner can override a price, and the override is logged.

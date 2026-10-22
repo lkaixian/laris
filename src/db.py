@@ -14,11 +14,12 @@ def url() -> str:
 
 
 @contextmanager
-def tx(role="staff", actor=""):
-    """Commit on clean exit, roll back on exception. prepare_threshold=None keeps PGlite/pgbouncer happy."""
+def tx(role="staff", actor="", tenant="*"):
+    """Commit on clean exit, roll back on exception. prepare_threshold=None keeps PGlite/pgbouncer happy.
+    tenant '*' is for work that crosses tenants on purpose; request code narrows it once the user is known (db/rls.sql)."""
     with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None) as conn:
-        conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true)",
-                     (role, str(actor or "")))
+        conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
+                     (role, str(actor or ""), str(tenant)))
         yield conn
 
 
@@ -32,6 +33,7 @@ def apply_schema(seed: bool | None = None) -> None:
             for f in ("schema.sql", "transitions.sql", "functions.sql"):
                 c.execute((DB_DIR / f).read_text(encoding="utf-8"))
         c.execute((DB_DIR / "views.sql").read_text(encoding="utf-8"))
+        c.execute((DB_DIR / "rls.sql").read_text(encoding="utf-8"))
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \
                 not c.execute("select 1 from tenants limit 1").fetchone():
             c.execute((DB_DIR / "seed_made_to_order.sql").read_text(encoding="utf-8"))

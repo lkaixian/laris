@@ -35,7 +35,7 @@ Until an account has a password the app stays in header-only demo mode. To switc
 
 ## Least-privilege database role (recommended before real customers)
 
-`db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production.
+`db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production. `db/rls.sql` (applied on start) then limits that role to its own tenant's rows: a request sets `laris.tenant`, system work (login lookup, webhooks, scheduler) sets `*`. It does nothing for the schema owner, so use `DATABASE_URL_OWNER` plus a `laris_app` `DATABASE_URL` in production; with one owner URL RLS is bypassed.
 
 ## 1. Push the repo to GitHub
 

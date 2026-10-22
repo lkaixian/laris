@@ -1,5 +1,6 @@
 """Shared fixtures for API tests: fresh seeded PGlite DB per test, mocked ILMU / channels (no network)."""
 import json
+from contextlib import contextmanager
 
 import httpx
 import psycopg
@@ -97,6 +98,16 @@ def env(pg_url, monkeypatch):
     with psycopg.connect(pg_url, autocommit=True) as c:
         c.execute("drop schema public cascade; create schema public")
     db.apply_schema(seed=True)
+    with psycopg.connect(pg_url, autocommit=True) as c:  # the app runs as laris_app, so row-level security applies to every test
+        c.execute((db.DB_DIR / "roles.sql").read_text(encoding="utf-8"))
+    real_tx = db.tx
+
+    @contextmanager
+    def as_app(*a, **k):
+        with real_tx(*a, **k) as c:
+            c.execute("set local role laris_app")
+            yield c
+    monkeypatch.setattr(db, "tx", as_app)
     ai = AI()
     ai.payload, ai.fail, ai.calls = {}, False, 0
     svc = FakeSvc(ai)

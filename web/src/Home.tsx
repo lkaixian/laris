@@ -7,6 +7,7 @@ interface Dash {
   needs_review: number; open_quotes: number; jobs: { todo: number; doing: number; done: number }
   recent_contacts: { id: string; name: string; role: string; last_activity: string }[]
   recent_documents: DocSummary[]
+  customer_replies: { document_id: string; doc_no: string; customer: string; text: string; at: string; kind: 'accept' | 'decline' | null }[]
   stale_quotes?: number; stale_margin_lost?: string; followups_pending?: number
 }
 
@@ -40,6 +41,24 @@ export function HomeView({ owner, name }: { owner: boolean; name: string }) {
               {owner && <Stat title="Waiting for a reply" value={d.followups_pending ?? 0} href="#/alerts" warn={(d.followups_pending ?? 0) > 0} />}
             </div>
           </section>
+
+          {d.customer_replies.length > 0 && (
+            <section className="mt-8" aria-labelledby="cr">
+              <h2 id="cr" className="mb-1 text-lg font-semibold">Customers who replied to a quote</h2>
+              <p className="mb-2 text-sm text-muted">Only you can accept or decline. Open the quote to record it.</p>
+              <ul className="divide-y divide-soft rounded-ui border border-soft bg-surface">
+                {d.customer_replies.map((r, i) => (
+                  <li key={i}><a className="row" href={`#/doc/${r.document_id}`}>
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <span className="font-semibold text-accent underline underline-offset-2">{r.doc_no}</span>
+                      <span className="text-sm text-muted">{r.customer}</span></span>
+                    <span className="block text-sm">"{r.text}"</span>
+                    {r.kind && <span className="badge mt-1">Looks like {r.kind === 'accept' ? 'a yes' : 'a no'}</span>}
+                  </a></li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="mt-8" aria-labelledby="jb">
             <h2 id="jb" className="mb-2 text-lg font-semibold">Jobs</h2>

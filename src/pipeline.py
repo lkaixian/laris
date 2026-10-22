@@ -118,6 +118,32 @@ def party(conn, tenant_id, role, name, contact=None):
            returning id""", (tenant_id, role, name[:200], contact)).fetchone()["id"]
 
 
+ACCEPT = {"ok", "okay", "yes", "ya", "yup", "setuju", "boleh", "confirm", "confirmed", "deal", "proceed", "accept", "accepted", "terima", "jom", "lock"}
+DECLINE = {"no", "nope", "tak", "tidak", "cancel", "batal", "reject", "declined", "expensive", "mahal", "pass"}
+
+
+def classify_reply(text: str) -> str | None:
+    """Short answer to a quote we sent: 'accept' or 'decline' by keyword, else None (then it is a new enquiry).
+    Only suggests: nothing is accepted until the owner records it."""
+    words = re.findall(r"[a-z]+", text.lower())
+    if not words or len(words) > 8 or any(w.isdigit() for w in text.split()):  # a number means it is probably a new order
+        return None
+    a, d = any(w in ACCEPT for w in words), any(w in DECLINE for w in words)
+    if "tak" in words and "boleh" in words:  # "tak boleh" = cannot
+        return "decline"
+    return "accept" if a and not d else "decline" if d and not a else None
+
+
+def record_reply(conn, party_id, channel, text, external_id):
+    """Attach a customer's reply to their latest open quote. -> {doc_id, doc_no} or None when they have none."""
+    d = conn.execute("""select id, doc_no from documents where party_id=%s and direction='out' and status in ('sent','read')
+                        order by sent_at desc nulls last, created_at desc limit 1""", (party_id,)).fetchone()
+    if not d:
+        return None
+    _record_message(conn, None, d["id"], "in", channel, text[:2000], external_id)
+    return {"doc_id": d["id"], "doc_no": d["doc_no"]}
+
+
 def route_attrs(conn, tenant_id, direction, extras: dict):
     """-> (attrs for approved tenant_fields, attrs_unmapped for everything else). Keys normalised to the field-key regex."""
     approved = {r["key"] for r in conn.execute(

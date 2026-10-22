@@ -108,12 +108,16 @@ def _handle(conn, s, m):
         else:
             raise ApiError(415, "unsupported_media", "supplier documents: send a PDF, photo or text")
         return f"Received {res['doc_no'] or 'your document'}; it is queued for review."
+    if p["role"] == "contractor":  # contacts we record, not people who order
+        return None
     text = m.text if not m.media_kind else None
     if m.media_kind == "audio":
         data, mime = s.download(m.channel, m.media_ref, m.media_kind)
         text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
+    if pipeline.classify_reply(text) and (hit := pipeline.record_reply(conn, p["id"], m.channel, text, m.external_id)):
+        return f"Noted, thank you. We will confirm {hit['doc_no']} with you shortly."  # the owner records accept or decline
     try:
         res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
     except ApiError as e:

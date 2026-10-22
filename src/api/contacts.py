@@ -146,6 +146,13 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
                """select p.id, p.name, p.role::text as role, max(d.created_at) as last_activity from parties p
                   join documents d on d.party_id = p.id where p.tenant_id=%s group by p.id order by last_activity desc limit 5""", (t,)).fetchall(),
            "recent_documents": [summary(ctx, d) for d in c.execute(SUMMARY + " where d.tenant_id=%s order by d.created_at desc limit 5", (t,)).fetchall()]}
+    # customers who answered a sent quote: the owner still records accept or decline
+    from .. import pipeline
+    out["customer_replies"] = [{**x, "kind": pipeline.classify_reply(x["text"])} for x in c.execute(
+        """select m.document_id, d.doc_no, p.name as customer, left(m.body, 200) as text, m.created_at as at
+           from messages m join documents d on d.id = m.document_id join parties p on p.id = d.party_id
+           where d.tenant_id=%s and d.direction='out' and d.status in ('sent','read') and m.direction='in'
+             and m.created_at >= now() - interval '7 days' order by m.created_at desc limit 5""", (t,)).fetchall()]
     if ctx.owner:
         st = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s", (t,)).fetchone()
         out["stale_quotes"], out["stale_margin_lost"] = st["n"], st["lost"]

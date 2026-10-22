@@ -908,3 +908,41 @@ def test_dashboard_counts_and_staff_scrub(env):
     assert "stale_quotes" not in s and "followups_pending" not in s and s["open_quotes"] >= 1
     assert s["contacts"] == o["contacts"]  # staff still get the contact counts (no scrubbed key names)
     assert not (keys(s) & STAFF_HIDE), keys(s) & STAFF_HIDE
+
+
+# ---------------------------------------------------------------- customer replies to a sent quote
+def test_reply_classifier():
+    from src.pipeline import classify_reply as k
+    assert k("ok boleh") == "accept" and k("Setuju, proceed") == "accept" and k("tak nak, mahal") == "decline"
+    assert k("tak boleh") == "decline" and k("ok but expensive") is None  # mixed: a person decides
+    assert k("ok 50 more signboards please") is None  # a number: probably a new order
+    assert k("how much for 10 small parts please tell me quickly now") is None and k("") is None
+
+
+def test_customer_yes_is_recorded_not_acted_on(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    d = make_draft(e, channel="whatsapp")
+    e.sql("update parties set contact='60111222333' where id=(select party_id from documents where id=%s)", (d,))
+    assert tr(e, d, "approved").status_code == 200 and tr(e, d, "sent").status_code == 200
+    n_enq = e.sql("select count(*) n from enquiries")[0]["n"]
+    assert wa_post(e, wa_msg(id="wamid.yes", type="text", text={"body": "ok boleh"})).status_code == 200
+    assert "will confirm" in e.svc.sent[-1][2] and e.sql("select count(*) n from enquiries")[0]["n"] == n_enq  # no new enquiry
+    assert e.sql("select status from documents where id=%s", (d,))[0]["status"] == "sent"  # still the owner's call
+    for who in (e.O, e.S):
+        reps = e.c.get("/api/dashboard", headers=who).json()["customer_replies"]
+        assert reps and reps[0]["text"] == "ok boleh" and reps[0]["kind"] == "accept" and reps[0]["doc_no"]
+    # a customer with no open quote who says "ok" is not matched to anything: it goes the normal enquiry way
+    e.sql("update documents set status='accepted' where id=%s", (d,))
+    e.ai.payload = {"items": []}
+    wa_post(e, wa_msg(id="wamid.yes2", type="text", text={"body": "ok"}))
+    assert "could not tell" in e.svc.sent[-1][2]
+
+
+def test_contractor_messages_do_not_become_enquiries(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    e.c.post("/api/contacts", json={"role": "contractor", "name": "Pak Ali", "contact": "60111222333"}, headers=e.S)
+    n = len(e.svc.sent)
+    assert wa_post(e, wa_msg(id="wamid.c1", type="text", text={"body": "10 small parts"})).status_code == 200
+    assert len(e.svc.sent) == n and e.sql("select count(*) n from enquiries")[0]["n"] == 0

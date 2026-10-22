@@ -810,3 +810,17 @@ def test_contact_book_crud_search_and_staff_view(env):
     assert not (keys(sd) & STAFF_HIDE - {"stale"}), keys(sd) & STAFF_HIDE
     assert e.c.get(f"/api/contacts/{uuid.uuid4()}", headers=e.S).status_code == 404
     assert any("contact added" in x["event"] for x in e.sql("select event from audit_log"))
+
+
+def test_global_search(env):
+    e = env
+    r = e.c.get("/api/search", params={"q": "acrylic"}, headers=e.O).json()
+    assert r["documents"] and r["contacts"] and r["cost_items"]
+    assert any(c["role"] == "supplier" for c in r["contacts"])
+    assert e.c.get("/api/search", params={"q": "SAMPLE-QT"}, headers=e.O).json()["documents"][0]["doc_no"] == "SAMPLE-QT-0001"
+    s = e.c.get("/api/search", params={"q": "acrylic"}, headers=e.S).json()
+    assert "cost_items" not in s and s["documents"] and not (keys(s) & STAFF_HIDE - {"stale"})
+    assert all(d["total"] is None for d in s["documents"] if d["direction"] == "in")  # supplier prices stay hidden for staff
+    assert e.c.get("/api/search", params={"q": "a"}, headers=e.O).status_code == 422
+    assert e.c.get("/api/search", params={"q": "%%"}, headers=e.O).json()["documents"] == []
+    assert e.c.get("/api/search", params={"q": "zzzz-nothing"}, headers=e.O).json()["contacts"] == []

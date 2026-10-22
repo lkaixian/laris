@@ -186,6 +186,12 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
   if (p === '/settings') { need(); return { min_margin_pct: '25.00', ssm_no: null, address: null, bank_details: null, sst_registered: false, sst_no: null } }
+  if (p === '/search') {
+    const term = (new URLSearchParams(q).get('q') ?? '').toLowerCase()
+    const all = Object.values(docs).map(d => d.doc)
+    return { query: term, contacts: contacts().filter(c => JSON.stringify(c).toLowerCase().includes(term)),
+      documents: all.filter(d => JSON.stringify(d).toLowerCase().includes(term)).map(d => (owner || d.direction === 'out' ? d : { ...d, total: null })) }
+  }
   if (p === '/contacts' && method === 'GET') {
     const term = (new URLSearchParams(q).get('q') ?? '').toLowerCase(), role = new URLSearchParams(q).get('role')
     return contacts().filter(c => (!role || c.role === role) && (!term || JSON.stringify(c).toLowerCase().includes(term)))

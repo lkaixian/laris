@@ -110,3 +110,21 @@ def edit_contact(pid: UUID, body: ContactEdit, ctx: Ctx = Depends(write_ctx)):
         raise ApiError(404, "not_found", "contact not found")
     audit(ctx, "parties", pid, "contact changed: " + ",".join(sorted(sets)))
     return reply(ctx, {"id": pid})
+
+
+@r.get("/search")
+def search(q: str = Query(..., min_length=2, max_length=100), ctx: Ctx = Depends(read_ctx)):
+    """One box for contacts, documents (number, party, line text) and, for the owner, cost items."""
+    pat = like(q)
+    docs = ctx.conn.execute(
+        SUMMARY + """ where d.tenant_id = %(t)s and (d.doc_no ilike %(q)s or p.name ilike %(q)s or exists (
+                        select 1 from document_lines l where l.document_id = d.id and (l.description ilike %(q)s or l.item_key ilike %(q)s)))
+                      order by d.created_at desc limit 10""", {"t": ctx.tenant_id, "q": pat}).fetchall()
+    out = {"query": q, "contacts": list_contacts(ctx, q, limit=8), "documents": [summary(ctx, d) for d in docs]}
+    if ctx.owner:
+        out["cost_items"] = ctx.conn.execute(
+            """select ci.id, ci.item_key, ci.uom, ci.unit_cost, p.name as supplier, p.id as supplier_id, ci.effective_date
+               from cost_items ci join parties p on p.id = ci.supplier_id
+               where ci.tenant_id = %(t)s and ci.superseded_by is null and (ci.item_key ilike %(q)s or p.name ilike %(q)s)
+               order by ci.item_key limit 10""", {"t": ctx.tenant_id, "q": pat}).fetchall()
+    return reply(ctx, out)

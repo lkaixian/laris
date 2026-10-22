@@ -488,3 +488,16 @@ def test_send_failure_is_reported(env):
     e.svc.send = lambda *a: (_ for _ in ()).throw(RuntimeError("down"))
     r = tr(e, d, "sent")
     assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["delivery"] == "failed"
+
+
+def test_big_supplier_price_jump_is_flagged_for_review(env):
+    e = env
+    doc = e.shock(price=140)  # RM100 -> RM140 on the seeded acrylic
+    flags = e.sql("select extraction->'doc_flags' f from documents where id=%s", (doc,))[0]["f"]
+    assert any(f.startswith("price_jump:acrylic_3mm_sheet:+40%") for f in flags)
+    e.ai.payload["doc_no"] = "J-2"
+    e.ai.payload["lines"][0]["unit_price"] = 142
+    e.ai.payload["lines"][0]["amount"] = 1420
+    d2 = e.c.post("/api/documents/ingest", data={"text": "small change"}, headers=e.S).json()["id"]
+    f2 = e.sql("select extraction->'doc_flags' f from documents where id=%s", (d2,))[0]["f"]
+    assert not any(x.startswith("price_jump") for x in f2)

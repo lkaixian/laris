@@ -167,6 +167,27 @@ def _source_text(data, mime, text, ocr):
     raise ApiError(415, "unsupported_media", f"cannot read {mime or 'unknown type'}; send text, PDF or an image")
 
 
+JUMP_PCT = Decimal(20)
+
+
+def _flag_price_jumps(conn, tenant_id, v):
+    """A supplier price far from the current cost book is either news or an injected/misread number: a human confirms.
+    Marks the line needs_review and adds a doc flag naming the item and the change."""
+    for l in v["lines"]:
+        up, key = _dec(l.get("unit_price")), l.get("item_key_suggestion")
+        if not (up and key):
+            continue
+        cur = conn.execute("""select unit_cost from cost_items where tenant_id=%s and item_key=%s and superseded_by is null
+                              order by effective_date desc limit 1""", (tenant_id, key)).fetchone()
+        if cur and cur["unit_cost"] > 0:
+            pct = (up - cur["unit_cost"]) / cur["unit_cost"] * 100
+            if abs(pct) > JUMP_PCT:
+                l["needs_review"] = True
+                l["failed"] = [*l["failed"], "price_jump"]
+                v["doc_flags"].append(f"price_jump:{key}:{pct:+.0f}%")
+                v["ok"] = False
+
+
 def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime: str | None = None,
                              text: str | None = None, party_id=None, supplier_name=None, kind="quotation",
                              channel="upload", actor=None, external_id=None, ilmu_client=None, ocr=ocr_mod) -> dict:
@@ -181,6 +202,7 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     v = validate.validate_extraction(raw, tpl["item_catalog"])
     if not v["lines"]:
         raise ApiError(422, "no_lines", "no line items found; key the lines in manually")
+    _flag_price_jumps(conn, tenant_id, v)
     if party_id is None:
         party_id = party(conn, tenant_id, "supplier", supplier_name or str(raw.get("supplier_name") or "Unknown supplier"))
     # integrity + replay: the same bytes/text must not become a second document, whoever forwards it

@@ -583,3 +583,15 @@ def test_followup_skip_and_failed_send_stays_pending(env):
     assert e.c.post(f"/api/followups/{fid}", json={"action": "send"}, headers=e.O).status_code == 502
     assert e.sql("select state from followups where id=%s", (fid,))[0]["state"] == "pending"
     assert e.c.post(f"/api/followups/{fid}", json={"action": "skip"}, headers=e.O).json()["state"] == "skipped"
+
+
+def test_margin_report_owner_only_and_adds_up(env):
+    e = env
+    e.shock()  # sent seed quote now has stale cost
+    d = make_draft(e)
+    assert e.c.get("/api/reports/margin", headers=e.S).status_code == 403
+    rep = e.c.get("/api/reports/margin?days=30", headers=e.O).json()
+    rows = e.sql("select sum(line_total) rev, sum(line_cost) cost from v_quote_margin where quote_id=%s", (d,))[0]
+    assert Decimal(rep["revenue"]) >= rows["rev"] and Decimal(rep["margin"]) == Decimal(rep["revenue"]) - Decimal(rep["cost"])
+    assert rep["outcomes"].get("draft", 0) >= 1 and rep["stale_quotes"] >= 1 and Decimal(rep["stale_margin_lost"]) < 0
+    assert rep["lowest_margin"] and e.c.get("/api/reports/margin?days=0", headers=e.O).status_code == 422

@@ -207,6 +207,35 @@ def stale_costs(ctx: Ctx = Depends(read_ctx)):
            from v_stale_alerts where tenant_id=%s order by margin_delta, quote_no""", (ctx.tenant_id,)).fetchall())
 
 
+@r.get("/reports/margin")
+def margin_report(days: int = Query(7, ge=1, le=366), ctx: Ctx = Depends(read_ctx)):
+    """Owner summary of quotes created in the last N days: money quoted, cost, margin, outcomes, margin lost to stale costs."""
+    require_owner(ctx)
+    c = ctx.conn
+    t = c.execute(
+        """select count(distinct m.quote_id) quotes, coalesce(sum(m.line_total), 0) revenue, coalesce(sum(m.line_cost), 0) cost
+           from v_quote_margin m join documents d on d.id = m.quote_id
+           where m.tenant_id=%s and d.created_at >= now() - %s * interval '1 day'
+             and d.status not in ('cancelled', 'superseded')""", (ctx.tenant_id, days)).fetchone()
+    outcome = {x["status"]: x["n"] for x in c.execute(
+        """select status::text, count(*) n from documents where tenant_id=%s and direction='out'
+             and created_at >= now() - %s * interval '1 day' group by status""", (ctx.tenant_id, days))}
+    low = c.execute(
+        """select m.quote_id, m.quote_no, sum(m.line_total) revenue, sum(m.line_total - m.line_cost) margin,
+                  round(sum(m.line_total - m.line_cost) / nullif(sum(m.line_total), 0) * 100, 2) margin_pct
+           from v_quote_margin m join documents d on d.id = m.quote_id
+           where m.tenant_id=%s and d.created_at >= now() - %s * interval '1 day' and d.status not in ('cancelled', 'superseded')
+           group by m.quote_id, m.quote_no order by margin_pct nulls last, m.quote_no limit 3""", (ctx.tenant_id, days)).fetchall()
+    stale = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s",
+                      (ctx.tenant_id,)).fetchone()
+    won, lost = (sum(outcome.get(k, 0) for k in ks) for ks in (("accepted", "job_created"), ("rejected", "expired")))
+    return reply(ctx, {"days": days, "quotes": t["quotes"], "revenue": t["revenue"], "cost": t["cost"],
+                       "margin": t["revenue"] - t["cost"],
+                       "margin_pct": round((t["revenue"] - t["cost"]) / t["revenue"] * 100, 2) if t["revenue"] else None,
+                       "outcomes": outcome, "won": won, "lost": lost,
+                       "lowest_margin": low, "stale_quotes": stale["n"], "stale_margin_lost": stale["lost"]})
+
+
 @r.get("/cost-items")
 def cost_items(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)

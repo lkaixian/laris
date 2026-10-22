@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Proposal, AuditEvent } from './api'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
 const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -422,6 +422,28 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
 }
 
 // ---------- Stale-cost alerts + field proposals ----------
+function Report() {
+  const s = useFetch<MarginReport>('/reports/margin?days=7')
+  const r = s.data
+  return (
+    <section className="mb-8" aria-labelledby="wk">
+      <h2 id="wk" className="mb-2 text-base font-semibold">Last 7 days</h2>
+      <Async s={s} empty={!r || r.quotes === 0} emptyText="No quotes were created in the last 7 days.">
+        {r && <>
+          <dl className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {([['Quotes', String(r.quotes)], ['Quoted', rm(r.revenue)], ['Margin', `${rm(r.margin)}${r.margin_pct !== null ? ` (${r.margin_pct}%)` : ''}`],
+               ['Won / lost', `${r.won} / ${r.lost}`]] as const).map(([k, v]) => (
+              <div key={k} className="card"><dt className="text-sm text-muted">{k}</dt><dd className="text-lg font-semibold">{v}</dd></div>
+            ))}
+          </dl>
+          {r.lowest_margin.length > 0 && <p className="mt-2 text-sm">Thinnest margin: {r.lowest_margin.map((q, i) => (
+            <span key={q.quote_id}>{i > 0 && ', '}<a className="link" href={`#/doc/${q.quote_id}`}>{q.quote_no}</a> ({q.margin_pct ?? 'n/a'}%)</span>))}</p>}
+        </>}
+      </Async>
+    </section>
+  )
+}
+
 function Followups({ owner }: { owner: boolean }) {
   const s = useFetch<Followup[]>('/followups')
   const [err, setErr] = useState('')
@@ -501,6 +523,7 @@ function AlertsView({ owner }: { owner: boolean }) {
   return (
     <>
       <h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1>
+      <Report />
       <p className="mb-6 text-muted">Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically.</p>
       <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
       <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost.">

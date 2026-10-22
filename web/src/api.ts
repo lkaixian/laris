@@ -39,6 +39,11 @@ export interface Field {
   unit: string | null; options: string[] | null; show_in_grid: boolean; sort_order: number
 }
 export interface Followup { id: string; document_id: string; doc_no: string; customer: string; status: Status; due_at: string; reason: string; suggested_text: string | null }
+export interface MarginReport {
+  days: number; quotes: number; revenue: string; cost: string; margin: string; margin_pct: string | number | null
+  won: number; lost: number; stale_quotes: number; stale_margin_lost: string
+  lowest_margin: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
+}
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }
 export interface AuditEvent { id: number; at: string; actor: string; entity: string; entity_id: string; event: string }
 

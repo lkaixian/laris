@@ -1,7 +1,7 @@
 ---
 type: plan
 date: 2026-10-22
-status: P0 done; P1 11,12,19 (mostly) done, see [[2026-10-22-security-hardening]]
+status: P0, P1 and P2 done except deferred items; see [[2026-10-22-security-hardening]]
 sources: [[security-audit]], [[architecture-review]], [[code-review]], [[accessibility-review]], [[qa-report]]
 ---
 # Consolidated fix list (de-duplicated across the five reviews)
@@ -46,4 +46,4 @@ Order: P0 blocks the demo, P1 data correctness and security, P2 polish. Each fix
 | 25 | Drop dead code: stale_check use or removal, v_quote_bom, discount_guard wiring or removal | CODE L1, ARCH |
 
 ## Deferred (documented, not fixed)
-Real auth and RLS, per-tenant webhook mapping, retention/erasure, redaction before LLM, DPO and breach runbook, pooling and pagination, quote PDF, ai_actions logging, WhatsApp template fallback.
+Real auth and RLS, least-privilege DB role, per-tenant webhook mapping, automatic retention job, DPO and breach runbook, pooling and pagination. (Done since: quote PDF, ai_actions logging, WhatsApp template fallback, erasure, redaction before LLM.)

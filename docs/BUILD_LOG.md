@@ -46,3 +46,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 39 | deploy.md leftover 'Pending changes' references removed | docs only | 0a907f1 |
 | 40 | ai_actions rows for enquiry extraction and supplier document parsing (counts, flags, hash, OCR confidence; no prices), closing the deferred 'ai_actions logging' item | pytest 92 passed | ff41c8d |
 | 41 | UI reads the transition delivery field: failed send shows an error, no-contact shows a note | npm run build passes; not clicked against the live API | 4eb2261 |
+| 42 | Vault notes updated: what the second pass closed, what stays open (needs the deployed DB or a real login) | docs only | f440af3 |

@@ -14,4 +14,6 @@ Closes security-audit A1 (demo), A2, A3, W1, W3, W4, W2, S1, U1, U2, DEP1 (pypdf
 - **Inputs:** 1 MB webhook cap, 10 MB upload cap before the body is read, magic-byte sniff (PDF, JPEG, PNG, WebP), 25 MP image cap, 30 page PDF cap, 30 s Tesseract timeout, Meta-only media hosts, Telegram token never in error text, hashed ids in logs.
 - **Channels:** `scripts/setup_channels.py`; WhatsApp falls back to an approved template (error 131047) when the 24h window is closed.
 
-Still open: real login and Postgres RLS, least-privilege DB role, retention and erasure, redaction before the LLM, prompt-injection price-delta confirm (P1).
+Second pass: supplier price jumps over 20% flagged for review (P1), contact details and NRIC redacted before ILMU calls, owner erasure endpoint for customers, `ai_actions` rows for every model call, audit trigger on `tenant_fields` (parties and users stay out of the append-only log on purpose), FastAPI 0.159.1 with a clean `pip-audit`.
+
+Still open: real login and Postgres RLS, least-privilege DB role and separate owner role (D1, D2; needs the deployed database), per-tenant webhook mapping (A4; single tenant today), automatic retention job, DPO contact and breach runbook.

@@ -13,10 +13,6 @@ class MissingCost(KeyError):
     pass
 
 
-class OwnerRequired(PermissionError):
-    pass
-
-
 def D(x) -> Decimal:
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
@@ -95,32 +91,3 @@ def margin_guard(quote: dict, min_margin_pct) -> list:
     if quote["margin_pct"] is not None and quote["margin_pct"] < floor:
         out.append({"line_no": None, "margin_pct": quote["margin_pct"], "min_margin_pct": floor})
     return out
-
-
-def discount_guard(discount_pct, max_discount_pct, role: str) -> None:
-    """Discount above the tenant cap needs role == 'owner'."""
-    if D(discount_pct) < 0:
-        raise ValueError("negative discount")
-    if D(discount_pct) > D(max_discount_pct) and role != "owner":
-        raise OwnerRequired(f"discount {discount_pct}% > cap {max_discount_pct}%: owner approval required")
-
-
-def stale_check(quote: dict, current_costs: dict) -> list:
-    """Per costed line: cost now vs cost snapshot. margin_delta (RM, negative = margin leaked)
-    and margin_pct_delta (points). current_costs: {item_key: unit_cost}; missing keys keep snapshot."""
-    out = []
-    for l in quote["lines"]:
-        if l["line_cost"] is None:
-            continue
-        new = sum((q * D(current_costs.get(k, u)) for k, q, u, _ in l["basis"]), Decimal(0))
-        if new == l["line_cost"]:
-            continue
-        out.append({"line_no": l["line_no"], "old_cost": l["line_cost"], "new_cost": new,
-                    "margin_delta": l["line_cost"] - new,
-                    "margin_pct_delta": _pct(l["line_total"], new) - _pct(l["line_total"], l["line_cost"])})
-    return out
-
-
-def stl_grams(volume_mm3, infill=0.2, density_g_cm3=1.24) -> Decimal:
-    """Rough print weight. Ignores shell thickness (ponytail: treats volume as infill-only)."""
-    return _q(D(volume_mm3) / 1000 * D(infill) * D(density_g_cm3))

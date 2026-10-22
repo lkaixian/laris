@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.pricing import (MissingCost, OwnerRequired, PriceInjection, discount_guard, margin_guard,
-                         price_quote, stale_check, stl_grams)
+from src.pricing import (MissingCost, PriceInjection, margin_guard, price_quote)
 from src.templates import TemplateError, load_template
 
 FX = json.loads((Path(__file__).parent / "fixtures" / "material_heavy.json").read_text())
@@ -55,24 +54,3 @@ def test_margin_guard_blocks_underpricing():
     assert v and v[0]["margin_pct"] < D(25)
     cheap = price_quote(FX["items"], COSTS, T, {}, owner_overrides={0: "30"})
     assert margin_guard(cheap, 25)
-
-
-def test_discount_guard_requires_owner():
-    discount_guard(3, 5, "staff")
-    with pytest.raises(OwnerRequired):
-        discount_guard(10, 5, "staff")
-    discount_guard(10, 5, "owner")
-
-
-def test_stale_quote_margin_delta_material_heavy():
-    q = price_quote(FX["items"], COSTS, T, {})
-    cur = {k: D(v) for k, v in FX["new_costs"].items()}
-    (d,) = stale_check(q, cur)
-    assert d["old_cost"] == D("388.00") and d["new_cost"] == D("448.00")
-    assert d["margin_delta"] == D("-60.00")
-    assert d["margin_pct_delta"] == D("-10.31")
-    assert stale_check(q, {}) == []
-
-
-def test_stl_grams():
-    assert stl_grams(10000, 0.2, 1.24) == D("2.48")

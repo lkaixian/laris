@@ -107,7 +107,7 @@ IN
                                  v
   price_quote  <-- cost_items + trade template (rules, no AI)
        |
-       +--> margin_guard, discount_guard
+       +--> margin_guard (below-floor lines flagged)
        |
        v
   draft quote  --> owner approves (owner role only, audit row)
@@ -115,7 +115,7 @@ IN
                                  v
   send to customer (WhatsApp or Telegram) --> tracker (sent, accepted) --> job
 
-  stale_check: a newer supplier cost beyond drift_alert_pct --> alert on open quotes
+  v_stale_alerts: a newer, higher supplier cost --> alert on open quotes (RM margin lost)
 
 OUT
   quote PDF, BOM/PO xlsx and csv (planned)

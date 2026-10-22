@@ -25,7 +25,9 @@ def tx(role="staff", actor=""):
 def apply_schema(seed: bool | None = None) -> None:
     """Idempotent: schema/transitions/functions only on an empty DB, views always (CREATE OR REPLACE)."""
     from .templates import load_template  # local: keeps db.py importable without yaml
-    with psycopg.connect(url(), autocommit=True, prepare_threshold=None) as c:
+    # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
+    owner = os.environ.get("DATABASE_URL_OWNER")
+    with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None) as c:
         if not c.execute("select to_regclass('public.tenants')").fetchone()[0]:
             for f in ("schema.sql", "transitions.sql", "functions.sql"):
                 c.execute((DB_DIR / f).read_text(encoding="utf-8"))
@@ -33,6 +35,8 @@ def apply_schema(seed: bool | None = None) -> None:
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \
                 not c.execute("select 1 from tenants limit 1").fetchone():
             c.execute((DB_DIR / "seed_made_to_order.sql").read_text(encoding="utf-8"))
+        if owner:  # new tables and views need their grants for laris_app
+            c.execute((DB_DIR / "roles.sql").read_text(encoding="utf-8"))
         # trade-template fields become the tenant's starting registry (owner can still add via proposals)
         for t in c.execute("select id, trade_template from tenants").fetchall():
             for f in load_template(t[1])["fields"]:

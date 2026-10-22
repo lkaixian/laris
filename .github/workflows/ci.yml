@@ -42,6 +42,7 @@ jobs:
           }
       - run: node tests/schema_check.mjs
       - run: node tests/db_check.mjs
+      - run: node tests/roles_check.mjs
       - run: pip-audit -r requirements.txt
 
   web:

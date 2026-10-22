@@ -62,6 +62,13 @@ Say, filling only measured numbers:
 
 Say: "LARIS. Know which price you quoted on, and when it goes stale." Show repo URL and live URL. Stop recording at 6:45 at the latest.
 
+### Optional extras if time allows (each 15 to 20 s)
+
+- **Quote PDF and exports:** on a sent quote click **Download quote PDF** (customer sees selling prices only); as Owner also **Download BOM (xlsx)** and **Download purchase list (csv)**.
+- **Follow-up:** Stale costs page, "Quotes waiting for a reply": read the suggested message, **Send follow-up**. Say: "Nothing goes to a customer without the owner."
+- **Last 7 days** block on the same page: quotes, margin, won and lost, thinnest margins.
+- **Jobs:** after the customer accepts, **Sign and create job**, then Jobs page: move the card to In progress.
+
 ## Backups
 
 **If WhatsApp fails (webhook, template, test number):** switch to Telegram. It runs the same pipeline behind one channel adapter (`src/channels/base.py`, `telegram.py`). Say one line: "WhatsApp is our target channel; today's demo uses Telegram, same code path." Do not pretend it is WhatsApp. If Telegram is also down, use the web app's `POST /api/enquiries/simulate` helper (documented in `docs/api-contract.md`) with typed text.

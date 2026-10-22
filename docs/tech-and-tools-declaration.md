@@ -13,7 +13,7 @@ Status as of 2026-10-22. Status values: **implemented** (code in repo), **planne
 | Qwen3-1.7B (or 4B) with vLLM on RunPod Serverless | Alternative extraction model with constrained JSON, only if `ilmu-mini-v3.3` fails the benchmark | none yet | Qwen3-1.7B apache-2.0 (vault, Hugging Face API). Qwen3-4B license unconfirmed | Text (synthetic) | fallback / planned. Few-shot prompting only; LoRA fine-tune dropped by owner |
 | PaddleOCR PP-OCRv5 `latin_PP-OCRv5_mobile_rec` | OCR for supplier quote photos and PDFs. Vault lists accuracy 84.7% on PaddleOCR's own eval set; accuracy on Malaysian quotes untested | `src/ocr.py` (`_paddle`), `tests/test_ocr.py` | Apache-2.0 (not verified in vault) | Supplier-quote images (synthetic) | implemented as first engine; result shape for PaddleOCR 3.x marked unverified in code |
 | Tesseract OCR (`eng`; `msa` traineddata exists but not yet wired) via `pytesseract` | Second OCR engine when PaddleOCR is unavailable | `src/ocr.py` (`_tesseract`); `requirements.txt` | Tesseract and pytesseract Apache-2.0 (not verified in vault) | Supplier-quote images (synthetic) | implemented as fallback; accuracy untested |
-| `pypdf` | Text layer from PDFs before OCR | `src/ocr.py` (`pdf_text`) | BSD-3-Clause (not verified in vault) | PDFs (synthetic) | implemented |
+| `pypdf` 6.21.2 | Text layer from PDFs before OCR | `src/ocr.py` (`pdf_text`) | BSD-3-Clause (not verified in vault) | PDFs (synthetic) | implemented |
 | Claude Code (Anthropic) | Development assistant used to write code, tests and documents | whole repo | Anthropic terms | Source code and synthetic data | used in development. Team to confirm exact tools and add any others (for example ChatGPT, Gemini, Copilot) |
 
 Design rule shown to anyone who asks: a model extracts and drafts; prices come from rules in `src/pricing.py`; the database has no AI price source (`price_src` enum) and rejects price keys in `ai_actions` payloads.
@@ -40,18 +40,20 @@ Design rule shown to anyone who asks: a model extracts and drafts; prices come f
 
 | Library | Purpose | Where | License (not verified in vault unless noted) | Status |
 |---|---|---|---|---|
-| FastAPI 0.115.6 | API server | `src/app.py` (only `/health` so far), `requirements.txt` | MIT | implemented (skeleton) |
+| FastAPI 0.159.1 (Starlette 1.9.0) | API server, webhooks, static UI | `src/app.py`, `src/api/`, `requirements.txt` | MIT / BSD-3-Clause | implemented |
 | uvicorn 0.34.0 | ASGI server | `requirements.txt` | BSD-3-Clause | implemented |
 | httpx 0.28.1 | HTTP client for ILMU, RunPod, Telegram, WhatsApp | `src/ilmu.py`, `src/channels/` | BSD-3-Clause | implemented |
 | PyYAML 6.0.2 | Load trade templates | `src/templates.py`, `config/templates/` | MIT | implemented |
 | Pillow | Image decode for OCR | `src/ocr.py` | HPND (MIT-CMU style) | implemented |
-| pytest 8.3.4 | Tests | `tests/` | MIT | implemented |
-| React 19, react-dom | Web UI | `web/src/` | MIT | implemented (mock mode) |
+| pytest 9.0.3, pip-audit | Tests and dependency audit (dev only, `requirements-dev.txt`) | `tests/`, `.github/workflows/ci.yml` | MIT / Apache-2.0 | implemented |
+| GitHub Actions | CI: pytest on PGlite, SQL and role checks, web build, `pip-audit`, `npm audit` | `.github/workflows/ci.yml` | service terms | implemented |
+| psycopg 3, python-multipart | Postgres driver, file uploads | `src/db.py`, `src/api/routes.py` | LGPL-3.0 / Apache-2.0 | implemented |
+| React 19, react-dom | Web UI | `web/src/` | MIT | implemented (live API and mock mode) |
 | Vite 8, @vitejs/plugin-react, TypeScript | Web build | `web/package.json` | MIT / MIT / Apache-2.0 | implemented |
 | Tailwind CSS 4 (`@tailwindcss/vite`) | Styling | `web/package.json`, `web/src/theme.css` | MIT | implemented |
-| APScheduler | 48-hour follow-up job | none | MIT | planned |
-| openpyxl / pandas | BOM xlsx and csv export | none | MIT / BSD-3-Clause | planned (Tier B) |
-| WeasyPrint (or reportlab) | Quote PDF | none | BSD-3-Clause / BSD | planned; Nix system libraries on Replit are a known risk |
+| APScheduler 3.11.3 | Expiry, follow-up queue, chat retention purge | `src/scheduler.py` | MIT | implemented |
+| openpyxl 3.1.5 | BOM xlsx export (purchase list is plain csv) | `src/api/routes.py` | MIT | implemented |
+| reportlab 5.0.1 | Quote PDF (pure Python, no system libraries) | `src/quote_pdf.py` | BSD | implemented |
 | trimesh | STL weight for 3D-printing plugin | none | MIT | planned only as optional plugin; cut from core scope |
 
 ## 5. Datasets

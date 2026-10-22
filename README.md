@@ -61,6 +61,7 @@ The idea is margin protection. The tracker is the plumbing.
 | Owner approval and staff view without margins | In repo: DB guard plus staff scrubbing on every response, tested in `tests/test_api.py`. Header identity is still simulated |
 | Quote PDF, BOM (xlsx) and PO (csv) exports | In repo (`src/quote_pdf.py`, `src/api/routes.py`) |
 | Follow-up job with APScheduler, suggested chase message, owner sends or skips | In repo (`src/scheduler.py`, `/api/followups`) |
+| Sign-in for several users (scrypt passwords, hashed sessions, owner manages the team), Home dashboard, contact book for customers, suppliers and contractors, one search box, look-up assistant | In repo (`src/auth.py`, `src/api/auth_routes.py`, `src/api/contacts.py`, `src/api/assistant.py`, `web/src/`). Checked by click-through in headless Edge against the live API; not tried with a real ILMU key |
 | Margin report for the last N days, customer erasure, AI call log | In repo (`/api/reports/margin`, `/api/parties/{id}/erase`, `ai_actions`) |
 
 ## Tech Stack

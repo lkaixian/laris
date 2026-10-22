@@ -25,6 +25,10 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 - `.gitignore` ignores only the root `/package*.json`, so `web/package.json` and `web/package-lock.json` are committed.
 - Set `APP_TOKEN` on any public URL. Without it `/api` trusts the `X-Role` and `X-User` headers, which is only acceptable for synthetic demo data.
 
+## First sign-in accounts
+
+Until an account has a password the app stays in header-only demo mode. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). From then on the login screen is shown, the owner adds everyone else on the Team page, and `REQUIRE_USER_TOKEN=1` removes the demo mode for good. Sessions last `SESSION_HOURS` (default 12).
+
 ## Least-privilege database role (recommended before real customers)
 
 `db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production.

@@ -9,41 +9,27 @@ Deadline reference: Sun 25 Oct 2026, 7:59:59 AM (handbook). The FAQ says 11:59 P
 | Piece | Where | Why |
 |---|---|---|
 | FastAPI app (`src/app.py`), webhooks, APScheduler | Replit Reserved VM | Always on. Autoscale can sleep and would drop webhooks and the scheduler. |
-| React build (`web/dist`) | Same process, once `src/app.py` serves it (see Pending changes) | One URL, no CORS. |
+| React build (`web/dist`) | Same process (`src/app.py` serves it) | One URL, no CORS. |
 | PostgreSQL | Replit PostgreSQL (`DATABASE_URL`) | Hackathon rule: Replit is compulsory. |
 | GPU calls (STT fallback, optional LLM) | RunPod serverless endpoint | Hackathon rule: any GPU work on RunPod. |
 | Speech and extraction | ILMU API (`ilmu-asr-v4.2`, `ilmu-mini-v3.3`) | Primary path. Endpoint path not yet verified. |
 
 Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3.11, Node 20, PostgreSQL 16 client, Tesseract), `run.sh` (install, one-time DB bootstrap, start uvicorn on `$PORT`).
 
-## Pending changes in src/ and root (for the lead, before the first deploy)
+## Pre-flight (all in the repo now; verify once on Replit)
 
-These are not made by this file. The deploy config assumes them.
-
-1. **Serve the React build from FastAPI.** Add to the end of `src/app.py`, after every router and webhook route is included (a mount on `/` shadows routes added after it):
-
-   ```python
-   from pathlib import Path
-   from fastapi.staticfiles import StaticFiles
-
-   _DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
-   if _DIST.is_dir():
-       app.mount("/", StaticFiles(directory=_DIST, html=True), name="web")
-   ```
-
-   Deep links (for example `/documents/123` on refresh) return 404 with this. Add a fallback to `index.html` only if the UI uses client routes.
-2. **Add the routes this file tests:** `GET`/`POST /webhooks/whatsapp`, `POST /webhooks/telegram`, and the `/api/*` endpoints in `docs/api-contract.md`. Only `/health` exists today.
-3. **Scheduler:** start APScheduler only when `os.environ.get("SCHEDULER") == "1"`. Keep one worker (`run.sh` already does this). Add `APScheduler` to `requirements.txt`.
-4. **Database driver:** no DB code exists yet. Add the driver you choose (for example `psycopg[binary]`) to `requirements.txt`. `run.sh` uses `psql` for bootstrap only.
-5. **Telegram webhook secret:** no check exists. Recommended: verify the `X-Telegram-Bot-Api-Secret-Token` header against a new env var (add it to `.env.example` and Secrets).
-6. **`.gitignore`:** the line `package*.json` in the repo root also matches `web/package.json` and `web/package-lock.json`. Neither is in the git index, so a fresh push omits them and `npm ci` fails on Replit. Change it to `/package*.json` (root only), or delete the line. Then re-check that `web/package.json` shows up as a new file.
-7. **Form uploads:** if the app accepts uploaded photos or PDFs through FastAPI `UploadFile`, add `python-multipart` to `requirements.txt`.
+- The React build is served by `src/app.py` (SPA fallback, mounted after every router). `web/dist` is built by the `.replit` build command.
+- `/api/*` and `/webhooks/whatsapp|telegram` exist. The Telegram route returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set.
+- APScheduler starts only when `SCHEDULER=1` (set in `.replit`). Keep one worker (`run.sh` does).
+- `psycopg`, `APScheduler` and `python-multipart` are in `requirements.txt`. `pytest` and `pip-audit` live in `requirements-dev.txt`.
+- `.gitignore` ignores only the root `/package*.json`, so `web/package.json` and `web/package-lock.json` are committed.
+- Set `APP_TOKEN` on any public URL. Without it `/api` trusts the `X-Role` and `X-User` headers, which is only acceptable for synthetic demo data.
 
 ## 1. Push the repo to GitHub
 
 1. Commit and push with your normal git flow.
 2. Confirm these files are in the GitHub repo: `web/package.json`, `web/package-lock.json`, `.replit`, `replit.nix`, `run.sh`, `requirements.txt`, `config/`, `db/`.
-   - Known issue: the root `.gitignore` line `package*.json` hides `web/package.json` and `web/package-lock.json`. Fix it first (Pending changes, item 6).
+   - Earlier the root `.gitignore` line `package*.json` hid `web/package.json` and `web/package-lock.json`. Already fixed; confirm `git ls-files web` lists both.
 3. Never commit `.env`. It is in `.gitignore`. Run the key scan in section 13 before pushing.
 
 ## 2. Create the Repl from GitHub

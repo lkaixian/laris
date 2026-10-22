@@ -781,3 +781,32 @@ def test_login_is_rate_limited_and_sessions_expire(env):
     tok = e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).json()["token"]
     e.sql("update sessions set expires_at = now() - interval '1 minute'")
     assert e.c.get("/api/me", headers={"Authorization": "Bearer " + tok}).status_code == 401
+
+
+# ---------------------------------------------------------------- contact book
+def test_contact_book_crud_search_and_staff_view(env):
+    e = env
+    mk = lambda who, **b: e.c.post("/api/contacts", json=b, headers=who)
+    r = mk(e.S, role="contractor", name="Pak Ali Welding", contact="+60 12-300 4000", email="ali@example.my", notes="does powder coating")
+    assert r.status_code == 201
+    cid = r.json()["id"]
+    assert mk(e.S, role="contractor", name="Pak Ali Welding").status_code == 409
+    assert mk(e.S, role="boss", name="X").status_code == 422
+    assert e.c.post(f"/api/contacts/{cid}", json={"address": "Lot 5, Klang", "ssm_no": "001"}, headers=e.S).status_code == 200
+    assert e.c.post(f"/api/contacts/{cid}", json={"name": None}, headers=e.S).status_code == 422
+    assert e.c.post(f"/api/contacts/{uuid.uuid4()}", json={"notes": "x"}, headers=e.S).status_code == 404
+    assert e.c.post(f"/api/contacts/{cid}", json={"role": "customer"}, headers=e.S).status_code == 422  # role is not editable
+    # search across fields, role filter, and LIKE wildcards are literal
+    ids = lambda **p: {x["id"] for x in e.c.get("/api/contacts", params=p, headers=e.S).json()}
+    assert cid in ids(q="powder") and cid in ids(q="4000") and cid in ids(q="klang") and cid in ids(q="ALI@")
+    assert cid not in ids(q="zzz") and cid in ids(role="contractor") and cid not in ids(role="supplier")
+    assert ids(q="%") == set() and ids(q="_") == set()
+    # supplier detail: owner sees what they charge, staff see neither value nor costs
+    sup = e.sql("select id from parties where role='supplier' limit 1")[0]["id"]
+    od = e.c.get(f"/api/contacts/{sup}", headers=e.O).json()
+    assert od["current_costs"] and od["recent_documents"] and od["value"] is not None
+    sd = e.c.get(f"/api/contacts/{sup}", headers=e.S).json()
+    assert "current_costs" not in sd and sd["value"] is None and all(d["total"] is None for d in sd["recent_documents"] if d["direction"] == "in")
+    assert not (keys(sd) & STAFF_HIDE - {"stale"}), keys(sd) & STAFF_HIDE
+    assert e.c.get(f"/api/contacts/{uuid.uuid4()}", headers=e.S).status_code == 404
+    assert any("contact added" in x["event"] for x in e.sql("select event from audit_log"))

@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
 
+-- Contact book: contractors are a third kind of party, plus an email and free notes.
+ALTER TYPE party_role ADD VALUE IF NOT EXISTS 'contractor';
+ALTER TABLE parties ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE parties ADD COLUMN IF NOT EXISTS notes text;
+
 -- Which tenant owns a WhatsApp business number (phone_number_id). Unmapped = single-tenant fallback.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;

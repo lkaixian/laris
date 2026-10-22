@@ -1,5 +1,6 @@
 """/api/* per docs/api-contract.md. Plain def endpoints (psycopg is sync; FastAPI runs them in a threadpool)."""
 import csv
+from datetime import date
 import io
 import logging
 import os
@@ -419,6 +420,35 @@ def erase_party(party_id: UUID, ctx: Ctx = Depends(write_ctx)):
                         or document_id in (select id from documents where party_id=%s)""", (party_id, party_id)).rowcount
     audit(ctx, "parties", party_id, "personal data erased on request", None, {"messages_erased": n})
     return reply(ctx, {"id": party_id, "messages_erased": n})
+
+
+class ManualLine(BaseModel, extra="forbid"):
+    description: str = Field(min_length=1, max_length=500)
+    qty: Decimal = Field(gt=0, lt=Decimal(10) ** 10)
+    uom: str = Field(min_length=1, max_length=20)
+    unit_price: Decimal = Field(ge=0, lt=Decimal(10) ** 10)
+    item_key: str | None = Field(None, pattern=r"^[a-z][a-z0-9_]{0,60}$")
+
+
+class ManualDoc(BaseModel, extra="forbid"):
+    supplier: str = Field(min_length=1, max_length=120)
+    kind: Literal["quotation", "receipt", "invoice"] = "quotation"
+    doc_no: str | None = Field(None, min_length=1, max_length=100)
+    issued_on: date | None = None
+    lines: list[ManualLine] = Field(min_length=1, max_length=200)
+
+
+@r.post("/documents/manual")
+def ingest_manual(body: ManualDoc, ctx: Ctx = Depends(write_ctx)):
+    """Fallback when OCR or the model cannot read a document: key it in. Goes through the same review as an extracted one."""
+    raw = {"supplier_name": body.supplier, "doc_no": body.doc_no,
+           "issued_on": body.issued_on.isoformat() if body.issued_on else None,
+           "lines": [{"description": l.description, "qty": str(l.qty), "uom": l.uom, "unit_price": str(l.unit_price),
+                      "amount": str(l.qty * l.unit_price), "item_key": l.item_key} for l in body.lines]}
+    with guarded():
+        res = pipeline.ingest_supplier_document(ctx.conn, ctx.tenant_id, raw=raw, supplier_name=body.supplier, kind=body.kind,
+                                                channel="upload", actor=ctx.user_id)
+    return reply(ctx, summary(ctx, get_doc(ctx, res["doc_id"])), 201)
 
 
 # ---- exports (owner: they carry supplier cost)

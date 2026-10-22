@@ -230,7 +230,7 @@ function TrackerView({ owner }: { owner: boolean }) {
       <p role="status" className="sr-only">{s.data ? `Showing ${shown} ${shown === 1 ? 'document' : 'documents'}` : ''}</p>
       <Async s={s}>
         <div className="grid gap-8 md:grid-cols-2">
-          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), <UploadQuote onDone={s.reload} />)}
+          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), <><UploadQuote onDone={s.reload} />{!MOCK && <ManualQuote onDone={s.reload} />}</>)}
           {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry />)}
         </div>
       </Async>
@@ -488,6 +488,64 @@ function JobsView() {
         </div>
       </Async>
     </>
+  )
+}
+
+type Row = { description: string; qty: string; uom: string; unit_price: string }
+const blank = (): Row => ({ description: '', qty: '', uom: '', unit_price: '' })
+
+// Fallback when the reader cannot make sense of a document: key the lines in. Same review steps afterwards.
+function ManualQuote({ onDone }: { onDone: () => void }) {
+  const [supplier, setSupplier] = useState('')
+  const [docNo, setDocNo] = useState('')
+  const [rows, setRows] = useState<Row[]>([blank()])
+  const [formErr, setFormErr] = useState('')
+  const [added, setAdded] = useState<DocSummary>()
+  const a = useAction()
+  const set = (i: number, k: keyof Row, v: string) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  const submit = () => {
+    if (!supplier.trim()) return setFormErr('Enter the supplier name.')
+    if (rows.some(r => !r.description.trim() || !(Number(r.qty) > 0) || !r.uom.trim() || r.unit_price === '' || Number(r.unit_price) < 0))
+      return setFormErr('Every line needs a description, a quantity above 0, a unit and a price.')
+    setFormErr('')
+    a.run(async () => {
+      const doc = await api<DocSummary>('POST', '/documents/manual', {
+        supplier: supplier.trim(), doc_no: docNo.trim() || undefined,
+        lines: rows.map(r => ({ description: r.description.trim(), qty: r.qty, uom: r.uom.trim(), unit_price: r.unit_price })) })
+      setAdded(doc); setRows([blank()]); setDocNo(''); onDone()
+    })
+  }
+  return (
+    <details className="card mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Key in a supplier quote by hand</summary>
+      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Supplier name
+          <input className="input font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} /></label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Supplier document number (optional)
+          <input className="input font-normal" value={docNo} onChange={e => setDocNo(e.target.value)} /></label>
+        {rows.map((r, i) => (
+          <fieldset key={i} className="grid gap-2 rounded-ui border border-soft p-2 sm:grid-cols-2">
+            <legend className="px-1 text-sm font-semibold">Line {i + 1}</legend>
+            <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Description
+              <input className="input font-normal" value={r.description} onChange={e => set(i, 'description', e.target.value)} /></label>
+            <label className="flex flex-col gap-1 text-sm font-semibold">Quantity
+              <input className="input font-normal" inputMode="decimal" value={r.qty} onChange={e => set(i, 'qty', e.target.value)} /></label>
+            <label className="flex flex-col gap-1 text-sm font-semibold">Unit (for example sheet, kg)
+              <input className="input font-normal" value={r.uom} onChange={e => set(i, 'uom', e.target.value)} /></label>
+            <label className="flex flex-col gap-1 text-sm font-semibold">Unit price
+              <input className="input font-normal" inputMode="decimal" value={r.unit_price} onChange={e => set(i, 'unit_price', e.target.value)} /></label>
+            {rows.length > 1 && <div className="flex items-end"><button type="button" className="btn" onClick={() => setRows(rows.filter((_, j) => j !== i))}>Remove line {i + 1}</button></div>}
+          </fieldset>
+        ))}
+        {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn" onClick={() => setRows([...rows, blank()])}>Add a line</button>
+          <button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Saving...' : 'Add to tracker'}</button>
+        </div>
+      </form>
+      <ActionError err={a.err} onRetry={submit} label="Retry saving" />
+      {added && <p role="status" className="mt-2 text-sm">Added {added.doc_no ?? 'supplier quote'}. <a className="link" href={`#/doc/${added.id}`}>Open it to review the lines</a></p>}
+    </details>
   )
 }
 

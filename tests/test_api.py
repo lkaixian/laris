@@ -612,3 +612,20 @@ def test_job_board_flow(env):
     assert e.c.post(f"/api/jobs/{uuid.uuid4()}", json={"status": "done"}, headers=e.S).status_code == 404
     assert [x["status"] for x in e.c.get("/api/jobs", headers=e.O).json() if x["id"] == j["id"]] == ["doing"]
     assert any(x["entity"] == "jobs" for x in e.c.get("/api/audit", headers=e.O).json())
+
+
+# ---------------------------------------------------------------- manual entry (fallback when OCR / the model fail)
+def test_manual_supplier_document_goes_through_review(env):
+    e = env
+    body = {"supplier": "Hand Keyed Sdn Bhd", "doc_no": "HK-1", "lines": [
+        {"description": "3mm acrylic sheet", "qty": 10, "uom": "sheet", "unit_price": 150, "item_key": "acrylic_3mm_sheet"}]}
+    e.ai.fail = True  # no model needed
+    r = e.c.post("/api/documents/manual", json=body, headers=e.S)
+    assert r.status_code == 201 and r.json()["status"] == "parsed" and r.json()["doc_no"] == "HK-1"
+    ln = e.c.get(f"/api/documents/{r.json()['id']}", headers=e.O).json()["lines"][0]
+    assert ln["item_key"] == "acrylic_3mm_sheet" and ln["unit_price"] == "150.0000"
+    assert e.c.post("/api/documents/manual", json=body, headers=e.S).status_code == 409  # same entry twice
+    assert e.ai.calls == 0
+    bad = {**body, "doc_no": "HK-2", "lines": [{**body["lines"][0], "qty": 0}]}
+    assert e.c.post("/api/documents/manual", json=bad, headers=e.S).status_code == 422
+    assert e.c.post("/api/documents/manual", json={**body, "lines": []}, headers=e.S).status_code == 422

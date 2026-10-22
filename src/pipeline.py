@@ -2,6 +2,7 @@
 NOTHING if ILMU/OCR fails (the owner keys lines manually). The LLM never supplies a price: enquiry prices come
 from pricing.price_quote, supplier prices come from the paper and are checked by validate.validate_extraction."""
 import hashlib
+import json
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -207,11 +208,15 @@ def _flag_price_jumps(conn, tenant_id, v):
 
 def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime: str | None = None,
                              text: str | None = None, party_id=None, supplier_name=None, kind="quotation",
-                             channel="upload", actor=None, external_id=None, ilmu_client=None, ocr=ocr_mod) -> dict:
+                             channel="upload", actor=None, external_id=None, ilmu_client=None, ocr=ocr_mod,
+                             raw: dict | None = None) -> dict:
+    """raw = lines keyed by hand (no OCR, no model): same validation, storage and review path as an extracted document."""
     t = conn.execute("select * from tenants where id=%s", (tenant_id,)).fetchone()
     tpl = load_template(t["trade_template"])
-    src, ocr_conf = _source_text(data, mime, text, ocr)
-    raw = _ilmu(ilmu.extract_json, redact(src[:20000]), SUPPLIER_SCHEMA, client=ilmu_client)
+    manual, ocr_conf = raw is not None, None
+    if not manual:
+        src, ocr_conf = _source_text(data, mime, text, ocr)
+        raw = _ilmu(ilmu.extract_json, redact(src[:20000]), SUPPLIER_SCHEMA, client=ilmu_client)
     if ocr_conf is not None:  # the LLM never scores itself: confidence comes from the OCR engine
         for l in raw.get("lines") if isinstance(raw.get("lines"), list) else []:
             if isinstance(l, dict):
@@ -219,11 +224,18 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     v = validate.validate_extraction(raw, tpl["item_catalog"])
     if not v["lines"]:
         raise ApiError(422, "no_lines", "no line items found; key the lines in manually")
+    if manual:  # the person who typed the line chose its item: that settles the catalog match, not the other checks
+        for l, src_l in zip(v["lines"], raw["lines"]):
+            if src_l.get("item_key"):
+                l["item_key_suggestion"] = src_l["item_key"]
+                l["failed"] = [f for f in l["failed"] if f not in ("no_item_match", "fuzzy_item_match")]
+                l["needs_review"] = bool(l["failed"])
     _flag_price_jumps(conn, tenant_id, v)
     if party_id is None:
         party_id = party(conn, tenant_id, "supplier", supplier_name or str(raw.get("supplier_name") or "Unknown supplier"))
     # integrity + replay: the same bytes/text must not become a second document, whoever forwards it
-    sha = hashlib.sha256(data if data else (text or "").encode()).hexdigest()
+    sha = hashlib.sha256(json.dumps(raw, sort_keys=True, default=str).encode() if manual
+                         else data if data else (text or "").encode()).hexdigest()
     if conn.execute("select 1 from documents where tenant_id=%s and direction='in' and extraction->>'source_sha256'=%s",
                     (tenant_id, sha)).fetchone():
         raise ApiError(409, "duplicate", "this exact document was already received")
@@ -255,10 +267,11 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
              disc if disc is not None and disc <= 100 else None, _dec(l.get("tax_rate")),
              str(l["section"])[:100] if l.get("section") else None, Jsonb(attrs), Jsonb(unmapped))).fetchone()["id"]
         propose(conn, tenant_id, unmapped, lid)
-    _log_ai(conn, tenant_id, "parse_receipt_lines", doc_id,
-            {"lines": len(v["lines"]), "doc_flags": v["doc_flags"], "source_sha256": sha},
-            round(ocr_conf, 3) if ocr_conf is not None else None)
-    _record_message(conn, None, doc_id, "in", channel, (text or f"[{mime}]")[:2000], external_id)
+    if not manual:
+        _log_ai(conn, tenant_id, "parse_receipt_lines", doc_id,
+                {"lines": len(v["lines"]), "doc_flags": v["doc_flags"], "source_sha256": sha},
+                round(ocr_conf, 3) if ocr_conf is not None else None)
+    _record_message(conn, None, doc_id, "in", channel, "[keyed in by hand]" if manual else (text or f"[{mime}]")[:2000], external_id)
     return {"doc_id": doc_id, "doc_no": doc_no, "ok": v["ok"], "doc_flags": v["doc_flags"]}
 
 

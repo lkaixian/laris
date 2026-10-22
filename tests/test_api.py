@@ -551,7 +551,6 @@ def test_model_calls_are_logged_without_prices(env):
 def sent_quote_on_telegram(e):
     d = make_draft(e, channel="telegram")
     e.sql("update parties set contact='4242' where id=(select party_id from documents where id=%s)", (d,))
-    tr(e, d, "reviewed", e.S)
     tr(e, d, "approved")
     assert tr(e, d, "sent").json()["delivery"] == "delivered"
     e.sql("update documents set sent_at = now() - interval '3 days' where id=%s", (d,))
@@ -700,3 +699,30 @@ def test_whatsapp_number_decides_the_tenant(env, monkeypatch):
     assert other and "could not process" in other[0][2]
     assert send("PN9", "wamid.c") == []  # a number nobody owns is ignored once numbers are mapped
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 1
+
+
+# ---------------------------------------------------------------- per-user API tokens
+def test_user_token_sets_identity_and_ignores_headers(env, monkeypatch):
+    from src.api.deps import token_hash
+    e = env
+    e.sql("update users set token_sha256=%s where id=%s", (token_hash("owner-tok"), e.owner))
+    e.sql("update users set token_sha256=%s where id=%s", (token_hash("staff-tok"), e.staff))
+    O, S = {"Authorization": "Bearer owner-tok"}, {"Authorization": "Bearer staff-tok"}
+    me = e.c.get("/api/me", headers=O).json()
+    assert me["role"] == "owner" and me["id"] == e.owner
+    assert e.c.get("/api/alerts/stale-costs", headers=O).status_code == 200  # no X-Role, no X-User
+    # a staff token cannot claim to be the owner
+    lie = {**S, "X-Role": "owner", "X-User": e.owner}
+    assert e.c.get("/api/me", headers=lie).json()["role"] == "staff"
+    assert e.c.get("/api/alerts/stale-costs", headers=lie).status_code == 403
+    # writes use the token's user (audit actor), tokens work with the DB guard
+    d = make_draft(e, headers=S)
+    assert tr(e, d, "approved", S).status_code == 403
+    assert tr(e, d, "approved", O).status_code == 200
+    assert e.sql("select approved_by from documents where id=%s", (d,))[0]["approved_by"] == uuid.UUID(e.owner)
+    # a token that matches nothing is refused even in demo mode; the hash column never leaks
+    assert e.c.get("/api/me", headers={"Authorization": "Bearer nope", **e.O}).json()["error"]["code"] == "bad_token"
+    assert "token" not in json.dumps(e.c.get("/api/me", headers=O).json())
+    monkeypatch.setenv("REQUIRE_USER_TOKEN", "1")
+    assert e.c.get("/api/tracker", headers=e.O).status_code == 401  # headers alone no longer work
+    assert e.c.get("/api/tracker", headers=O).status_code == 200

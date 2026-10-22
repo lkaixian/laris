@@ -753,7 +753,8 @@ export default function App() {
   useEffect(() => {
     let live = true
     setMe(undefined); setMeErr('')
-    resolveMe(role).then(m => live && setMe(m), e => live && setMeErr(msg(e)))
+    // With a per-user token the server decides the role; follow it instead of the picker.
+    resolveMe(role).then(m => { if (!live) return; if (m.role !== role) { setRole(m.role); setRoleState(m.role) } else setMe(m) }, e => live && setMeErr(msg(e)))
     return () => { live = false }
   }, [role, tries])
   const owner = role === 'owner'

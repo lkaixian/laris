@@ -1,4 +1,5 @@
 """Request context (one transaction per request), JSON rendering, staff scrubbing, injectable services."""
+import hashlib
 import hmac
 import json
 import os
@@ -73,41 +74,49 @@ def require_owner(ctx: Ctx):
         raise ApiError(403, "owner_only", "owner role required")
 
 
-def _check_token(request: Request):
-    """APP_TOKEN set -> every /api call needs `Authorization: Bearer <token>` (shared demo secret, constant-time compare)."""
-    want = os.environ.get("APP_TOKEN")
-    if not want:
-        return
-    got = request.headers.get("authorization", "")
-    if not got.startswith("Bearer ") or not hmac.compare_digest(got[7:].encode(), want.encode()):
-        raise ApiError(401, "bad_token", "missing or invalid bearer token")
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _open(request: Request, write: bool):
-    _check_token(request)
-    role = (request.headers.get("x-role") or "staff").lower()
-    if role not in ("owner", "staff"):
-        raise ApiError(400, "bad_role", "X-Role must be owner or staff")
-    uid = request.headers.get("x-user")
-    if write and not uid:
-        raise ApiError(401, "no_user", "X-User header required for writes")
-    if uid:
-        try:
-            uid = str(UUID(uid))
-        except ValueError:
-            raise ApiError(401, "bad_user", "X-User is not a uuid")
-    with db.tx(role, uid or "") as conn:
-        if uid:
-            u = conn.execute("select id, tenant_id, name, role from users where id=%s", (uid,)).fetchone()
-        elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
-            u = conn.execute("select id, tenant_id, name, role from users where role=%s order by name, id limit 1",
-                             (role,)).fetchone()
+    """Identity, strongest first:
+    1. a per-user API token (`Authorization: Bearer <token>`, stored only as SHA-256): user, role and tenant come from the DB row,
+       X-Role / X-User are ignored;
+    2. the shared APP_TOKEN: demo mode, the caller still names its user with X-Role / X-User;
+    3. no token: demo mode too, unless APP_TOKEN or REQUIRE_USER_TOKEN=1 is set."""
+    got = request.headers.get("authorization", "")
+    tok = got[7:] if got.startswith("Bearer ") else None
+    shared = os.environ.get("APP_TOKEN")
+    shared_ok = bool(shared) and tok is not None and hmac.compare_digest(tok.encode(), shared.encode())
+    with db.tx("staff", "") as conn:
+        u = conn.execute("select id, tenant_id, name, role from users where token_sha256=%s", (token_hash(tok),)).fetchone()             if tok and not shared_ok else None
+        if u:
+            role = u["role"]
         else:
-            raise ApiError(401, "no_user", "X-User header required")
-        if not u:
-            raise ApiError(401, "unknown_user", "unknown user")
-        if role == "owner" and u["role"] != "owner":
-            raise ApiError(403, "not_owner", "this user is not an owner")
+            if os.environ.get("REQUIRE_USER_TOKEN") == "1" or (shared and not shared_ok) or (tok and not shared_ok):  # a token that matches nothing is never ignored
+                raise ApiError(401, "bad_token", "missing or invalid bearer token")
+            role = (request.headers.get("x-role") or "staff").lower()
+            if role not in ("owner", "staff"):
+                raise ApiError(400, "bad_role", "X-Role must be owner or staff")
+            uid = request.headers.get("x-user")
+            if write and not uid:
+                raise ApiError(401, "no_user", "X-User header required for writes")
+            if uid:
+                try:
+                    uid = str(UUID(uid))
+                except ValueError:
+                    raise ApiError(401, "bad_user", "X-User is not a uuid")
+                u = conn.execute("select id, tenant_id, name, role from users where id=%s", (uid,)).fetchone()
+            elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
+                u = conn.execute("select id, tenant_id, name, role from users where role=%s order by name, id limit 1",
+                                 (role,)).fetchone()
+            else:
+                raise ApiError(401, "no_user", "X-User header required")
+            if not u:
+                raise ApiError(401, "unknown_user", "unknown user")
+            if role == "owner" and u["role"] != "owner":
+                raise ApiError(403, "not_owner", "this user is not an owner")
+        conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true)", (role, str(u["id"])))
         yield Ctx(conn, role, u["id"], u["tenant_id"], u["name"])
 
 

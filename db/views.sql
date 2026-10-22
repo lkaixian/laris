@@ -8,6 +8,10 @@ ALTER TABLE document_lines ADD COLUMN IF NOT EXISTS other_cost_per_unit numeric(
 DROP TRIGGER IF EXISTS tenant_fields_audit ON tenant_fields;
 CREATE TRIGGER tenant_fields_audit AFTER INSERT OR UPDATE ON tenant_fields FOR EACH ROW EXECUTE FUNCTION write_audit();
 
+-- Per-user API tokens, stored only as SHA-256 (see scripts/create_token.py).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_sha256 text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_token_uq ON users (token_sha256) WHERE token_sha256 IS NOT NULL;
+
 -- Which tenant owns a WhatsApp business number (phone_number_id). Unmapped = single-tenant fallback.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;

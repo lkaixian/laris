@@ -447,3 +447,44 @@ def test_webhook_body_cap_and_non_ascii_secret(env, monkeypatch):
     assert r.status_code == 413
     r = e.c.post("/webhooks/telegram", json={}, headers={"X-Telegram-Bot-Api-Secret-Token": b"caf\xe9"})
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------- correctness (fix list 13-17)
+def test_quote_numbers_are_sequential_and_unique(env):
+    e = env
+    e.stock_costs()
+    nos = [e.enquire([PART]).json()["doc_no"] for _ in range(3)]
+    assert len(set(nos)) == 3 and nos == sorted(nos)
+    assert nos[2].endswith(f"{int(nos[0][-4:]) + 2:04d}")
+
+
+def test_enquiry_bounds(env):
+    e = env
+    e.stock_costs()
+    for bad in ({"item_key": "print_part_small", "qty": 10 ** 9}, {"item_key": "print_part_small", "qty": "lots"}):
+        e.ai.payload = {"items": [bad]}
+        assert e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "x"}, headers=e.S).status_code == 422
+    e.ai.payload = {"items": [{"item_key": "print_part_small", "qty": 2, "attrs": {"note": "x" * 500, "nested": {"a": 1}}}]}
+    r = e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "x"}, headers=e.S)
+    assert r.status_code == 201
+
+
+def test_junk_extraction_line_does_not_sink_document(env):
+    e = env
+    e.ai.payload = {"doc_no": "J-1", "lines": ["???", {"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5,
+                                                         "amount": 5, "ocr_confidence": "high"}]}
+    r = e.c.post("/api/documents/ingest", data={"text": "junk"}, headers=e.S)
+    assert r.status_code == 201
+    assert e.sql("select issued_on from documents where doc_no='J-1'")[0]["issued_on"] is not None  # defaults to today
+
+
+def test_send_failure_is_reported(env):
+    e = env
+    d = make_draft(e, headers=e.S)
+    tr(e, d, "reviewed", e.S)
+    tr(e, d, "approved")
+    e.sql("update enquiries set channel='telegram' where id=(select enquiry_id from documents where id=%s)", (d,))
+    e.sql("update parties set contact='4242' where id=(select party_id from documents where id=%s)", (d,))
+    e.svc.send = lambda *a: (_ for _ in ()).throw(RuntimeError("down"))
+    r = tr(e, d, "sent")
+    assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["delivery"] == "failed"

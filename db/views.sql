@@ -6,6 +6,9 @@ ALTER TABLE document_lines ADD COLUMN IF NOT EXISTS other_cost_per_unit numeric(
 -- Provider retries / replays: one message per (channel, provider id).
 CREATE UNIQUE INDEX IF NOT EXISTS messages_channel_external_uq ON messages (channel, external_id) WHERE external_id IS NOT NULL;
 
+-- Quote numbers are unique per tenant (the app also serialises numbering with an advisory lock).
+CREATE UNIQUE INDEX IF NOT EXISTS documents_out_no_uq ON documents (tenant_id, doc_no) WHERE direction = 'out';
+
 -- One row per OUT line (fixes v_quote_bom, which repeats the line total once per cost-basis row).
 CREATE OR REPLACE VIEW v_quote_margin AS
 SELECT s.*, s.line_total - s.line_cost AS line_margin,

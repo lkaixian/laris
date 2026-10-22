@@ -31,7 +31,7 @@ REVIEWABLE = ("received", "parsed")  # 'in' statuses where staff may still edit 
 SUMMARY = """
 select d.id, d.direction, d.kind, d.doc_no, d.party_id, p.name as party_name, d.status, d.issued_on, d.valid_until,
   d.currency, d.created_at,
-  coalesce(d.stated_total, (select sum(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100))
+  coalesce(d.stated_total, (select sum(round(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100), 2))
                             from document_lines l where l.document_id = d.id and not l.is_header)) as total,
   coalesce((select max(a.at) from audit_log a where a.entity = 'documents' and a.entity_id = d.id), d.created_at) as updated_at,
   exists(select 1 from v_stale_alerts s where s.quote_id = d.id) as cost_is_stale,
@@ -142,12 +142,14 @@ def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depe
                       {"to": to, "u": ctx.user_id, "r": body.reason, "id": doc_id})
             if to == "job_created":
                 c.execute("insert into jobs(tenant_id, quote_id) values (%s, %s)", (ctx.tenant_id, doc_id))
+    out = summary(ctx, get_doc(ctx, doc_id))
     if to == "sent":
         try:  # the customer gets the SELLING price only; a send failure must not undo the owner's decision
-            pipeline.send_quote(c, svc(request).send, doc_id)
+            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request).send, doc_id) else "not_sent"
         except Exception:
             log.exception("could not send quote %s", doc_id)
-    return reply(ctx, summary(ctx, get_doc(ctx, doc_id)))
+            out["delivery"] = "failed"  # surfaced so the owner can resend by hand
+    return reply(ctx, out)
 
 
 class LineEdit(BaseModel, extra="forbid"):

@@ -55,6 +55,9 @@ def validate_extraction(data, catalog=None, today=None) -> dict:
 
     flags, out, sums = [], [], Decimal(0)
     for n, raw in enumerate(data["lines"], 1):
+        if not isinstance(raw, dict):  # a junk row from the LLM must not sink the whole document
+            flags.append(f"line_{n}_unreadable")
+            continue
         failed = []
         qty, up, amt = (_num(raw.get(k)) for k in ("qty", "unit_price", "amount"))
         for name, v in (("qty", qty), ("unit_price", up), ("amount", amt)):
@@ -71,17 +74,18 @@ def validate_extraction(data, catalog=None, today=None) -> dict:
         if qty is not None and up is not None and amt is not None and abs(qty * up - amt) > TOL:
             arith_ok = False
             failed.append("arith_mismatch")
-        ocr = raw.get("ocr_confidence")
+        ocr = _num(raw.get("ocr_confidence"))
+        ocr = None if ocr == "bad" or ocr is None else float(ocr)
         if ocr is not None and ocr < OCR_MIN:
             failed.append("low_ocr_confidence")
-        key, score, cat_uom = match_item(raw.get("description"), catalog)
+        key, score, cat_uom = match_item(str(raw.get("description") or ""), catalog)
         if catalog is not None:
             if key is None:
                 failed.append("no_item_match")
             else:
                 if score < 1.0:
                     failed.append("fuzzy_item_match")  # a fuzzy match is only a suggestion; a human confirms it
-                if raw.get("uom") and raw["uom"].lower() != cat_uom.lower():
+                if raw.get("uom") and str(raw["uom"]).lower() != cat_uom.lower():
                     failed.append("uom_mismatch")
         if not raw.get("uom"):
             failed.append("null_uom")

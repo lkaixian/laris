@@ -3,7 +3,7 @@ NOTHING if ILMU/OCR fails (the owner keys lines manually). The LLM never supplie
 from pricing.price_quote, supplier prices come from the paper and are checked by validate.validate_extraction."""
 import hashlib
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from statistics import mean
 
@@ -45,6 +45,41 @@ def _ilmu(fn, *a, **kw):
 
 def transcribe(audio: bytes, mime: str, ilmu_client=None) -> str:
     return _ilmu(ilmu.transcribe, audio, mime, client=ilmu_client)
+
+
+MY = timezone(timedelta(hours=8))  # Malaysia has no DST, so a fixed offset needs no tz database
+
+
+def today_my() -> date:
+    return datetime.now(MY).date()
+
+
+def next_quote_no(conn, tenant_id) -> str:
+    """QT-<year>-NNNN, one counter per tenant and year; the advisory lock serialises concurrent creates."""
+    conn.execute("select pg_advisory_xact_lock(hashtext(%s))", (f"quote-no:{tenant_id}",))
+    pre = f"QT-{today_my().year}-"
+    n = conn.execute("""select coalesce(max(substring(doc_no from '[0-9]+$')::int), 0) n from documents
+                        where tenant_id=%s and direction='out' and doc_no like %s""", (tenant_id, pre + "%")).fetchone()["n"]
+    return f"{pre}{n + 1:04d}"
+
+
+MAX_QTY, MAX_ITEMS, MAX_ATTRS = Decimal(1_000_000), 50, 20
+
+
+def clean_items(items) -> list:
+    """Bound what the LLM (and so a customer) can push into pricing: item count, qty range, flat short attrs."""
+    if len(items) > MAX_ITEMS:
+        raise ApiError(422, "too_many_items", f"at most {MAX_ITEMS} items per enquiry")
+    out = []
+    for i in items:
+        q = _dec(i.get("qty"))
+        if q is None or not 0 < q <= MAX_QTY:
+            raise ApiError(422, "bad_qty", f"quantity must be between 0 and {MAX_QTY:,}")
+        a = i.get("attrs") if isinstance(i.get("attrs"), dict) else {}
+        i = {**i, "qty": q, "attrs": {str(k)[:60]: str(v)[:200] for k, v in list(a.items())[:MAX_ATTRS]
+                                      if isinstance(v, (str, int, float)) and not isinstance(v, bool)}}
+        out.append(i)
+    return out
 
 
 def _dec(x, lo=Decimal(0)):
@@ -163,7 +198,7 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
         """insert into documents(tenant_id,direction,kind,party_id,doc_no,status,issued_on,valid_until,currency,
                                  stated_total,tax_total,extraction,source_channel,created_by)
            values (%s,'in',%s,%s,%s,'parsed',%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
-        (tenant_id, kind, party_id, doc_no, _date(raw.get("issued_on")), _date(raw.get("valid_until")),
+        (tenant_id, kind, party_id, doc_no, _date(raw.get("issued_on")) or today_my(), _date(raw.get("valid_until")),
          cur if re.fullmatch(r"[A-Z]{3}", cur) else t["currency"], _dec(tot.get("grand_total")), _dec(tot.get("sst")),
          Jsonb({"llm": raw, "doc_flags": v["doc_flags"], "source_sha256": sha}), channel, actor)).fetchone()["id"]
     for n, l in enumerate(v["lines"], 1):
@@ -206,7 +241,7 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
            where tenant_id=%s and superseded_by is null and (valid_until is null or valid_until >= current_date)
            order by item_key, effective_date desc, created_at desc""", (tenant_id,))}
     try:
-        quote = pricing.price_quote(items, costs, tpl, dict(t))
+        quote = pricing.price_quote(clean_items(items), costs, tpl, dict(t))
     except pricing.PriceInjection as e:
         raise ApiError(422, "price_injection", str(e))
     except pricing.MissingCost as e:
@@ -217,13 +252,11 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
 
     enq = conn.execute("insert into enquiries(tenant_id,party_id,channel,status) values (%s,%s,%s,'quoted') returning id",
                        (tenant_id, party_id, channel)).fetchone()["id"]
-    # ponytail: count-based numbering; a concurrent insert could collide (unique index rejects it) -> use a sequence if needed
-    n = conn.execute("select count(*) n from documents where tenant_id=%s and direction='out'", (tenant_id,)).fetchone()["n"]
-    doc_no = f"QT-{date.today().year}-{n + 1:04d}"
+    doc_no = next_quote_no(conn, tenant_id)
     doc_id = conn.execute(
         """insert into documents(tenant_id,direction,kind,party_id,doc_no,status,valid_until,currency,enquiry_id,source_channel,created_by)
            values (%s,'out','quotation',%s,%s,'draft',%s,%s,%s,%s,%s) returning id""",
-        (tenant_id, party_id, doc_no, date.today() + timedelta(days=30), t["currency"], enq, channel, actor)
+        (tenant_id, party_id, doc_no, today_my() + timedelta(days=30), t["currency"], enq, channel, actor)
     ).fetchone()["id"]
     for l in quote["lines"]:
         attrs, unmapped = route_attrs(conn, tenant_id, "out", l["attrs"])
@@ -252,7 +285,7 @@ def send_quote(conn, send, doc_id) -> bool:
     if not d or not d["contact"] or d["channel"] not in ("whatsapp", "telegram"):
         return False
     ls = conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    total = sum((l["qty"] * l["unit_price"] for l in ls), Decimal(0))
+    total = sum((pricing._q(l["qty"] * l["unit_price"] * (1 - (l["discount_pct"] or 0) / Decimal(100))) for l in ls), Decimal(0))
     body = "\n".join(
         [f"Quotation {d['doc_no']}"]
         + [f"{l['line_no']}. {l['description']} x {l['qty']:f} {l['uom']} @ {d['currency']} {l['unit_price']:.2f}" for l in ls]

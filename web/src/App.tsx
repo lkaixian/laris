@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, download, resolveMe, getRole, setRole, MOCK, NEXT } from './api'
+import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, logout } from './api'
+import Login from './Login'
+import { AccountView, TeamView } from './Team'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -651,7 +653,7 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
-const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log' }
+const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
 
 export default function App() {
   const [hash, setHash] = useState(location.hash)
@@ -663,20 +665,33 @@ export default function App() {
   const [me, setMe] = useState<Me>()
   const [meErr, setMeErr] = useState('')
   const [tries, setTries] = useState(0)
+  // 'login' shows the sign-in screen: when the server needs accounts and this tab has no session, or the session ended.
+  const [gate, setGate] = useState<'checking' | 'login' | 'ready'>(MOCK ? 'ready' : 'checking')
   useEffect(() => {
+    if (MOCK) return
+    authConfig().then(c => setGate(c.login_required && !getToken() ? 'login' : 'ready'), () => setGate('ready'))
+    const out = () => { setMe(undefined); setGate('login') }
+    addEventListener('laris:signedout', out)
+    return () => removeEventListener('laris:signedout', out)
+  }, [])
+  useEffect(() => {
+    if (gate !== 'ready') return
     let live = true
     setMe(undefined); setMeErr('')
     // With a per-user token the server decides the role; follow it instead of the picker.
     resolveMe(role).then(m => { if (!live) return; if (m.role !== role) { setRole(m.role); setRoleState(m.role) } else setMe(m) }, e => live && setMeErr(msg(e)))
     return () => { live = false }
-  }, [role, tries])
+  }, [role, tries, gate])
   const owner = role === 'owner'
+  const signedIn = !!getToken()
   const [, page, arg] = hash.split('/')
   const route = page || (owner ? 'alerts' : 'tracker')
   useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
   const firstNav = useRef(true)
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
-  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity'], ...(owner ? [['settings', 'Settings']] : [])]
+  if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
+  if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
+  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -687,12 +702,17 @@ export default function App() {
             {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line" /><OrgMark org={me.org} /></>}
           </div>
           <ThemeToggle dark={dark} setDark={setDark} />
-          <label className="flex items-center gap-2 text-sm font-semibold">
+          {signedIn ? (
+            <span className="flex flex-wrap items-center gap-2 text-sm">
+              <a className="link inline-flex min-h-11 items-center" href="#/account">{me ? `${me.name} (${me.role})` : 'Account'}</a>
+              <button type="button" className="btn" onClick={() => logout()}>Sign out</button>
+            </span>
+          ) : <label className="flex items-center gap-2 text-sm font-semibold">
             Role (simulated)
             <select className="input" value={role} onChange={e => { const r = e.target.value as Role; setRole(r); setRoleState(r); setRoleNote(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }}>
               <option value="owner">Owner</option><option value="staff">Staff</option>
             </select>
-          </label>
+          </label>}
         </div>
         <nav aria-label="Main" className="mx-auto flex max-w-6xl flex-wrap px-1">
           {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') ? 'page' : undefined}>{t}</a>)}
@@ -711,9 +731,11 @@ export default function App() {
           {route === 'tracker' && <TrackerView owner={owner} />}
           {route === 'jobs' && <JobsView />}
           {route === 'settings' && <SettingsView owner={owner} />}
+          {route === 'team' && <TeamView owner={owner} meId={me.id} />}
+          {route === 'account' && <AccountView name={me.name} role={me.role} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['alerts', 'tracker', 'jobs', 'activity', 'settings', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['alerts', 'tracker', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

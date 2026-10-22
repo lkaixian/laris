@@ -83,6 +83,34 @@ export async function resolveMe(r: Role): Promise<Me> {
   return me
 }
 
+// ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
+export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
+const setToken = (t: string | null) => { try { if (t) sessionStorage.setItem('token', t); else sessionStorage.removeItem('token') } catch { /* storage blocked */ } }
+export const signedOut = () => { setToken(null); userId = ''; window.dispatchEvent(new Event('laris:signedout')) }
+
+export async function authConfig(): Promise<{ login_required: boolean }> {
+  if (MOCK) return { login_required: false }
+  try { return await (await fetch('/api/auth/config')).json() } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+}
+
+export async function login(username: string, password: string): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
+  } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Sign-in failed (${res.status})`)
+  setToken(data.token)
+}
+
+// Shared access token (APP_TOKEN, demo deployments): same header, no account behind it.
+export const setAccessToken = (t: string) => setToken(t.trim())
+
+export async function logout(): Promise<void> {
+  if (!MOCK && getToken()) await fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + getToken() } }).catch(() => undefined)
+  signedOut()
+}
+
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
@@ -97,21 +125,15 @@ const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unk
   const headers: Record<string, string> = { 'X-Role': r }
   if (!form) headers['Content-Type'] = 'application/json'
   if (withUser && userId) headers['X-User'] = userId
-  const tok = () => { try { return sessionStorage.getItem('token') } catch { return null } }
-  const send = async () => {
-    if (tok()) headers['Authorization'] = 'Bearer ' + tok()
-    try {
-      return await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
-    } catch {
-      throw new ApiError(0, 'network', 'Cannot reach the server.')
-    }
-  }
-  let res = await send()
-  if (res.status === 401 && (await res.clone().json().catch(() => null))?.error?.code === 'bad_token') {
-    const t = window.prompt('Access token (APP_TOKEN)')  // shared demo secret, kept for this tab only
-    if (t) { try { sessionStorage.setItem('token', t) } catch { /* storage blocked */ } res = await send() }
+  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
+  let res: Response
+  try {
+    res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, 'network', 'Cannot reach the server.')
   }
   const data = await res.json().catch(() => null)
+  if (res.status === 401 && data?.error?.code === 'bad_token' && getToken()) signedOut()  // expired or revoked: back to the sign-in screen
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
   return data as T
 }
@@ -120,7 +142,7 @@ const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unk
 export async function download(path: string, filename: string): Promise<void> {
   const headers: Record<string, string> = { 'X-Role': role }
   if (userId) headers['X-User'] = userId
-  try { const t = sessionStorage.getItem('token'); if (t) headers['Authorization'] = 'Bearer ' + t } catch { /* storage blocked */ }
+  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
   let res: Response
   try { res = await fetch('/api' + path, { headers }) } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
   if (!res.ok) {

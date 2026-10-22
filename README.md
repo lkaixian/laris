@@ -152,7 +152,7 @@ source .venv/bin/activate
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env            # Windows: copy .env.example .env
 ```
 

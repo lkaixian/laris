@@ -29,7 +29,9 @@ def test_deterministic(tmp_path):
     ms.build(tmp_path / "a")
     ms.build(tmp_path / "b")
     assert _hashes(tmp_path / "a") == _hashes(tmp_path / "b")
-    assert _hashes(tmp_path / "a") == _hashes(DOCS), "committed fixtures stale: rerun scripts/make_samples.py"
+    # rendered PNG/PDF bytes depend on the platform's fonts, so only the text fixtures must match the committed ones
+    text = lambda h: {k: v for k, v in h.items() if not k.endswith((".png", ".pdf"))}
+    assert text(_hashes(tmp_path / "a")) == text(_hashes(DOCS)), "committed fixtures stale: rerun scripts/make_samples.py"
 
 
 @pytest.mark.parametrize("name", [n for n, m in MAN.items() if "validate" in m])

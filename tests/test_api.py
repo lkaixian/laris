@@ -326,9 +326,9 @@ def test_exports(env):
 def test_scheduler_followup_then_expiry(env):
     e = env
     q = seed_quote(e)
-    assert scheduler.run_once() == {"expired": 0, "followups": 0}  # just sent
+    assert scheduler.run_once() == {"expired": 0, "followups": 0, "purged": 0}  # just sent
     e.sql("update documents set sent_at = now() - interval '3 days' where id=%s", (q,))
-    assert scheduler.run_once() == {"expired": 0, "followups": 1}
+    assert scheduler.run_once() == {"expired": 0, "followups": 1, "purged": 0}
     assert scheduler.run_once()["followups"] == 0  # once per quote
     e.sql("update documents set valid_until = current_date - 1 where id=%s", (q,))
     assert scheduler.run_once()["expired"] == 1
@@ -662,3 +662,17 @@ def test_settings_owner_only_validated_audited_and_on_pdf(env):
     assert e.c.post("/api/settings", json={"min_margin_pct": 99}, headers=e.O).status_code == 200
     d = e.enquire([PART]).json()["id"]
     assert e.c.get(f"/api/documents/{d}", headers=e.O).json()["lines"][0]["needs_review"] is True
+
+
+def test_old_chat_text_is_purged_but_documents_stay(env, monkeypatch):
+    e = env
+    d = make_draft(e)
+    e.sql("update messages set created_at = now() - interval '200 days'")
+    monkeypatch.setenv("RETENTION_DAYS", "0")
+    assert scheduler.run_once()["purged"] == 0  # 0 = keep forever
+    monkeypatch.setenv("RETENTION_DAYS", "180")
+    n = scheduler.run_once()["purged"]
+    assert n >= 1
+    assert e.sql("select count(*) n from messages where body <> '[expired]'")[0]["n"] == 0
+    assert scheduler.run_once()["purged"] == 0  # idempotent
+    assert e.sql("select count(*) n from documents where id=%s", (d,))[0]["n"] == 1

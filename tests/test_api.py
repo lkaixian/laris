@@ -629,3 +629,14 @@ def test_manual_supplier_document_goes_through_review(env):
     bad = {**body, "doc_no": "HK-2", "lines": [{**body["lines"][0], "qty": 0}]}
     assert e.c.post("/api/documents/manual", json=bad, headers=e.S).status_code == 422
     assert e.c.post("/api/documents/manual", json={**body, "lines": []}, headers=e.S).status_code == 422
+
+
+def test_unreadable_enquiry_gets_a_clarifying_question(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    e.ai.payload = {"items": []}
+    assert wa_post(e, wa_msg(type="text", text={"body": "hi, how much?"})).status_code == 200
+    ch, to, body = e.svc.sent[-1]
+    assert (ch, to) == ("whatsapp", "60111222333") and "Acrylic signboard" in body and "quantity" in body
+    assert e.sql("select count(*) n from ai_actions where action='ask_clarification'")[0]["n"] == 1
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 0  # nothing half-created

@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from .. import db, pipeline
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
+from ..templates import load_template
 from .deps import JR
 
 log = logging.getLogger("laris")
@@ -36,6 +37,17 @@ def _cap(request: Request):
     cl = request.headers.get("content-length") or "0"
     if not cl.isdigit() or int(cl) > MAX_BODY:
         raise ApiError(413, "too_large", "payload too large")
+
+
+CLARIFY = ("no_items", "bad_items", "bad_qty", "too_many_items")  # the customer's message could not be turned into items
+
+
+def _clarify(conn, tid) -> str:
+    """Ask the customer what we could not read instead of a dead-end apology (the model's ask_clarification, templated)."""
+    t = conn.execute("select trade_template from tenants where id=%s", (tid,)).fetchone()
+    names = "; ".join(r.get("description", k) for k, r in load_template(t["trade_template"])["recipes"].items())
+    pipeline._log_ai(conn, tid, "ask_clarification", None, {"reason": "enquiry not understood"})
+    return f"Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity."
 
 
 def _limited(sender) -> bool:
@@ -95,7 +107,12 @@ def _handle(conn, s, m):
         text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
-    res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
+    try:
+        res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
+    except ApiError as e:
+        if e.code not in CLARIFY:  # anything else (no cost on file, AI down) is our problem, not the customer's
+            raise
+        return _clarify(conn, tid)
     return f"Thanks, we received your enquiry ({res['doc_no']}). We will send your quote shortly."
 
 

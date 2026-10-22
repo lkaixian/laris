@@ -6,6 +6,7 @@ import { AccountView, TeamView } from './Team'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
+import { HomeView } from './Home'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -656,7 +657,7 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
-const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
+const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
 
 export default function App() {
   const [hash, setHash] = useState(location.hash)
@@ -694,14 +695,14 @@ export default function App() {
   const owner = role === 'owner'
   const signedIn = !!getToken()
   const [, page, arg] = hash.split('/')
-  const route = page || (owner ? 'alerts' : 'tracker')
+  const route = page || 'home'
   useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
   const firstNav = useRef(true)
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
   if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
   const runSearch = () => { const t = searchText.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
-  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
+  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -725,8 +726,8 @@ export default function App() {
           </label>}
         </div>
         <form role="search" className="mx-auto flex max-w-6xl gap-2 px-4 pb-2" onSubmit={e => { e.preventDefault(); runSearch() }}>
-          <label className="sr-only" htmlFor="gs">Search contacts, documents and items</label>
-          <input id="gs" ref={searchBox} type="search" className="input min-w-0 flex-1" placeholder="Search contacts, documents, items (press / to focus)"
+          <label className="sr-only" htmlFor="gs">Search everything</label>
+          <input id="gs" ref={searchBox} type="search" className="input min-w-0 flex-1" placeholder="Search (press / to focus)"
             value={searchText} onChange={e => setSearchText(e.target.value)} />
           <button type="submit" className="btn">Search</button>
         </form>
@@ -743,6 +744,7 @@ export default function App() {
             <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
           </div>
         ) : !me ? <p role="status" className="text-muted">Loading...</p> : <>
+          {route === 'home' && <HomeView owner={owner} name={me.name} />}
           {route === 'alerts' && <AlertsView owner={owner} />}
           {route === 'tracker' && <TrackerView owner={owner} />}
           {route === 'contacts' && <ContactsView owner={owner} />}
@@ -755,7 +757,7 @@ export default function App() {
           {route === 'account' && <AccountView name={me.name} role={me.role} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['alerts', 'tracker', 'contacts', 'contact', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

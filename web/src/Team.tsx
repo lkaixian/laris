@@ -91,7 +91,7 @@ export function AccountView({ name, role }: { name: string; role: string }) {
   const save = async () => {
     setErr(''); setNote('')
     if (nw.length < 10) return setErr('The new password needs at least 10 characters.')
-    try { await api('POST', '/me/password', { current: cur, new: nw }); setCur(''); setNw(''); setNote('Password changed. Other devices are signed out.') }
+    try { await api('POST', '/me/password', { current: cur, new: nw }); setCur(''); setNw(''); setNote('Password changed. Your other devices are signed out.') }
     catch (e) { setErr(msg(e)) }
   }
   return (

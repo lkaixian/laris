@@ -65,12 +65,14 @@ class NewPassword(BaseModel, extra="forbid"):
 
 
 @r.post("/me/password")
-def change_password(body: NewPassword, ctx: Ctx = Depends(write_ctx)):
+def change_password(body: NewPassword, request: Request, ctx: Ctx = Depends(write_ctx)):
     row = ctx.conn.execute("select password_hash from users where id=%s", (ctx.user_id,)).fetchone()
     if not auth.verify_password(body.current, row["password_hash"]):
         raise ApiError(403, "bad_credentials", "Current password is wrong.")
     ctx.conn.execute("update users set password_hash=%s where id=%s", (auth.hash_password(body.new), ctx.user_id))
-    ctx.conn.execute("delete from sessions where user_id=%s", (ctx.user_id,))  # other devices must sign in again
+    got = request.headers.get("authorization", "")
+    keep = auth.token_hash(got[7:]) if got.startswith("Bearer ") else ""
+    ctx.conn.execute("delete from sessions where user_id=%s and token_sha256 <> %s", (ctx.user_id, keep))  # other devices sign in again
     audit(ctx, "users", ctx.user_id, "password changed")
     return reply(ctx, {"ok": True})
 

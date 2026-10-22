@@ -761,8 +761,10 @@ def test_login_sessions_and_user_management(env):
     assert e.c.post(f"/api/users/{e.owner}", json={"active": False}, headers=O).json()["error"]["code"] == "last_owner"
     assert e.c.post(f"/api/users/{e.owner}", json={"role": "staff"}, headers=O).json()["error"]["code"] == "last_owner"
     # password change signs other devices out; logout ends the session
+    other = {"Authorization": "Bearer " + e.c.post("/api/login", json={"username": "boss", "password": "correct horse 1"}).json()["token"]}
     pw = e.c.post("/api/me/password", json={"current": "correct horse 1", "new": "another phrase 22"}, headers={**O, "X-User": e.owner})
-    assert pw.status_code == 200 and e.c.get("/api/me", headers=O).status_code == 401
+    assert pw.status_code == 200 and e.c.get("/api/me", headers=O).status_code == 200  # this device stays signed in
+    assert e.c.get("/api/me", headers=other).status_code == 401  # the other device does not
     again = e.c.post("/api/login", json={"username": "boss", "password": "another phrase 22"}).json()
     assert e.c.post("/api/logout", headers={"Authorization": "Bearer " + again["token"]}).status_code == 200
     assert e.c.get("/api/me", headers={"Authorization": "Bearer " + again["token"]}).status_code == 401
@@ -894,3 +896,15 @@ def test_assistant_keyword_fallback_strips_filler(env):
     assert phrase("find supplier for acrylic") == "acrylic" and phrase("who is Pak Ali?") == "Pak Ali"
     assert fallback("how much does acrylic cost")["query"] == "acrylic"
     assert fallback("SAMPLE-QT-0001")["intent"] == "search"
+
+
+def test_dashboard_counts_and_staff_scrub(env):
+    e = env
+    e.shock()
+    o = e.c.get("/api/dashboard", headers=e.O).json()
+    assert o["contacts"]["suppliers"] >= 1 and o["contacts"]["customers"] >= 1 and o["contacts"]["contractors"] == 0
+    assert o["stale_quotes"] == 1 and Decimal(o["stale_margin_lost"]) == Decimal("-400") and o["recent_documents"] and o["recent_contacts"]
+    s = e.c.get("/api/dashboard", headers=e.S).json()
+    assert "stale_quotes" not in s and "followups_pending" not in s and s["open_quotes"] >= 1
+    assert s["contacts"] == o["contacts"]  # staff still get the contact counts (no scrubbed key names)
+    assert not (keys(s) & STAFF_HIDE), keys(s) & STAFF_HIDE

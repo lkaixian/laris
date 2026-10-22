@@ -186,6 +186,14 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
   if (p === '/settings') { need(); return { min_margin_pct: '25.00', ssm_no: null, address: null, bank_details: null, sst_registered: false, sst_no: null } }
+  if (p === '/dashboard') {
+    const all = Object.values(docs).map(d => d.doc), stale = all.filter(d => d.flags.cost_is_stale)
+    return { contacts: { customers: 1, suppliers: 2, contractors: 0 }, needs_review: all.filter(d => d.flags.needs_review).length,
+      open_quotes: all.filter(d => d.direction === 'out').length, jobs: { todo: 0, doing: 0, done: 0 },
+      recent_contacts: contacts().slice(0, 3).map(c => ({ id: c.id, name: c.name, role: c.role, last_activity: new Date().toISOString() })),
+      recent_documents: all.slice(0, 5).map(d => (owner || d.direction === 'out' ? d : { ...d, total: null })),
+      ...(owner ? { stale_quotes: stale.length, stale_margin_lost: '-400', followups_pending: 0 } : {}) }
+  }
   if (p === '/assistant/suggestions') return ['What needs my attention?', 'Find the acrylic supplier']
   if (p === '/assistant' && method === 'POST') {
     const stale = owner && Object.values(docs).some(d => d.doc.flags.cost_is_stale)

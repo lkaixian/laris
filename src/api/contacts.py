@@ -128,3 +128,27 @@ def search(q: str = Query(..., min_length=2, max_length=100), ctx: Ctx = Depends
                where ci.tenant_id = %(t)s and ci.superseded_by is null and (ci.item_key ilike %(q)s or p.name ilike %(q)s)
                order by ci.item_key limit 10""", {"t": ctx.tenant_id, "q": pat}).fetchall()
     return reply(ctx, out)
+
+
+@r.get("/dashboard")
+def dashboard(ctx: Ctx = Depends(read_ctx)):
+    """Home page numbers: contact book, what needs a person, jobs, and the latest movement."""
+    c, t = ctx.conn, ctx.tenant_id
+    by_role = {x["role"]: x["n"] for x in c.execute("select role::text, count(*) n from parties where tenant_id=%s group by role", (t,))}
+    review = c.execute("""select count(distinct d.id) n from documents d join document_lines l on l.document_id=d.id
+                          where d.tenant_id=%s and l.needs_review and d.status in ('received','parsed','draft')""", (t,)).fetchone()["n"]
+    open_quotes = c.execute("select count(*) n from documents where tenant_id=%s and direction='out' and status in ('draft','approved','sent','read')", (t,)).fetchone()["n"]
+    jobs = {x["status"]: x["n"] for x in c.execute("select status, count(*) n from jobs where tenant_id=%s group by status", (t,))}
+    # plural keys: "supplier" is a staff-scrubbed key name
+    out = {"contacts": {k + "s": by_role.get(k, 0) for k in ("customer", "supplier", "contractor")}, "needs_review": review,
+           "open_quotes": open_quotes, "jobs": {k: jobs.get(k, 0) for k in ("todo", "doing", "done")},
+           "recent_contacts": c.execute(
+               """select p.id, p.name, p.role::text as role, max(d.created_at) as last_activity from parties p
+                  join documents d on d.party_id = p.id where p.tenant_id=%s group by p.id order by last_activity desc limit 5""", (t,)).fetchall(),
+           "recent_documents": [summary(ctx, d) for d in c.execute(SUMMARY + " where d.tenant_id=%s order by d.created_at desc limit 5", (t,)).fetchall()]}
+    if ctx.owner:
+        st = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s", (t,)).fetchone()
+        out["stale_quotes"], out["stale_margin_lost"] = st["n"], st["lost"]
+        out["followups_pending"] = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
+                                                where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (t,)).fetchone()["n"]
+    return reply(ctx, out)

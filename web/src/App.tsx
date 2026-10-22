@@ -304,8 +304,10 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
     if (busy) return
     setBusy(true); setErr(''); setNote('')
     try {
-      await api('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined })
+      const r = await api<{ delivery?: string }>('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined })
       setReason(''); setNote(`${docNo} moved to ${label(to)}.`); s.reload(); focusTop()
+      if (r.delivery === 'failed') setErr('Marked as sent, but the message to the customer did not go through. Send the quote PDF by hand.')
+      else if (r.delivery === 'not_sent') setNote(`${docNo} moved to ${label(to)}. No chat contact on file, so nothing was sent.`)
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   const save = async (path: string, name: string) => {

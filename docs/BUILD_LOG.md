@@ -41,3 +41,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 34 | PDPA2: emails, Malaysian mobile numbers and NRIC masked before ILMU calls (stored message keeps the original); prices, quantities and doc numbers unaffected | pytest 90 passed | e33aeaa |
 | 35 | PDPA1: POST /api/parties/{id}/erase (owner only) wipes name, contact, address, ids and chat text for a customer; quotes stay as financial records; audit row without PII | pytest 91 passed | 8d1b449 |
 | 36 | DEP1: fastapi 0.159.1 (starlette 1.9.0), pytest moved to requirements-dev.txt; pip-audit reports no known vulnerabilities in requirements.txt | pytest 91 passed, pip-audit clean | f5c4f9f |
+| 37 | D3: field registry changes audited; parties and users deliberately excluded so the append-only log never holds names or numbers an erasure must remove | pytest 91 passed, db_check ALL GREEN | eefa887 |

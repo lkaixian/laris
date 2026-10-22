@@ -100,7 +100,7 @@ Prerequisite: a Meta app with the WhatsApp Cloud API and a test number. Free-for
 6. Copy the test number's Phone number ID to `WHATSAPP_PHONE_NUMBER_ID`. Create a permanent system user token for `WHATSAPP_TOKEN` (the temporary token expires in 24 h). **UNVERIFIED:** current Meta token options.
 7. Copy the app secret (App settings > Basic) to `WHATSAPP_APP_SECRET`.
 
-**Status:** the parsing and signature helpers exist in `src/channels/whatsapp.py`. The `/webhooks/whatsapp` route is not in `src/app.py` yet (Pending changes, item 2). Verification returns 404 until it is added.
+**Status:** `/webhooks/whatsapp` is implemented (HMAC on the raw body, fail closed). Not yet exercised against Meta.
 
 ## 9. Set the Telegram webhook (or polling)
 
@@ -131,7 +131,7 @@ Replace `$BASE` with the deployment URL, for example `export BASE=https://<deplo
 # Works today: the only route in src/app.py.
 curl -s "$BASE/health"                      # expect {"status":"ok"}
 
-# Static UI after the static-serving change (Pending changes, item 1). Expect 200:
+# Static UI. Expect 200:
 curl -s -o /dev/null -w "%{http_code}\n" "$BASE/"
 
 # Planned in docs/api-contract.md. Expect 404 until the routes exist.
@@ -201,7 +201,7 @@ This does not catch every secret format. Also check the Secrets pane is the only
 | "DATABASE_URL not set" in deployment logs | Database not linked to the deployment | Section 3 step 3. |
 | `psql: command not found` | `replit.nix` not applied | Reopen the Repl or rebuild the Nix environment. |
 | Bootstrap error on `CREATE TYPE` | Half-applied schema from an older run | Drop the schema in the Shell (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`) then run again. Only on the demo DB. |
-| `npm ci` fails in build | `web/package.json` or lock file not in GitHub | Pending changes, item 6. |
+| `npm ci` fails in build | `web/package.json` or lock file not in GitHub | Confirm `git ls-files web` lists both. |
 | Port error or 502 | App not bound to `$PORT` or 5000 | `run.sh` uses `${PORT:-5000}`; check `.replit` `localPort` matches. |
 | Scheduler jobs run twice | More than one uvicorn worker | Keep `--workers 1` in `run.sh`. |
 | WhatsApp verify fails | Route missing, or token mismatch | Section 8. |

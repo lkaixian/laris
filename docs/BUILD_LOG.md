@@ -43,3 +43,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 36 | DEP1: fastapi 0.159.1 (starlette 1.9.0), pytest moved to requirements-dev.txt; pip-audit reports no known vulnerabilities in requirements.txt | pytest 91 passed, pip-audit clean | f5c4f9f |
 | 37 | D3: field registry changes audited; parties and users deliberately excluded so the append-only log never holds names or numbers an erasure must remove | pytest 91 passed, db_check ALL GREEN | eefa887 |
 | 38 | Fix list 24: deploy.md stale 'pending changes' replaced by what the repo already does; APP_TOKEN guidance | docs only | c94f85b |
+| 39 | deploy.md leftover 'Pending changes' references removed | docs only | 0a907f1 |

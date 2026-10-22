@@ -89,7 +89,7 @@ def me(ctx: Ctx = Depends(read_ctx)):
 
 @r.get("/tracker")
 def tracker(ctx: Ctx = Depends(read_ctx)):
-    rows = ctx.conn.execute(SUMMARY + " where d.tenant_id = %s order by updated_at desc", (ctx.tenant_id,)).fetchall()
+    rows = ctx.conn.execute(SUMMARY + " where d.tenant_id = %s order by updated_at desc limit 500", (ctx.tenant_id,)).fetchall()  # newest 500; search finds older ones
     return reply(ctx, {"received": [summary(ctx, d) for d in rows if d["direction"] == "in"],
                        "sent": [summary(ctx, d) for d in rows if d["direction"] == "out"]})
 

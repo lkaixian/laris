@@ -726,3 +726,58 @@ def test_user_token_sets_identity_and_ignores_headers(env, monkeypatch):
     monkeypatch.setenv("REQUIRE_USER_TOKEN", "1")
     assert e.c.get("/api/tracker", headers=e.O).status_code == 401  # headers alone no longer work
     assert e.c.get("/api/tracker", headers=O).status_code == 200
+
+
+# ---------------------------------------------------------------- accounts, login, sessions
+def test_login_sessions_and_user_management(env):
+    from src import auth
+    e = env
+    assert e.c.get("/api/auth/config").json() == {"login_required": False}  # demo mode until an account has a password
+    e.sql("update users set username='boss', password_hash=%s where id=%s", (auth.hash_password("correct horse 1"), e.owner))
+    assert e.c.get("/api/auth/config").json() == {"login_required": True}
+    bad = e.c.post("/api/login", json={"username": "boss", "password": "nope"})
+    assert bad.status_code == 401 and bad.json()["error"]["code"] == "bad_credentials"
+    assert e.c.post("/api/login", json={"username": "ghost", "password": "nope"}).json()["error"]["message"] == bad.json()["error"]["message"]
+    ok = e.c.post("/api/login", json={"username": "BOSS", "password": "correct horse 1"}).json()  # username is case-insensitive
+    O = {"Authorization": "Bearer " + ok["token"]}
+    assert ok["user"]["role"] == "owner" and "password" not in json.dumps(ok)
+    assert e.sql("select count(*) n from sessions where token_sha256=%s", (auth.token_hash(ok["token"]),))[0]["n"] == 1
+    assert e.sql("select count(*) n from sessions where token_sha256=%s", (ok["token"],))[0]["n"] == 0  # stored hashed only
+    assert e.c.get("/api/me", headers=O).json()["id"] == e.owner
+    # owner creates a staff account; staff signs in and cannot manage users
+    mk = e.c.post("/api/users", json={"name": "Aisyah", "username": "aisyah", "role": "staff", "password": "staff pass 123"}, headers=O)
+    assert mk.status_code == 201 and "password" not in json.dumps(mk.json())
+    assert e.c.post("/api/users", json={"name": "X", "username": "aisyah", "role": "staff", "password": "staff pass 123"}, headers=O).status_code == 409
+    assert e.c.post("/api/users", json={"name": "X", "username": "x1", "role": "staff", "password": "short"}, headers=O).status_code == 422
+    st = e.c.post("/api/login", json={"username": "aisyah", "password": "staff pass 123"}).json()
+    S = {"Authorization": "Bearer " + st["token"]}
+    assert e.c.get("/api/users", headers=S).status_code == 403
+    assert "aisyah" in [u["username"] for u in e.c.get("/api/users", headers=O).json()]
+    # deactivating kills the session at once; the last owner cannot be removed
+    uid = mk.json()["id"]
+    assert e.c.post(f"/api/users/{uid}", json={"active": False}, headers=O).status_code == 200
+    assert e.c.get("/api/me", headers=S).status_code == 401
+    assert e.c.post("/api/login", json={"username": "aisyah", "password": "staff pass 123"}).status_code == 401
+    assert e.c.post(f"/api/users/{e.owner}", json={"active": False}, headers=O).json()["error"]["code"] == "last_owner"
+    assert e.c.post(f"/api/users/{e.owner}", json={"role": "staff"}, headers=O).json()["error"]["code"] == "last_owner"
+    # password change signs other devices out; logout ends the session
+    pw = e.c.post("/api/me/password", json={"current": "correct horse 1", "new": "another phrase 22"}, headers={**O, "X-User": e.owner})
+    assert pw.status_code == 200 and e.c.get("/api/me", headers=O).status_code == 401
+    again = e.c.post("/api/login", json={"username": "boss", "password": "another phrase 22"}).json()
+    assert e.c.post("/api/logout", headers={"Authorization": "Bearer " + again["token"]}).status_code == 200
+    assert e.c.get("/api/me", headers={"Authorization": "Bearer " + again["token"]}).status_code == 401
+    assert any("user created" in x["event"] for x in e.sql("select event from audit_log"))
+
+
+def test_login_is_rate_limited_and_sessions_expire(env):
+    from src import auth
+    e = env
+    auth._FAILS.clear()
+    e.sql("update users set username='boss2', password_hash=%s where id=%s", (auth.hash_password("right password 1"), e.owner))
+    for _ in range(auth.LIMIT):
+        assert e.c.post("/api/login", json={"username": "boss2", "password": "wrong"}).status_code == 401
+    assert e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).status_code == 429
+    auth._FAILS.clear()
+    tok = e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).json()["token"]
+    e.sql("update sessions set expires_at = now() - interval '1 minute'")
+    assert e.c.get("/api/me", headers={"Authorization": "Bearer " + tok}).status_code == 401

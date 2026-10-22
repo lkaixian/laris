@@ -62,3 +62,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 55 | Vault note updated | docs only | b6d3231 |
 | 56 | Tech and Tools Declaration rows updated (FastAPI, APScheduler, openpyxl, reportlab, psycopg, CI, pytest, pypdf versions, UI wired to live API); demo script gains optional extras for PDF, follow-up, report, jobs | docs only | 0b798ed |
 | 57 | PDPA4: docs/privacy-and-breach-runbook.md (data map, requests from people, breach steps, honest limits; contact names left as REAL DATA); README minimisation line updated | docs only | 2d23706 |
+| 58 | Multi-user login backend: scrypt passwords, POST /api/login (rate limited, same error for unknown user or wrong password), hashed session tokens with expiry, logout, password change signs other devices out, owner user management (create, edit, deactivate, last owner protected), GET /api/auth/config, scripts/create_token.py account for the first sign-in | pytest 104 passed | 3c97c2f |

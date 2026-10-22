@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import db, scheduler
-from .api import routes, webhooks
+from .api import auth_routes, routes, webhooks
 from .api.deps import JR, Services
 from .errors import ApiError
 
@@ -28,6 +28,7 @@ app = FastAPI(title="LARIS", lifespan=lifespan)
 app.state.svc = Services()
 app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(","),
                    allow_methods=["*"], allow_headers=["*"])
+app.include_router(auth_routes.r)
 app.include_router(routes.r)
 app.include_router(webhooks.r)
 

@@ -1,5 +1,4 @@
 """Request context (one transaction per request), JSON rendering, staff scrubbing, injectable services."""
-import hashlib
 import hmac
 import json
 import os
@@ -16,6 +15,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .. import db, ocr
+from ..auth import token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
 
@@ -74,10 +74,6 @@ def require_owner(ctx: Ctx):
         raise ApiError(403, "owner_only", "owner role required")
 
 
-def token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
 def _open(request: Request, write: bool):
     """Identity, strongest first:
     1. a per-user API token (`Authorization: Bearer <token>`, stored only as SHA-256): user, role and tenant come from the DB row,
@@ -89,7 +85,10 @@ def _open(request: Request, write: bool):
     shared = os.environ.get("APP_TOKEN")
     shared_ok = bool(shared) and tok is not None and hmac.compare_digest(tok.encode(), shared.encode())
     with db.tx("staff", "") as conn:
-        u = conn.execute("select id, tenant_id, name, role from users where token_sha256=%s", (token_hash(tok),)).fetchone()             if tok and not shared_ok else None
+        u = conn.execute("""select u.id, u.tenant_id, u.name, u.role from users u
+                            left join sessions s on s.user_id = u.id and s.token_sha256 = %(h)s and s.expires_at > now()
+                            where u.active and (s.token_sha256 is not null or u.token_sha256 = %(h)s)""",
+                         {"h": token_hash(tok)}).fetchone() if tok and not shared_ok else None
         if u:
             role = u["role"]
         else:
@@ -106,9 +105,9 @@ def _open(request: Request, write: bool):
                     uid = str(UUID(uid))
                 except ValueError:
                     raise ApiError(401, "bad_user", "X-User is not a uuid")
-                u = conn.execute("select id, tenant_id, name, role from users where id=%s", (uid,)).fetchone()
+                u = conn.execute("select id, tenant_id, name, role from users where id=%s and active", (uid,)).fetchone()
             elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
-                u = conn.execute("select id, tenant_id, name, role from users where role=%s order by name, id limit 1",
+                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active order by name, id limit 1",
                                  (role,)).fetchone()
             else:
                 raise ApiError(401, "no_user", "X-User header required")

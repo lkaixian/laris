@@ -12,6 +12,20 @@ CREATE TRIGGER tenant_fields_audit AFTER INSERT OR UPDATE ON tenant_fields FOR E
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_sha256 text;
 CREATE UNIQUE INDEX IF NOT EXISTS users_token_uq ON users (token_sha256) WHERE token_sha256 IS NOT NULL;
 
+-- Accounts: username + scrypt password, login sessions (token stored only as SHA-256), deactivation.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_uq ON users (lower(username)) WHERE username IS NOT NULL;
+CREATE TABLE IF NOT EXISTS sessions (
+  token_sha256 text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  user_agent text
+);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+
 -- Which tenant owns a WhatsApp business number (phone_number_id). Unmapped = single-tenant fallback.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;

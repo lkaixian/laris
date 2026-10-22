@@ -1,7 +1,7 @@
 ---
 type: plan
 date: 2026-10-22
-status: in progress (update the Done column as fixes land)
+status: P0 done; P1 11,12,19 (mostly) done, see [[2026-10-22-security-hardening]]
 sources: [[security-audit]], [[architecture-review]], [[code-review]], [[accessibility-review]], [[qa-report]]
 ---
 # Consolidated fix list (de-duplicated across the five reviews)

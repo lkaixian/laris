@@ -4,6 +4,20 @@ import os
 TESS_DIR = r"C:\Program Files\Tesseract-OCR"
 
 
+MAX_PIXELS = 25_000_000  # decompression-bomb guard (about 5000x5000)
+MAX_PAGES = 30
+TESS_TIMEOUT = 30
+
+
+def _open_image(image_bytes):
+    from PIL import Image
+
+    im = Image.open(io.BytesIO(image_bytes))
+    if im.width * im.height > MAX_PIXELS:
+        raise OcrError(f"image too large ({im.width}x{im.height})")
+    return im
+
+
 class OcrError(RuntimeError):
     pass
 
@@ -16,9 +30,8 @@ def _sort(items):
 def _paddle(image_bytes):
     import numpy as np
     from paddleocr import PaddleOCR
-    from PIL import Image
 
-    res = PaddleOCR(lang="latin").ocr(np.array(Image.open(io.BytesIO(image_bytes)).convert("RGB")))
+    res = PaddleOCR(lang="latin").ocr(np.array(_open_image(image_bytes).convert("RGB")))
     out = []
     for page in res or []:
         for box, (text, conf) in page or []:  # PaddleOCR 2.x result shape (unverified for 3.x)
@@ -29,13 +42,12 @@ def _paddle(image_bytes):
 
 def _tesseract(image_bytes):
     import pytesseract
-    from PIL import Image
 
     if os.path.isdir(TESS_DIR):
         pytesseract.pytesseract.tesseract_cmd = os.path.join(TESS_DIR, "tesseract.exe")
     # ponytail: eng only; use "msa+eng" once msa.traineddata is installed
     d = pytesseract.image_to_data(
-        Image.open(io.BytesIO(image_bytes)), lang="eng", output_type=pytesseract.Output.DICT
+        _open_image(image_bytes), lang="eng", output_type=pytesseract.Output.DICT, timeout=TESS_TIMEOUT
     )
     return [
         {"text": t, "conf": float(c) / 100, "bbox": [l, tp, l + w, tp + h]}
@@ -62,4 +74,7 @@ def pdf_text(pdf_bytes: bytes) -> str:
         from pypdf import PdfReader
     except ImportError as e:
         raise OcrError("pypdf not installed") from e
-    return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf_bytes)).pages).strip()
+    pages = PdfReader(io.BytesIO(pdf_bytes)).pages
+    if len(pages) > MAX_PAGES:
+        raise OcrError(f"PDF has {len(pages)} pages; limit is {MAX_PAGES}")
+    return "\n".join((p.extract_text() or "") for p in pages).strip()

@@ -8,12 +8,19 @@ import httpx
 from .base import InboundMessage
 
 GRAPH = "https://graph.facebook.com/v21.0"
+MEDIA_HOSTS = (".facebook.com", ".fbsbx.com", ".fbcdn.net", ".whatsapp.net")  # the bearer token only goes to Meta
+MAX_MEDIA = 20_000_000
+OUTSIDE_WINDOW = "131047"  # Graph error: free-form message outside the 24h customer-service window
+
+
+def is_outside_window(e: httpx.HTTPStatusError) -> bool:
+    return OUTSIDE_WINDOW in e.response.text
 
 
 def verify_challenge(params: dict, verify_token: str) -> str | None:
     """Meta GET verify: return hub.challenge if token matches, else None (route -> 403)."""
     if params.get("hub.mode") == "subscribe" and hmac.compare_digest(
-        str(params.get("hub.verify_token", "")), verify_token
+        str(params.get("hub.verify_token", "")).encode(), verify_token.encode()
     ):
         return params.get("hub.challenge")
     return None
@@ -23,7 +30,7 @@ def verify_signature(raw_body: bytes, header: str | None, app_secret: str) -> bo
     if not header or not header.startswith("sha256=") or not app_secret:
         return False
     mac = hmac.new(app_secret.encode(), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(mac, header[7:])
+    return hmac.compare_digest(mac.encode(), header[7:].encode())  # bytes: non-ASCII input must not raise
 
 
 def _ts(v) -> datetime:
@@ -102,6 +109,11 @@ def download_media(media_id, *, client=None, token=None) -> tuple[bytes, str]:
     r = c.get(f"{GRAPH}/{media_id}", headers=h)
     r.raise_for_status()
     meta = r.json()
-    r = c.get(meta["url"], headers=h)
+    u = httpx.URL(meta["url"])
+    if u.scheme != "https" or not (u.host or "").endswith(MEDIA_HOSTS):
+        raise ValueError(f"media host not allowed: {u.host}")
+    r = c.get(u, headers=h)
     r.raise_for_status()
+    if len(r.content) > MAX_MEDIA:
+        raise ValueError("media over 20 MB")
     return r.content, meta.get("mime_type", "")

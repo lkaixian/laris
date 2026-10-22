@@ -3,6 +3,9 @@
 -- Labour/machine rate-card hours have no cost_item row: they are stored on the line as other_cost_per_unit and added to line cost.
 ALTER TABLE document_lines ADD COLUMN IF NOT EXISTS other_cost_per_unit numeric(14,4) NOT NULL DEFAULT 0;  -- DBs created before this column
 
+-- Provider retries / replays: one message per (channel, provider id).
+CREATE UNIQUE INDEX IF NOT EXISTS messages_channel_external_uq ON messages (channel, external_id) WHERE external_id IS NOT NULL;
+
 -- One row per OUT line (fixes v_quote_bom, which repeats the line total once per cost-basis row).
 CREATE OR REPLACE VIEW v_quote_margin AS
 SELECT s.*, s.line_total - s.line_cost AS line_margin,

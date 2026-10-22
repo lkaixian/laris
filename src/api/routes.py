@@ -23,6 +23,9 @@ r = APIRouter(prefix="/api")
 
 STATUSES = Literal["received", "draft", "parsed", "reviewed", "accepted", "in_cost_book", "approved", "sent", "read",
                    "job_created", "expired", "rejected", "cancelled", "superseded"]
+MAX_UPLOAD = 10_000_000  # app.py also refuses bigger Content-Length before the body is read
+MAGIC = ((b"%PDF", "application/pdf"), (b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "image/png"),
+         (b"RIFF", "image/webp"))  # the client-sent content type is not trusted: sniff
 REVIEWABLE = ("received", "parsed")  # 'in' statuses where staff may still edit lines (and see supplier prices)
 
 SUMMARY = """
@@ -72,7 +75,7 @@ def line_json(ctx: Ctx, l: dict, doc: dict, hide: set) -> dict:
             "section": l["section"], "is_header": l["is_header"], "needs_review": l["needs_review"],
             "ocr_confidence": l["ocr_confidence"],
             "attrs": {k: v for k, v in l["attrs"].items() if k not in hide},
-            "attrs_unmapped": {k: v for k, v in l["attrs_unmapped"].items() if k not in hide}}
+            "attrs_unmapped": {k: v for k, v in l["attrs_unmapped"].items() if k not in hide} if ctx.owner else {}}
 
 
 @r.get("/me")
@@ -97,13 +100,15 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
         """select payment_terms, lead_time_days, deposit_pct, terms_text, customer_ref, tax_inclusive, tax_total,
                   sent_at, read_at, decided_at, decision_reason, approved_at, parent_id from documents where id=%s""",
         (doc_id,)).fetchone()
+    if not ctx.owner:
+        full.pop("tax_total")
     hide = hidden_attr_keys(ctx)
     lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
     out = {"doc": {**summary(ctx, d), **full},
            "lines": [line_json(ctx, l, d, hide) for l in lines],
-           "messages": ctx.conn.execute(
+           "messages": ctx.conn.execute(  # supplier chat text carries their prices: owner only
                "select direction, channel, body, created_at as at from messages where document_id=%s order by created_at, id",
-               (doc_id,)).fetchall()}
+               (doc_id,)).fetchall() if ctx.owner or d["direction"] == "out" else []}
     if ctx.owner and d["direction"] == "out":
         out["provenance"] = ctx.conn.execute(
             """select line_id, cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost,
@@ -272,13 +277,18 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
     """Extra (not in the contract): upload a supplier PDF/photo or paste its text."""
-    data = file.file.read(10_000_001) if file else None
-    if data is not None and len(data) > 10_000_000:
+    data = file.file.read(MAX_UPLOAD + 1) if file else None
+    if data is not None and len(data) > MAX_UPLOAD:
         raise ApiError(413, "too_large", "file over 10 MB")
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")
+    mime = None
+    if data:
+        mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
+        if not mime:
+            raise ApiError(415, "unsupported_media", "upload a PDF, JPEG, PNG or WebP")
     res = pipeline.ingest_supplier_document(
-        ctx.conn, ctx.tenant_id, data=data, mime=file.content_type if file else None, text=text,
+        ctx.conn, ctx.tenant_id, data=data, mime=mime, text=text,
         supplier_name=supplier, kind=kind, actor=ctx.user_id, ilmu_client=svc(request).ilmu, ocr=svc(request).ocr)
     return reply(ctx, summary(ctx, get_doc(ctx, res["doc_id"])), 201)
 

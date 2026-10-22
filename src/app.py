@@ -36,6 +36,16 @@ def _err(status, code, msg):
     return JR({"error": {"code": code, "message": msg}}, status_code=status)
 
 
+@app.middleware("http")
+async def _cap_body(request, call_next):
+    """Refuse oversized bodies up front (multipart is spooled to disk before any endpoint code runs)."""
+    if request.method in ("POST", "PUT", "PATCH") and request.url.path.startswith("/api/"):
+        cl = request.headers.get("content-length") or "0"
+        if not cl.isdigit() or int(cl) > routes.MAX_UPLOAD + 100_000:
+            return _err(413, "too_large", "request body over 10 MB")
+    return await call_next(request)
+
+
 @app.exception_handler(ApiError)
 async def _api_error(_, e: ApiError):
     return _err(e.status, e.code, e.message)

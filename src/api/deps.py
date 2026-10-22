@@ -1,4 +1,5 @@
 """Request context (one transaction per request), JSON rendering, staff scrubbing, injectable services."""
+import hmac
 import json
 import os
 from contextlib import contextmanager
@@ -7,6 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import httpx
 import psycopg
 from psycopg.types.json import Jsonb
 from fastapi import Request
@@ -71,7 +73,18 @@ def require_owner(ctx: Ctx):
         raise ApiError(403, "owner_only", "owner role required")
 
 
+def _check_token(request: Request):
+    """APP_TOKEN set -> every /api call needs `Authorization: Bearer <token>` (shared demo secret, constant-time compare)."""
+    want = os.environ.get("APP_TOKEN")
+    if not want:
+        return
+    got = request.headers.get("authorization", "")
+    if not got.startswith("Bearer ") or not hmac.compare_digest(got[7:].encode(), want.encode()):
+        raise ApiError(401, "bad_token", "missing or invalid bearer token")
+
+
 def _open(request: Request, write: bool):
+    _check_token(request)
     role = (request.headers.get("x-role") or "staff").lower()
     if role not in ("owner", "staff"):
         raise ApiError(400, "bad_role", "X-Role must be owner or staff")
@@ -86,9 +99,11 @@ def _open(request: Request, write: bool):
     with db.tx(role, uid or "") as conn:
         if uid:
             u = conn.execute("select id, tenant_id, name, role from users where id=%s", (uid,)).fetchone()
-        else:  # demo default for reads: first user of the claimed role
+        elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
             u = conn.execute("select id, tenant_id, name, role from users where role=%s order by name, id limit 1",
                              (role,)).fetchone()
+        else:
+            raise ApiError(401, "no_user", "X-User header required")
         if not u:
             raise ApiError(401, "unknown_user", "unknown user")
         if role == "owner" and u["role"] != "owner":
@@ -136,7 +151,14 @@ class Services:
 
     def send(self, channel: str, to: str, text: str) -> str:
         if channel == "whatsapp":
-            return whatsapp.send_text(to, text, client=self.http)
+            try:
+                return whatsapp.send_text(to, text, client=self.http)
+            except httpx.HTTPStatusError as e:  # 24h window closed: only an approved template can open the chat
+                tpl = os.environ.get("WHATSAPP_FOLLOWUP_TEMPLATE")
+                if not tpl or not whatsapp.is_outside_window(e):
+                    raise
+                return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"),
+                                              [" ".join(text.split())[:1000]], client=self.http)
         if channel == "telegram":
             return telegram.send_message(to, text, client=self.http)
         raise ValueError(f"cannot send on {channel}")

@@ -12,6 +12,7 @@ from src import scheduler
 from src.api.deps import STAFF_HIDE
 from support.fixtures import env, pg_url  # noqa: F401
 
+PNG = b"\x89PNG\r\n\x1a\nimg"
 PART = {"item_key": "print_part_small", "qty": 10}
 WA_SECRET, WA_VERIFY, TG_SECRET = "wa-secret", "wa-verify", "tg-secret"
 
@@ -262,8 +263,9 @@ def test_field_proposal_approve_flow(env):
     e.ai.payload = {"doc_no": "F-1", "issued_on": "2026-01-02", "lines": [
         {"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5, "amount": 5, "Colour Code": "RAL 9005"}]}
     doc = e.c.post("/api/documents/ingest", data={"text": "t", "supplier": "Acme"}, headers=e.S).json()["id"]
-    line = e.c.get(f"/api/documents/{doc}", headers=e.S).json()["lines"][0]
+    line = e.c.get(f"/api/documents/{doc}", headers=e.O).json()["lines"][0]
     assert line["attrs_unmapped"] == {"colour_code": "RAL 9005"} and line["attrs"] == {}
+    assert e.c.get(f"/api/documents/{doc}", headers=e.S).json()["lines"][0]["attrs_unmapped"] == {}  # staff: owner-only
     assert e.c.get("/api/field-proposals", headers=e.S).status_code == 403
     props = e.c.get("/api/field-proposals", headers=e.O).json()
     assert [(p["key"], p["status"], p["sample_values"]) for p in props] == [("colour_code", "pending", ["RAL 9005"])]
@@ -291,7 +293,7 @@ def test_ingest_ocr_confidence_and_failures(env):
     e.svc.ocr = Ocr()
     e.ai.payload = {"doc_no": "O-1", "issued_on": "2026-01-02", "lines": [
         {"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5, "amount": 5}]}
-    r = e.c.post("/api/documents/ingest", files={"file": ("a.png", b"img", "image/png")}, headers=e.S)
+    r = e.c.post("/api/documents/ingest", files={"file": ("a.png", PNG, "image/png")}, headers=e.S)
     assert r.status_code == 201
     ln = e.c.get(f"/api/documents/{r.json()['id']}", headers=e.O).json()["lines"][0]
     assert ln["needs_review"] and ln["ocr_confidence"] == "0.550"
@@ -394,3 +396,54 @@ def test_unknown_sender_is_rate_limited(env, monkeypatch):
                                                                        "type": "text", "text": {"body": "10 small parts"}}]}}]}]}).status_code == 200
     assert e.ai.calls - before == 10  # the other two never reached ILMU
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 10
+
+
+# ---------------------------------------------------------------- hardening
+def test_bearer_token_gates_api(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("APP_TOKEN", "s3cret")
+    assert e.c.get("/api/tracker", headers=e.O).json()["error"]["code"] == "bad_token"
+    assert e.c.get("/api/tracker", headers={**e.O, "Authorization": "Bearer wrong"}).status_code == 401
+    assert e.c.get("/api/tracker", headers={**e.O, "Authorization": b"Bearer s\xe9cret"}).status_code == 401  # non-ASCII: 401, not 500
+    assert e.c.get("/api/tracker", headers={**e.O, "Authorization": "Bearer s3cret"}).status_code == 200
+    assert e.c.get("/health").status_code == 200 and e.c.get("/api/me", headers={"X-Role": "owner"}).status_code == 401
+
+
+def test_reads_need_a_user_except_me(env):
+    e = env
+    assert e.c.get("/api/tracker", headers={"X-Role": "owner"}).json()["error"]["code"] == "no_user"
+    assert e.c.get("/api/me", headers={"X-Role": "owner"}).status_code == 200
+
+
+def test_staff_cannot_read_supplier_chat_text(env):
+    e = env
+    e.ai.payload = {"doc_no": "M-1", "issued_on": "2026-01-02", "lines": [
+        {"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5, "amount": 5}]}
+    doc = e.c.post("/api/documents/ingest", data={"text": "PLA black RM5 secret price"}, headers=e.S).json()["id"]
+    assert e.c.get(f"/api/documents/{doc}", headers=e.S).json()["messages"] == []
+    assert "secret price" in json.dumps(e.c.get(f"/api/documents/{doc}", headers=e.O).json()["messages"])
+    assert "tax_total" not in e.c.get(f"/api/documents/{doc}", headers=e.S).json()["doc"]
+
+
+def test_upload_limits_and_content_hash(env):
+    e = env
+    e.ai.payload = {"doc_no": "H-1", "issued_on": "2026-01-02", "lines": [
+        {"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5, "amount": 5}]}
+    assert e.c.post("/api/documents/ingest", files={"file": ("x.pdf", b"MZ not a pdf", "application/pdf")}, headers=e.S).status_code == 415
+    assert e.c.post("/api/documents/ingest", data={"text": "x"}, headers={**e.S, "Content-Length": "99999999"}).status_code == 413
+    assert e.c.post("/api/documents/ingest", data={"text": "same bytes"}, headers=e.S).status_code == 201
+    e.ai.payload["doc_no"] = "H-2"  # a different number does not hide an identical source
+    r = e.c.post("/api/documents/ingest", data={"text": "same bytes"}, headers=e.S)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "duplicate"
+    sha = hashlib.sha256(b"same bytes").hexdigest()
+    assert e.sql("select count(*) n from documents where extraction->>'source_sha256'=%s", (sha,))[0]["n"] == 1
+
+
+def test_webhook_body_cap_and_non_ascii_secret(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_SECRET)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", TG_SECRET)
+    r = e.c.post("/webhooks/whatsapp", content=b"x" * 1_000_001, headers={"X-Hub-Signature-256": "sha256=00"})
+    assert r.status_code == 413
+    r = e.c.post("/webhooks/telegram", json={}, headers={"X-Telegram-Bot-Api-Secret-Token": b"caf\xe9"})
+    assert r.status_code == 403

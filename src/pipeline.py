@@ -1,6 +1,7 @@
 """Document pipelines. Both take an open transaction (conn) and an injectable ILMU httpx client; both create
 NOTHING if ILMU/OCR fails (the owner keys lines manually). The LLM never supplies a price: enquiry prices come
 from pricing.price_quote, supplier prices come from the paper and are checked by validate.validate_extraction."""
+import hashlib
 import re
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -147,6 +148,11 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
         raise ApiError(422, "no_lines", "no line items found; key the lines in manually")
     if party_id is None:
         party_id = party(conn, tenant_id, "supplier", supplier_name or str(raw.get("supplier_name") or "Unknown supplier"))
+    # integrity + replay: the same bytes/text must not become a second document, whoever forwards it
+    sha = hashlib.sha256(data if data else (text or "").encode()).hexdigest()
+    if conn.execute("select 1 from documents where tenant_id=%s and direction='in' and extraction->>'source_sha256'=%s",
+                    (tenant_id, sha)).fetchone():
+        raise ApiError(409, "duplicate", "this exact document was already received")
     doc_no = str(raw["doc_no"])[:100] if raw.get("doc_no") else None
     if doc_no and conn.execute("select 1 from documents where tenant_id=%s and direction='in' and party_id=%s and doc_no=%s",
                                (tenant_id, party_id, doc_no)).fetchone():
@@ -159,7 +165,7 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
            values (%s,'in',%s,%s,%s,'parsed',%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
         (tenant_id, kind, party_id, doc_no, _date(raw.get("issued_on")), _date(raw.get("valid_until")),
          cur if re.fullmatch(r"[A-Z]{3}", cur) else t["currency"], _dec(tot.get("grand_total")), _dec(tot.get("sst")),
-         Jsonb({"llm": raw, "doc_flags": v["doc_flags"]}), channel, actor)).fetchone()["id"]
+         Jsonb({"llm": raw, "doc_flags": v["doc_flags"], "source_sha256": sha}), channel, actor)).fetchone()["id"]
     for n, l in enumerate(v["lines"], 1):
         qty, up = _dec(l.get("qty")), _dec(l.get("unit_price"))
         qty = qty if qty and qty > 0 else None

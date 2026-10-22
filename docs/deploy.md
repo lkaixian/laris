@@ -118,23 +118,16 @@ Prerequisite: a Meta app with the WhatsApp Cloud API and a test number. Free-for
 
 ## 9. Set the Telegram webhook (or polling)
 
-Webhook (recommended for the deployed app):
+Use the setup script (it sends the secret token, so the route accepts only Telegram):
 
 ```bash
-TOKEN="$TELEGRAM_BOT_TOKEN"   # from Secrets; do not paste the token into files
-curl -s "https://api.telegram.org/bot${TOKEN}/setWebhook?url=https://<deployment-domain>/webhooks/telegram"
-curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+python scripts/setup_channels.py check                      # which keys are set (never prints values)
+python scripts/setup_channels.py telegram-webhook https://<deployment-domain>/webhooks/telegram
+python scripts/setup_channels.py telegram-info              # last_error_message must be empty
+python scripts/setup_channels.py telegram-poll              # local only: long-poll and forward to localhost:5000
 ```
 
-Expect `"ok": true` and `"url"` set to your domain. Check `last_error_message` is empty after you send a test message to the bot.
-
-Polling (only for a local run, or if the webhook route is not ready): `src/channels/telegram.py` has `get_updates()`, but no polling loop exists yet. While a webhook is set, `getUpdates` does not work. Remove the webhook first:
-
-```bash
-curl -s "https://api.telegram.org/bot${TOKEN}/deleteWebhook"
-```
-
-**Status:** `/webhooks/telegram` is not in `src/app.py` yet. The webhook request is not checked against a secret token in code yet.
+`/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`. After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL set `APP_TOKEN`; the UI asks for it once per tab.
 
 ## 10. RunPod endpoint (sponsor proof)
 

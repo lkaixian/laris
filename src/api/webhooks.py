@@ -1,6 +1,7 @@
 """Inbound channels. WhatsApp: verify HMAC on the RAW body before parsing. Telegram: secret-token header.
 A staff/owner handle (users.channel_handle) or a supplier party -> supplier-document pipeline; anyone else -> customer
 enquiry pipeline only, rate-limited so spam cannot burn ILMU credit."""
+import hashlib
 import hmac
 import json
 import logging
@@ -22,7 +23,19 @@ r = APIRouter(prefix="/webhooks")
 LIMIT, WINDOW = 10, 600  # enquiries per sender per 10 minutes
 # ponytail: in-memory, per process (run.sh forces 1 worker), keys never pruned; move to Redis/DB if we scale out
 _HITS = defaultdict(deque)
+MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
 SORRY = "Sorry, we could not process that message. Our team will follow up."
+
+
+def _h(x) -> str:
+    """Stable short id for logs (PDPA: no raw phone numbers or chat ids)."""
+    return hashlib.sha256(str(x).encode()).hexdigest()[:10]
+
+
+def _cap(request: Request):
+    cl = request.headers.get("content-length") or "0"
+    if not cl.isdigit() or int(cl) > MAX_BODY:
+        raise ApiError(413, "too_large", "payload too large")
 
 
 def _limited(sender) -> bool:
@@ -57,7 +70,7 @@ def _handle(conn, s, m):
             tid = p["tenant_id"]
         else:
             if _limited(digits):
-                log.warning("inbound from %s rate-limited", digits)
+                log.warning("inbound from %s rate-limited", _h(digits))
                 return None
             tid = p["tenant_id"] if p else None
             if tid is None:
@@ -100,10 +113,10 @@ def _process(s, msgs, statuses=()):
                 with conn.transaction():  # savepoint per message
                     text = _handle(conn, s, m)
             except ApiError as e:
-                log.warning("inbound %s rejected: %s", m.external_id, e.message)
+                log.warning("inbound %s rejected: %s", _h(m.external_id), e.message)
                 text = SORRY
             except Exception:
-                log.exception("inbound %s failed", m.external_id)
+                log.exception("inbound %s failed", _h(m.external_id))
                 text = None
             if text:
                 replies.append((m.channel, m.sender, text))
@@ -111,7 +124,7 @@ def _process(s, msgs, statuses=()):
         try:
             s.send(ch, to, text)
         except Exception:
-            log.exception("reply to %s failed", to)
+            log.exception("reply to %s failed", _h(to))
 
 
 @r.get("/whatsapp")
@@ -124,6 +137,7 @@ def wa_verify(request: Request):
 
 @r.post("/whatsapp")
 async def wa_inbound(request: Request):
+    _cap(request)
     raw = await request.body()  # signature is over the exact bytes: check before any parsing
     if not whatsapp.verify_signature(raw, request.headers.get("x-hub-signature-256"), os.environ.get("WHATSAPP_APP_SECRET", "")):
         raise ApiError(403, "bad_signature", "invalid signature")
@@ -131,6 +145,8 @@ async def wa_inbound(request: Request):
         payload = json.loads(raw)
     except ValueError:
         raise ApiError(400, "bad_json", "body is not JSON")
+    if len(raw) > MAX_BODY:  # chunked bodies carry no Content-Length
+        raise ApiError(413, "too_large", "payload too large")
     await run_in_threadpool(_process, request.app.state.svc, whatsapp.parse_inbound(payload), whatsapp.parse_status(payload))
     return JR({"ok": True})
 
@@ -138,8 +154,9 @@ async def wa_inbound(request: Request):
 @r.post("/telegram")
 async def tg_inbound(request: Request):
     secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
-    if not secret or not hmac.compare_digest(request.headers.get("x-telegram-bot-api-secret-token", ""), secret):
+    if not secret or not hmac.compare_digest(request.headers.get("x-telegram-bot-api-secret-token", "").encode(), secret.encode()):
         raise ApiError(403, "bad_secret", "invalid secret token")
+    _cap(request)
     try:
         m = telegram.parse_update(await request.json())
     except (ValueError, KeyError, TypeError):

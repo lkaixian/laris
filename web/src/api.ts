@@ -89,11 +89,19 @@ const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unk
   const headers: Record<string, string> = { 'X-Role': r }
   if (!form) headers['Content-Type'] = 'application/json'
   if (withUser && userId) headers['X-User'] = userId
-  let res: Response
-  try {
-    res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
-  } catch {
-    throw new ApiError(0, 'network', 'Cannot reach the server.')
+  const tok = () => { try { return sessionStorage.getItem('token') } catch { return null } }
+  const send = async () => {
+    if (tok()) headers['Authorization'] = 'Bearer ' + tok()
+    try {
+      return await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
+    } catch {
+      throw new ApiError(0, 'network', 'Cannot reach the server.')
+    }
+  }
+  let res = await send()
+  if (res.status === 401 && (await res.clone().json().catch(() => null))?.error?.code === 'bad_token') {
+    const t = window.prompt('Access token (APP_TOKEN)')  // shared demo secret, kept for this tab only
+    if (t) { try { sessionStorage.setItem('token', t) } catch { /* storage blocked */ } res = await send() }
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)

@@ -78,7 +78,7 @@ class Env:
         self.ai.payload = {"supplier_name": "SAMPLE Supplier A Acrylic Sdn Bhd", "doc_no": doc_no,
                            "issued_on": self.sql("select (current_date - 1)::text d")[0]["d"],
                            "lines": [{"description": desc, "qty": 10, "uom": "sheet", "unit_price": price, "amount": 10 * price}]}
-        r = self.c.post("/api/documents/ingest", data={"text": "supplier quote text"}, headers=self.S)
+        r = self.c.post("/api/documents/ingest", data={"text": f"supplier quote text {doc_no} {price}"}, headers=self.S)
         assert r.status_code == 201, r.text
         doc = r.json()["id"]
         ln = self.c.get(f"/api/documents/{doc}", headers=self.S).json()["lines"][0]

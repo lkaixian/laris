@@ -33,8 +33,9 @@ class FakeSvc(Services):
             return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(ai.payload)}}]})
         self.ilmu = httpx.Client(transport=httpx.MockTransport(handler))
 
-    def send(self, channel, to, text):
+    def send(self, channel, to, text, phone_id=None):
         self.sent.append((channel, to, text))
+        self.via = getattr(self, "via", []) + [phone_id]
         return f"wamid.{len(self.sent)}"
 
     def download(self, channel, ref, kind):

@@ -142,3 +142,15 @@ def test_whatsapp_falls_back_to_template_outside_window(monkeypatch):
         pass
     monkeypatch.setenv("WHATSAPP_FOLLOWUP_TEMPLATE", "quote_followup")
     assert s.send("whatsapp", "6012", "hi there") == "wamid.T" and calls[-1] == "template"
+
+
+def test_whatsapp_send_uses_the_tenants_own_number(monkeypatch):
+    from src.api.deps import Services
+    urls = []
+    def h(req):
+        urls.append(req.url.path)
+        return httpx.Response(200, json={"messages": [{"id": "wamid.X"}]})
+    monkeypatch.setenv("WHATSAPP_TOKEN", "t"); monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "SHARED")
+    s = Services(); s.http = httpx.Client(transport=httpx.MockTransport(h))
+    s.send("whatsapp", "6012", "a", "TENANT1"); s.send("whatsapp", "6012", "b")
+    assert urls[0].endswith("/TENANT1/messages") and urls[1].endswith("/SHARED/messages")

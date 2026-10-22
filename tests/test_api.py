@@ -695,7 +695,9 @@ def test_whatsapp_number_decides_the_tenant(env, monkeypatch):
 
     ok = send("PN1", "wamid.a")
     assert ok and "received your enquiry" in ok[0][2]
-    other = send("PN2", "wamid.b")  # tenant 2 has no cost book: it must NOT borrow tenant 1's costs
+    assert e.svc.via[-1] == "PN1"  # the reply leaves from the number the customer wrote to
+    other = send("PN2", "wamid.b")
+    assert e.svc.via[-1] == "PN2"  # tenant 2 has no cost book: it must NOT borrow tenant 1's costs
     assert other and "could not process" in other[0][2]
     assert send("PN9", "wamid.c") == []  # a number nobody owns is ignored once numbers are mapped
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 1

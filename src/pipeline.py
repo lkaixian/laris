@@ -362,8 +362,9 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
 # ---------------------------------------------------------------- quote out
 def _target(conn, doc_id):
     """The quote plus where to reach its customer, or None when there is no chat contact on file."""
-    d = conn.execute("""select d.doc_no, d.valid_until, d.currency, d.party_id, p.name, p.contact, e.channel from documents d
-                        join parties p on p.id=d.party_id join enquiries e on e.id=d.enquiry_id
+    d = conn.execute("""select d.doc_no, d.valid_until, d.currency, d.party_id, p.name, p.contact, e.channel,
+                               t.wa_phone_number_id pn from documents d
+                        join parties p on p.id=d.party_id join enquiries e on e.id=d.enquiry_id join tenants t on t.id=d.tenant_id
                         where d.id=%s and d.direction='out'""", (doc_id,)).fetchone()
     return d if d and d["contact"] and d["channel"] in ("whatsapp", "telegram") else None
 
@@ -384,7 +385,7 @@ def send_followup(conn, send, doc_id) -> bool:
     d, body = _target(conn, doc_id), followup_text(conn, doc_id)
     if not d:
         return False
-    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body))
+    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body, d["pn"]))
     return True
 
 
@@ -399,6 +400,6 @@ def send_quote(conn, send, doc_id) -> bool:
         [f"Quotation {d['doc_no']}"]
         + [f"{l['line_no']}. {l['description']} x {l['qty']:f} {l['uom']} @ {d['currency']} {l['unit_price']:.2f}" for l in ls]
         + [f"Total: {d['currency']} {total:.2f}"] + ([f"Valid until {d['valid_until']}"] if d["valid_until"] else []))
-    wid = send(d["channel"], d["contact"], body)
+    wid = send(d["channel"], d["contact"], body, d["pn"])
     _record_message(conn, None, doc_id, "out", d["channel"], body, wid)
     return True

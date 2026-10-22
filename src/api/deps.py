@@ -157,16 +157,17 @@ class Services:
         self.http = None  # httpx.Client for WhatsApp / Telegram (None = real)
         self.ocr = ocr
 
-    def send(self, channel: str, to: str, text: str) -> str:
+    def send(self, channel: str, to: str, text: str, phone_id: str | None = None) -> str:
+        """phone_id: the tenant's own WhatsApp business number; None falls back to WHATSAPP_PHONE_NUMBER_ID."""
         if channel == "whatsapp":
             try:
-                return whatsapp.send_text(to, text, client=self.http)
+                return whatsapp.send_text(to, text, client=self.http, phone_id=phone_id)
             except httpx.HTTPStatusError as e:  # 24h window closed: only an approved template can open the chat
                 tpl = os.environ.get("WHATSAPP_FOLLOWUP_TEMPLATE")
                 if not tpl or not whatsapp.is_outside_window(e):
                     raise
                 return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"),
-                                              [" ".join(text.split())[:1000]], client=self.http)
+                                              [" ".join(text.split())[:1000]], client=self.http, phone_id=phone_id)
         if channel == "telegram":
             return telegram.send_message(to, text, client=self.http)
         raise ValueError(f"cannot send on {channel}")

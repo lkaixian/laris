@@ -147,10 +147,10 @@ def _process(s, msgs, statuses=()):
                 log.exception("inbound %s failed", _h(m.external_id))
                 text = None
             if text:
-                replies.append((m.channel, m.sender, text))
-    for ch, to, text in replies:  # after commit; a send failure never loses the stored document
+                replies.append((m.channel, m.sender, text, m.to))
+    for ch, to, text, via in replies:  # after commit; a send failure never loses the stored document
         try:
-            s.send(ch, to, text)
+            s.send(ch, to, text, via)  # answer from the number the customer wrote to
         except Exception:
             log.exception("reply to %s failed", _h(to))
 

@@ -535,3 +535,13 @@ def test_owner_can_erase_a_customer(env):
     assert e.sql("select count(*) n from documents where id=%s", (d,))[0]["n"] == 1  # the quote record stays
     sup = e.sql("select id from parties where role='supplier' limit 1")[0]["id"]
     assert e.c.post(f"/api/parties/{sup}/erase", headers=e.O).status_code == 409
+
+
+def test_model_calls_are_logged_without_prices(env):
+    e = env
+    make_draft(e)
+    e.ai.payload = {"doc_no": "L-1", "lines": [{"description": "pla black", "qty": 1, "uom": "kg", "unit_price": 5, "amount": 5}]}
+    e.c.post("/api/documents/ingest", data={"text": "log me"}, headers=e.S)
+    rows = e.sql("select action, payload from ai_actions order by created_at")
+    assert {"extract_items", "parse_receipt_lines"} <= {r["action"] for r in rows}
+    assert "unit_price" not in json.dumps(rows)

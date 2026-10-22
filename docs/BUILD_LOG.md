@@ -44,3 +44,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 37 | D3: field registry changes audited; parties and users deliberately excluded so the append-only log never holds names or numbers an erasure must remove | pytest 91 passed, db_check ALL GREEN | eefa887 |
 | 38 | Fix list 24: deploy.md stale 'pending changes' replaced by what the repo already does; APP_TOKEN guidance | docs only | c94f85b |
 | 39 | deploy.md leftover 'Pending changes' references removed | docs only | 0a907f1 |
+| 40 | ai_actions rows for enquiry extraction and supplier document parsing (counts, flags, hash, OCR confidence; no prices), closing the deferred 'ai_actions logging' item | pytest 92 passed | ff41c8d |

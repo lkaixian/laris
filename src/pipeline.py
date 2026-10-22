@@ -139,6 +139,12 @@ def propose(conn, tenant_id, unmapped: dict, line_id):
             (tenant_id, k, Jsonb([v]), line_id))
 
 
+def _log_ai(conn, tenant_id, action, input_ref, payload, confidence=None):
+    """Every model call that fed a document is recorded (suggestions only; the DB rejects price keys in payload)."""
+    conn.execute("insert into ai_actions(tenant_id,action,input_ref,payload,model,confidence) values (%s,%s,%s,%s,%s,%s)",
+                 (tenant_id, action, input_ref, Jsonb(payload), ilmu.LLM_MODEL, confidence))
+
+
 def _record_message(conn, enquiry_id, doc_id, direction, channel, body, external_id):
     conn.execute("""insert into messages(enquiry_id,document_id,direction,channel,body,external_id)
                     values (%s,%s,%s,%s,%s,%s)""", (enquiry_id, doc_id, direction, channel, body, external_id))
@@ -249,6 +255,9 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
              disc if disc is not None and disc <= 100 else None, _dec(l.get("tax_rate")),
              str(l["section"])[:100] if l.get("section") else None, Jsonb(attrs), Jsonb(unmapped))).fetchone()["id"]
         propose(conn, tenant_id, unmapped, lid)
+    _log_ai(conn, tenant_id, "parse_receipt_lines", doc_id,
+            {"lines": len(v["lines"]), "doc_flags": v["doc_flags"], "source_sha256": sha},
+            round(ocr_conf, 3) if ocr_conf is not None else None)
     _record_message(conn, None, doc_id, "in", channel, (text or f"[{mime}]")[:2000], external_id)
     return {"doc_id": doc_id, "doc_no": doc_no, "ok": v["ok"], "doc_flags": v["doc_flags"]}
 
@@ -305,6 +314,8 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
             if cid is not None:  # rate-card hours have no cost_item row (see db/views.sql note)
                 conn.execute("insert into line_cost_basis(out_line_id,cost_item_id,qty_consumed,cost_snapshot) values (%s,%s,%s,%s)",
                              (lid, cid, q / l["qty"], uc))  # per unit of the sold line, as in the seed
+    _log_ai(conn, tenant_id, "extract_items", doc_id,
+            {"items": [{"item_key": i["item_key"], "qty": str(i["qty"])} for i in items]})
     _record_message(conn, enq, doc_id, "in", channel, text[:2000], external_id)
     return {"doc_id": doc_id, "doc_no": doc_no, "flagged_lines": sorted(flagged)}
 

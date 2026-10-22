@@ -38,3 +38,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 31 | Prompt-injection / misread guard (audit P1): supplier unit price more than 20% off the current cost-book price marks the line needs_review and adds a price_jump:<item>:<pct> doc flag | pytest 91 passed | 570744b |
 | 32 | Fix list 25: dead code removed with its tests; README and PRD point at what really runs (rules_only, v_stale_alerts) | pytest 88 passed | 88622cc |
 | 33 | Quote PDF (reportlab, selling prices only, staff and owner) at GET /api/documents/{id}/pdf; detail page buttons for PDF, BOM xlsx, purchase csv via authenticated blob download (hidden in mock mode) | pytest 89 passed, npm run build passes; buttons not clicked in a browser against the live API | 9db6efc |
+| 34 | PDPA2: emails, Malaysian mobile numbers and NRIC masked before ILMU calls (stored message keeps the original); prices, quantities and doc numbers unaffected | pytest 90 passed | e33aeaa |

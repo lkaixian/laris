@@ -63,6 +63,17 @@ def next_quote_no(conn, tenant_id) -> str:
     return f"{pre}{n + 1:04d}"
 
 
+PII = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"                       # email
+                 r"|(?<!\d)(?:\+?60|0)1\d[ -]?\d{3,4}[ -]?\d{4}(?!\d)"       # Malaysian mobile
+                 r"|(?<!\d)\d{6}-?\d{2}-?\d{4}(?!\d)")                       # NRIC
+
+
+def redact(text: str) -> str:
+    """Strip contact details and NRIC numbers before text leaves for the LLM (PDPA cross-border transfer).
+    Prices, quantities and document numbers are untouched. ponytail: regex only; names and addresses pass through."""
+    return PII.sub("[redacted]", text)
+
+
 MAX_QTY, MAX_ITEMS, MAX_ATTRS = Decimal(1_000_000), 50, 20
 
 
@@ -194,7 +205,7 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     t = conn.execute("select * from tenants where id=%s", (tenant_id,)).fetchone()
     tpl = load_template(t["trade_template"])
     src, ocr_conf = _source_text(data, mime, text, ocr)
-    raw = _ilmu(ilmu.extract_json, src[:20000], SUPPLIER_SCHEMA, client=ilmu_client)
+    raw = _ilmu(ilmu.extract_json, redact(src[:20000]), SUPPLIER_SCHEMA, client=ilmu_client)
     if ocr_conf is not None:  # the LLM never scores itself: confidence comes from the OCR engine
         for l in raw.get("lines") if isinstance(raw.get("lines"), list) else []:
             if isinstance(l, dict):
@@ -254,7 +265,7 @@ def _items_schema(tpl):
 def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, external_id=None, ilmu_client=None) -> dict:
     t = conn.execute("select * from tenants where id=%s", (tenant_id,)).fetchone()
     tpl = load_template(t["trade_template"])
-    out = _ilmu(ilmu.extract_json, text[:4000], _items_schema(tpl), client=ilmu_client)
+    out = _ilmu(ilmu.extract_json, redact(text[:4000]), _items_schema(tpl), client=ilmu_client)
     items = out.get("items")
     if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
         raise ApiError(422, "no_items", "could not find any items in the enquiry")

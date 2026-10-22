@@ -511,3 +511,11 @@ def test_quote_pdf_has_selling_price_and_no_cost(env):
         assert r.status_code == 200 and r.content[:5] == b"%PDF-" and "SAMPLE-QT-0001" in r.headers["content-disposition"]
     in_doc = e.sql("select id from documents where direction='in' limit 1")[0]["id"]
     assert e.c.get(f"/api/documents/{in_doc}/pdf", headers=e.O).status_code == 404
+
+
+def test_pii_is_redacted_before_the_llm_but_prices_survive():
+    from src.pipeline import redact
+    t = "Call 012-345 6789 or +60123456789, a@b.my, IC 900101-14-5678. 10 pcs @ RM 12.50, quote Q-0123-4567-89"
+    r = redact(t)
+    assert "345 6789" not in r and "a@b.my" not in r and "900101" not in r and "123456789" not in r
+    assert "10 pcs @ RM 12.50" in r and "Q-0123-4567-89" in r

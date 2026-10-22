@@ -96,6 +96,14 @@ const alerts = (): Alert[] => Object.values(docs).filter(d => d.doc.direction ==
 
 const down = (t: string) => { if (/ilmu down/i.test(t)) throw new ApiError(502, 'ilmu_unavailable', 'AI extraction failed (SAMPLE: simulated outage); key the lines in manually') }
 
+// Mock contact book: one entry per party that appears in the sample documents.
+const contacts = () => {
+  const seen = new Map<string, { id: string; role: 'customer' | 'supplier'; name: string }>()
+  for (const d of Object.values(docs)) seen.set(d.doc.party.id, { id: d.doc.party.id, role: d.doc.direction === 'in' ? 'supplier' : 'customer', name: d.doc.party.name })
+  return [...seen.values()].map(c => ({ ...c, contact: null, email: null, attention: null, ssm_no: null, address: null, notes: 'SAMPLE contact (mock mode).',
+    documents: Object.values(docs).filter(d => d.doc.party.id === c.id).length, last_activity: null, value: null }))
+}
+
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
@@ -178,6 +186,16 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
   if (p === '/settings') { need(); return { min_margin_pct: '25.00', ssm_no: null, address: null, bank_details: null, sst_registered: false, sst_no: null } }
+  if (p === '/contacts' && method === 'GET') {
+    const term = (new URLSearchParams(q).get('q') ?? '').toLowerCase(), role = new URLSearchParams(q).get('role')
+    return contacts().filter(c => (!role || c.role === role) && (!term || JSON.stringify(c).toLowerCase().includes(term)))
+  }
+  if ((m = p.match(/^\/contacts\/([^/]+)$/)) && method === 'GET') {
+    const c = contacts().find(x => x.id === m![1])
+    if (!c) throw new ApiError(404, 'not_found', 'contact not found')
+    return { ...c, sst_no: null, recent_documents: Object.values(docs).map(d => d.doc).filter(d => d.party.name === c.name) }
+  }
+  if (p.startsWith('/contacts')) throw new ApiError(409, 'mock', 'Mock mode does not save contacts.')
   if (p === '/users') { need(); return [] }
   if (p === '/jobs') return []  // mock quotes never reach job_created
   if (p === '/followups') return []  // mock data has no quote old enough to chase

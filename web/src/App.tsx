@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, logout } from './api'
 import Login from './Login'
 import { AccountView, TeamView } from './Team'
+import { ContactDetail, ContactsView } from './Contacts'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -653,7 +654,7 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
-const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
+const TITLES: Record<string, string> = { alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
 
 export default function App() {
   const [hash, setHash] = useState(location.hash)
@@ -691,7 +692,7 @@ export default function App() {
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
   if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
-  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
+  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['jobs', 'Jobs'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -715,7 +716,7 @@ export default function App() {
           </label>}
         </div>
         <nav aria-label="Main" className="mx-auto flex max-w-6xl flex-wrap px-1">
-          {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') ? 'page' : undefined}>{t}</a>)}
+          {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') || (route === 'contact' && k === 'contacts') ? 'page' : undefined}>{t}</a>)}
         </nav>
       </header>
       <p role="status" className="sr-only">{roleNote}</p>
@@ -729,13 +730,15 @@ export default function App() {
         ) : !me ? <p role="status" className="text-muted">Loading...</p> : <>
           {route === 'alerts' && <AlertsView owner={owner} />}
           {route === 'tracker' && <TrackerView owner={owner} />}
+          {route === 'contacts' && <ContactsView owner={owner} />}
+          {route === 'contact' && arg && <ContactDetail id={arg} owner={owner} />}
           {route === 'jobs' && <JobsView />}
           {route === 'settings' && <SettingsView owner={owner} />}
           {route === 'team' && <TeamView owner={owner} meId={me.id} />}
           {route === 'account' && <AccountView name={me.name} role={me.role} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['alerts', 'tracker', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['alerts', 'tracker', 'contacts', 'contact', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

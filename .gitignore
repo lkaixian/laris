@@ -14,3 +14,4 @@ venv/
 node_modules/
 LARIS Logo.zip
 LARIS Logo/
+.shot-*.png

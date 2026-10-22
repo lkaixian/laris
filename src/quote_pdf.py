@@ -15,7 +15,7 @@ def _esc(s) -> str:
     return str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def render(org: str, doc: dict, customer: str, lines: list[dict]) -> bytes:
+def render(org: dict, doc: dict, customer: str, lines: list[dict]) -> bytes:
     st = getSampleStyleSheet()
     cur = doc["currency"]
     rows, total = [["#", "Description", "Qty", "Unit", f"Unit price ({cur})", f"Amount ({cur})"]], Decimal(0)
@@ -33,13 +33,18 @@ def render(org: str, doc: dict, customer: str, lines: list[dict]) -> bytes:
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f6f4a")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("ALIGN", (2, 0), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LINEBELOW", (0, 1), (-1, -2), 0.25, colors.lightgrey), ("FONTNAME", (4, -1), (-1, -1), "Helvetica-Bold")]))
-    out = [Paragraph(_esc(org), st["Title"]), Paragraph(f"Quotation {_esc(doc['doc_no'])}", st["Heading2"]),
+    issuer = [f"SSM {org['ssm_no']}" if org["ssm_no"] else "", f"SST {org['sst_no']}" if org["sst_registered"] and org["sst_no"] else ""]
+    out = [Paragraph(_esc(org["name"]), st["Title"]),
+           *([Paragraph(_esc(org["address"]), st["BodyText"])] if org["address"] else []),
+           *([Paragraph(_esc(" | ".join(x for x in issuer if x)), st["BodyText"])] if any(issuer) else []),
+           Spacer(1, 3 * mm), Paragraph(f"Quotation {_esc(doc['doc_no'])}", st["Heading2"]),
            Paragraph(f"For: {_esc(customer)}<br/>Issued: {doc['issued_on'] or doc['created_at']:%Y-%m-%d}"
                      + (f"<br/>Valid until: {doc['valid_until']}" if doc["valid_until"] else ""), st["BodyText"]),
            Spacer(1, 6 * mm), t]
-    for label, key in (("Payment terms", "payment_terms"), ("Notes", "terms_text")):
-        if doc.get(key):
-            out += [Spacer(1, 4 * mm), Paragraph(f"<b>{label}:</b> {_esc(doc[key])}", st["BodyText"])]
+    for label, text in (("Payment terms", doc.get("payment_terms")), ("Notes", doc.get("terms_text")),
+                        ("Bank details", org["bank_details"])):
+        if text:
+            out += [Spacer(1, 4 * mm), Paragraph(f"<b>{label}:</b> {_esc(text)}", st["BodyText"])]
     buf = io.BytesIO()
-    SimpleDocTemplate(buf, pagesize=A4, title=f"Quotation {doc['doc_no']}", author=org).build(out)
+    SimpleDocTemplate(buf, pagesize=A4, title=f"Quotation {doc['doc_no']}", author=org["name"]).build(out)
     return buf.getvalue()

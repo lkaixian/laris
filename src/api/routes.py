@@ -127,7 +127,8 @@ def document_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
     doc = ctx.conn.execute("select doc_no, currency, issued_on, created_at, valid_until, payment_terms, terms_text from documents where id=%s",
                            (doc_id,)).fetchone()
     lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    org = ctx.conn.execute("select name from tenants where id=%s", (ctx.tenant_id,)).fetchone()["name"]
+    org = ctx.conn.execute("select name, ssm_no, address, bank_details, sst_registered, sst_no from tenants where id=%s",
+                           (ctx.tenant_id,)).fetchone()
     pdf = quote_pdf.render(org, doc, d["party_name"], lines)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{re.sub(r"[^A-Za-z0-9_-]", "_", doc["doc_no"] or "quote")}.pdf"'})
@@ -246,6 +247,40 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
            join document_lines l on l.id=ci.source_line_id join documents d on d.id=l.document_id
            where ci.tenant_id=%s and ci.superseded_by is null order by ci.item_key, ci.effective_date desc""",
         (ctx.tenant_id,)).fetchall())
+
+
+SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no")
+
+
+@r.get("/settings")
+def settings(ctx: Ctx = Depends(read_ctx)):
+    require_owner(ctx)
+    return reply(ctx, ctx.conn.execute(f"select {', '.join(SETTINGS)} from tenants where id=%s", (ctx.tenant_id,)).fetchone())
+
+
+class SettingsEdit(BaseModel, extra="forbid"):
+    min_margin_pct: Decimal | None = Field(None, ge=0, lt=100)
+    ssm_no: str | None = Field(None, max_length=40)
+    address: str | None = Field(None, max_length=400)
+    bank_details: str | None = Field(None, max_length=400)
+    sst_registered: bool | None = None
+    sst_no: str | None = Field(None, max_length=40)
+
+
+@r.post("/settings")
+def edit_settings(body: SettingsEdit, ctx: Ctx = Depends(write_ctx)):
+    """Margin floor and the issuer details printed on the quote PDF. Owner only; the change is audited."""
+    require_owner(ctx)
+    sets = body.model_dump(exclude_unset=True)
+    if not sets:
+        raise ApiError(422, "empty", "nothing to change")
+    old = ctx.conn.execute(f"select {', '.join(SETTINGS)} from tenants where id=%s for update", (ctx.tenant_id,)).fetchone()
+    if (sets.get("sst_registered") or (old["sst_registered"] and "sst_registered" not in sets)) and not (sets.get("sst_no") or old["sst_no"]):
+        raise ApiError(422, "sst_no_needed", "an SST-registered business must give its SST number")
+    new = ctx.conn.execute("update tenants set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(t)s returning " + ", ".join(SETTINGS),
+                           {**sets, "t": ctx.tenant_id}).fetchone()
+    audit(ctx, "tenants", ctx.tenant_id, "settings changed: " + ",".join(sorted(sets)), {k: old[k] for k in sets}, {k: new[k] for k in sets})
+    return reply(ctx, new)
 
 
 @r.get("/jobs")

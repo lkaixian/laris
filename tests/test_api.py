@@ -640,3 +640,25 @@ def test_unreadable_enquiry_gets_a_clarifying_question(env, monkeypatch):
     assert (ch, to) == ("whatsapp", "60111222333") and "Acrylic signboard" in body and "quantity" in body
     assert e.sql("select count(*) n from ai_actions where action='ask_clarification'")[0]["n"] == 1
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 0  # nothing half-created
+
+
+# ---------------------------------------------------------------- settings
+def test_settings_owner_only_validated_audited_and_on_pdf(env):
+    e = env
+    assert e.c.get("/api/settings", headers=e.S).status_code == 403
+    assert e.c.post("/api/settings", json={"min_margin_pct": 30}, headers=e.S).status_code == 403
+    assert e.c.post("/api/settings", json={"min_margin_pct": 100}, headers=e.O).status_code == 422
+    assert e.c.post("/api/settings", json={"max_discount_pct": 50}, headers=e.O).status_code == 422  # not editable here
+    assert e.c.post("/api/settings", json={"sst_registered": True}, headers=e.O).json()["error"]["code"] == "sst_no_needed"
+    r = e.c.post("/api/settings", json={"min_margin_pct": 30, "ssm_no": "202001000001", "address": "1 Jalan Test, KL",
+                                         "sst_registered": True, "sst_no": "W10-1234-56789012"}, headers=e.O)
+    assert r.status_code == 200 and r.json()["min_margin_pct"] == "30.00"
+    assert e.c.get("/api/settings", headers=e.O).json()["ssm_no"] == "202001000001"
+    assert any("settings changed" in x["event"] for x in e.c.get("/api/audit", headers=e.O).json())
+    q = seed_quote(e)
+    assert e.c.get(f"/api/documents/{q}/pdf", headers=e.S).status_code == 200
+    # the new floor really is what the margin guard uses
+    e.stock_costs()
+    assert e.c.post("/api/settings", json={"min_margin_pct": 99}, headers=e.O).status_code == 200
+    d = e.enquire([PART]).json()["id"]
+    assert e.c.get(f"/api/documents/{d}", headers=e.O).json()["lines"][0]["needs_review"] is True

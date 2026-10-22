@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Proposal, AuditEvent } from './api'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
 const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -549,6 +549,52 @@ function ManualQuote({ onDone }: { onDone: () => void }) {
   )
 }
 
+function SettingsView({ owner }: { owner: boolean }) {
+  const s = useFetch<Settings>('/settings')
+  const [f, setF] = useState<Settings>()
+  const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
+  useEffect(() => { if (s.data) setF(s.data) }, [s.data])
+  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1><p className="card mt-3 text-muted">Owner only. Switch the simulated role to owner to change settings.</p></>
+  const text = (k: 'ssm_no' | 'address' | 'bank_details' | 'sst_no', name: string) => (
+    <label className="flex flex-col gap-1 text-sm font-semibold">{name}
+      <input className="input font-normal" value={f?.[k] ?? ''} onChange={e => f && setF({ ...f, [k]: e.target.value })} /></label>
+  )
+  const save = async () => {
+    if (!f) return
+    setErr(''); setNote('')
+    try {
+      const out = await api<Settings>('POST', '/settings', {
+        min_margin_pct: f.min_margin_pct, ssm_no: f.ssm_no ?? '', address: f.address ?? '', bank_details: f.bank_details ?? '',
+        sst_registered: f.sst_registered, sst_no: f.sst_no ?? '' })
+      setF(out); setNote('Settings saved.')
+    } catch (e) { setErr(msg(e)) }
+  }
+  return (
+    <>
+      <h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1>
+      <p className="mb-4 text-muted">The margin floor flags thin quotes for review. The business details are printed on the quote PDF.</p>
+      <Async s={s} empty={false}>
+        {f && (
+          <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
+            <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
+              <input className="input font-normal" inputMode="decimal" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} /></label>
+            {text('ssm_no', 'SSM registration number')}
+            {text('address', 'Business address')}
+            {text('bank_details', 'Bank details for payment')}
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={f.sst_registered} onChange={e => setF({ ...f, sst_registered: e.target.checked })} /> Registered for SST</label>
+            {f.sst_registered && text('sst_no', 'SST registration number')}
+            {err && <p role="alert" className="text-sm text-warn">{err}</p>}
+            <p role="status" className="text-sm">{note}</p>
+            <div><button type="submit" className="btn btn-primary">Save settings</button></div>
+          </form>
+        )}
+      </Async>
+    </>
+  )
+}
+
 function Followups({ owner }: { owner: boolean }) {
   const s = useFetch<Followup[]>('/followups')
   const [err, setErr] = useState('')
@@ -716,7 +762,7 @@ export default function App() {
   useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
   const firstNav = useRef(true)
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
-  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity']]
+  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity'], ...(owner ? [['settings', 'Settings']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -750,9 +796,10 @@ export default function App() {
           {route === 'alerts' && <AlertsView owner={owner} />}
           {route === 'tracker' && <TrackerView owner={owner} />}
           {route === 'jobs' && <JobsView />}
+          {route === 'settings' && <SettingsView owner={owner} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['alerts', 'tracker', 'jobs', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['alerts', 'tracker', 'jobs', 'activity', 'settings', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

@@ -519,3 +519,19 @@ def test_pii_is_redacted_before_the_llm_but_prices_survive():
     r = redact(t)
     assert "345 6789" not in r and "a@b.my" not in r and "900101" not in r and "123456789" not in r
     assert "10 pcs @ RM 12.50" in r and "Q-0123-4567-89" in r
+
+
+def test_owner_can_erase_a_customer(env):
+    e = env
+    d = make_draft(e)
+    cust = e.sql("select party_id from documents where id=%s", (d,))[0]["party_id"]
+    e.sql("update parties set contact='+60123456789', address='1 Jalan Test' where id=%s", (cust,))
+    assert e.c.post(f"/api/parties/{cust}/erase", headers=e.S).status_code == 403
+    r = e.c.post(f"/api/parties/{cust}/erase", headers=e.O)
+    assert r.status_code == 200 and r.json()["messages_erased"] >= 1
+    row = e.sql("select name, contact, address from parties where id=%s", (cust,))[0]
+    assert row["name"].startswith("Erased customer") and row["contact"] is None and row["address"] is None
+    assert e.sql("select count(*) n from messages where body <> '[erased]' and enquiry_id in (select id from enquiries where party_id=%s)", (cust,))[0]["n"] == 0
+    assert e.sql("select count(*) n from documents where id=%s", (d,))[0]["n"] == 1  # the quote record stays
+    sup = e.sql("select id from parties where role='supplier' limit 1")[0]["id"]
+    assert e.c.post(f"/api/parties/{sup}/erase", headers=e.O).status_code == 409

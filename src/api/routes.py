@@ -310,6 +310,25 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
     return reply(ctx, summary(ctx, get_doc(ctx, res["doc_id"])), 201)
 
 
+@r.post("/parties/{party_id}/erase")
+def erase_party(party_id: UUID, ctx: Ctx = Depends(write_ctx)):
+    """PDPA erasure request for a customer: identity and chat text go, the quote rows stay (financial record)."""
+    require_owner(ctx)
+    c = ctx.conn
+    p = c.execute("select id, role from parties where id=%s and tenant_id=%s for update", (party_id, ctx.tenant_id)).fetchone()
+    if not p:
+        raise ApiError(404, "not_found", "party not found")
+    if p["role"] != "customer":
+        raise ApiError(409, "not_customer", "only customer records can be erased here")
+    c.execute("""update parties set name = 'Erased customer ' || left(id::text, 8), contact = null, address = null,
+                   attention = null, ssm_no = null, sst_no = null where id=%s""", (party_id,))
+    n = c.execute("""update messages set body = '[erased]', transcript = null, media_key = null
+                     where enquiry_id in (select id from enquiries where party_id=%s)
+                        or document_id in (select id from documents where party_id=%s)""", (party_id, party_id)).rowcount
+    audit(ctx, "parties", party_id, "personal data erased on request", None, {"messages_erased": n})
+    return reply(ctx, {"id": party_id, "messages_erased": n})
+
+
 # ---- exports (owner: they carry supplier cost)
 def _safe(v):
     """Neutralise spreadsheet formula injection from supplier-controlled text."""

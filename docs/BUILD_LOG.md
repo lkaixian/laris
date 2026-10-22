@@ -39,3 +39,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 32 | Fix list 25: dead code removed with its tests; README and PRD point at what really runs (rules_only, v_stale_alerts) | pytest 88 passed | 88622cc |
 | 33 | Quote PDF (reportlab, selling prices only, staff and owner) at GET /api/documents/{id}/pdf; detail page buttons for PDF, BOM xlsx, purchase csv via authenticated blob download (hidden in mock mode) | pytest 89 passed, npm run build passes; buttons not clicked in a browser against the live API | 9db6efc |
 | 34 | PDPA2: emails, Malaysian mobile numbers and NRIC masked before ILMU calls (stored message keeps the original); prices, quantities and doc numbers unaffected | pytest 90 passed | e33aeaa |
+| 35 | PDPA1: POST /api/parties/{id}/erase (owner only) wipes name, contact, address, ids and chat text for a customer; quotes stay as financial records; audit row without PII | pytest 91 passed | 8d1b449 |

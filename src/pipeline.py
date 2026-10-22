@@ -321,12 +321,38 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
 
 
 # ---------------------------------------------------------------- quote out
-def send_quote(conn, send, doc_id) -> bool:
-    """Send an approved quote to the customer on the channel the enquiry came in on. Selling prices only."""
-    d = conn.execute("""select d.doc_no, d.valid_until, d.currency, p.contact, e.channel from documents d
+def _target(conn, doc_id):
+    """The quote plus where to reach its customer, or None when there is no chat contact on file."""
+    d = conn.execute("""select d.doc_no, d.valid_until, d.currency, d.party_id, p.name, p.contact, e.channel from documents d
                         join parties p on p.id=d.party_id join enquiries e on e.id=d.enquiry_id
                         where d.id=%s and d.direction='out'""", (doc_id,)).fetchone()
-    if not d or not d["contact"] or d["channel"] not in ("whatsapp", "telegram"):
+    return d if d and d["contact"] and d["channel"] in ("whatsapp", "telegram") else None
+
+
+def followup_text(conn, doc_id) -> str | None:
+    """Suggested chase message (deterministic template, no model). The owner reads it before it goes out."""
+    d = _target(conn, doc_id)
+    if not d:
+        return None
+    total = conn.execute("""select coalesce(sum(round(qty * unit_price * (1 - coalesce(discount_pct, 0) / 100), 2)), 0) t
+                            from document_lines where document_id=%s and not is_header""", (doc_id,)).fetchone()["t"]
+    until = f", valid until {d['valid_until']}" if d["valid_until"] else ""
+    return (f"Hi {d['name']}, just checking if you had a chance to look at quotation {d['doc_no']} "
+            f"({d['currency']} {total:.2f}{until}). Happy to adjust it if needed.")
+
+
+def send_followup(conn, send, doc_id) -> bool:
+    d, body = _target(conn, doc_id), followup_text(conn, doc_id)
+    if not d:
+        return False
+    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body))
+    return True
+
+
+def send_quote(conn, send, doc_id) -> bool:
+    """Send an approved quote to the customer on the channel the enquiry came in on. Selling prices only."""
+    d = _target(conn, doc_id)
+    if not d:
         return False
     ls = conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
     total = sum((pricing._q(l["qty"] * l["unit_price"] * (1 - (l["discount_pct"] or 0) / Decimal(100))) for l in ls), Decimal(0))

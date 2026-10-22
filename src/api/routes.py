@@ -218,6 +218,42 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
         (ctx.tenant_id,)).fetchall())
 
 
+@r.get("/followups")
+def followups(ctx: Ctx = Depends(read_ctx)):
+    """Quotes with no answer after the template's follow-up window, each with the suggested chase message."""
+    rows = ctx.conn.execute(
+        """select f.id, f.document_id, d.doc_no, p.name as customer, d.status, f.due_at, f.reason
+           from followups f join documents d on d.id=f.document_id join parties p on p.id=d.party_id
+           where d.tenant_id=%s and f.state='pending' and d.direction='out' order by f.due_at, f.id""", (ctx.tenant_id,)).fetchall()
+    return reply(ctx, [{**x, "suggested_text": pipeline.followup_text(ctx.conn, x["document_id"])} for x in rows])
+
+
+class FollowupAct(BaseModel, extra="forbid"):
+    action: Literal["send", "skip"]
+
+
+@r.post("/followups/{fid}")
+def followup_act(fid: UUID, body: FollowupAct, request: Request, ctx: Ctx = Depends(write_ctx)):
+    require_owner(ctx)  # nothing goes to a customer without the owner
+    c = ctx.conn
+    f = c.execute("""select f.id, f.document_id from followups f join documents d on d.id=f.document_id
+                     where f.id=%s and d.tenant_id=%s and f.state='pending' for update of f""", (fid, ctx.tenant_id)).fetchone()
+    if not f:
+        raise ApiError(404, "not_found", "no pending follow-up with that id")
+    if body.action == "send":
+        try:
+            ok = pipeline.send_followup(c, svc(request).send, f["document_id"])
+        except Exception:
+            log.exception("follow-up %s not delivered", fid)
+            raise ApiError(502, "delivery_failed", "could not reach the customer; follow-up stays pending")
+        if not ok:
+            raise ApiError(409, "no_contact", "no chat contact on file for this customer; skip it or call them")
+    state = "sent" if body.action == "send" else "skipped"
+    c.execute("update followups set state=%s where id=%s", (state, fid))
+    audit(ctx, "followups", fid, f"follow-up {state}")
+    return reply(ctx, {"id": fid, "state": state})
+
+
 @r.get("/fields")
 def fields(ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, ctx.conn.execute(

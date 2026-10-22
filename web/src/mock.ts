@@ -176,6 +176,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/alerts/stale-costs') { need(); return alerts() }
   if (p === '/cost-items') { need(); return [] }
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
+  if (p === '/followups') return []  // mock data has no quote old enough to chase
   if (p === '/field-proposals') { need(); return proposals.filter(x => x.status === 'pending') }
   if ((m = p.match(/^\/field-proposals\/([^/]+)\/decide$/)) && method === 'POST') {
     need()

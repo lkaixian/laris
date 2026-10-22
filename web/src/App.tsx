@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Proposal, AuditEvent } from './api'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
 const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -422,6 +422,40 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
 }
 
 // ---------- Stale-cost alerts + field proposals ----------
+function Followups({ owner }: { owner: boolean }) {
+  const s = useFetch<Followup[]>('/followups')
+  const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
+  const act = async (f: Followup, action: 'send' | 'skip') => {
+    setErr(''); setNote('')
+    try { await api('POST', `/followups/${f.id}`, { action }); setNote(action === 'send' ? `Follow-up for ${f.doc_no} sent.` : `Follow-up for ${f.doc_no} skipped.`); s.reload() }
+    catch (e) { setErr(msg(e)) }
+  }
+  return (
+    <section className="mt-10 border-t border-soft pt-6" aria-labelledby="fu">
+      <h2 id="fu" className="text-base font-semibold">Quotes waiting for a reply</h2>
+      <p className="mb-2 text-sm text-muted">No answer after the follow-up window. Read the message, then send it or skip. Nothing is sent without you.</p>
+      {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
+      <p role="status" className="mb-2 text-sm">{note}</p>
+      <Async s={s} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up.">
+        <ul className="grid gap-2 md:grid-cols-2">
+          {s.data?.map(f => (
+            <li key={f.id} className="card">
+              <p className="font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">for {f.customer}</span></p>
+              <p className="mt-1 text-sm text-muted">{f.reason}</p>
+              <p className="mt-2 text-sm">{f.suggested_text ?? 'No chat contact on file: call the customer, then skip this.'}</p>
+              {owner && <div className="mt-3 flex flex-wrap gap-2">
+                {f.suggested_text && <button type="button" className="btn btn-primary" onClick={() => act(f, 'send')}>Send follow-up for {f.doc_no}</button>}
+                <button type="button" className="btn" onClick={() => act(f, 'skip')}>Skip {f.doc_no}</button>
+              </div>}
+            </li>
+          ))}
+        </ul>
+      </Async>
+    </section>
+  )
+}
+
 function Proposals() {
   const s = useFetch<Proposal[]>('/field-proposals')
   const [err, setErr] = useState('')
@@ -483,6 +517,7 @@ function AlertsView({ owner }: { owner: boolean }) {
           ))}
         </ul>
       </Async>
+      <Followups owner={owner} />
       <Proposals />
     </>
   )

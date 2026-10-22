@@ -545,3 +545,41 @@ def test_model_calls_are_logged_without_prices(env):
     rows = e.sql("select action, payload from ai_actions order by created_at")
     assert {"extract_items", "parse_receipt_lines"} <= {r["action"] for r in rows}
     assert "unit_price" not in json.dumps(rows)
+
+
+# ---------------------------------------------------------------- follow-ups (owner approves the chase)
+def sent_quote_on_telegram(e):
+    d = make_draft(e, channel="telegram")
+    e.sql("update parties set contact='4242' where id=(select party_id from documents where id=%s)", (d,))
+    tr(e, d, "reviewed", e.S)
+    tr(e, d, "approved")
+    assert tr(e, d, "sent").json()["delivery"] == "delivered"
+    e.sql("update documents set sent_at = now() - interval '3 days' where id=%s", (d,))
+    return d
+
+
+def test_followup_is_suggested_then_owner_sends(env):
+    e = env
+    d = sent_quote_on_telegram(e)
+    assert scheduler.run_once()["followups"] >= 1
+    fu = [x for x in e.c.get("/api/followups", headers=e.S).json() if x["document_id"] == d][0]
+    assert fu["suggested_text"].startswith("Hi ") and "RM" not in fu["suggested_text"] and "MYR" in fu["suggested_text"]
+    assert "cost" not in json.dumps(fu).lower()
+    act = lambda who, a: e.c.post(f"/api/followups/{fu['id']}", json={"action": a}, headers=who)
+    assert act(e.S, "send").status_code == 403
+    n = len(e.svc.sent)
+    assert act(e.O, "send").json()["state"] == "sent" and len(e.svc.sent) == n + 1
+    assert e.svc.sent[-1][:2] == ("telegram", "4242") and e.svc.sent[-1][2] == fu["suggested_text"]
+    assert act(e.O, "send").status_code == 404  # already handled, never twice
+    assert not [x for x in e.c.get("/api/followups", headers=e.O).json() if x["id"] == fu["id"]]
+
+
+def test_followup_skip_and_failed_send_stays_pending(env):
+    e = env
+    d = sent_quote_on_telegram(e)
+    scheduler.run_once()
+    fid = [x for x in e.c.get("/api/followups", headers=e.O).json() if x["document_id"] == d][0]["id"]
+    e.svc.send = lambda *a: (_ for _ in ()).throw(RuntimeError("down"))
+    assert e.c.post(f"/api/followups/{fid}", json={"action": "send"}, headers=e.O).status_code == 502
+    assert e.sql("select state from followups where id=%s", (fid,))[0]["state"] == "pending"
+    assert e.c.post(f"/api/followups/{fid}", json={"action": "skip"}, headers=e.O).json()["state"] == "skipped"

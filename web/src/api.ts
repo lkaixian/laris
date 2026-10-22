@@ -38,6 +38,7 @@ export interface Field {
   key: string; label: string; type: 'text' | 'number' | 'integer' | 'date' | 'select' | 'boolean'
   unit: string | null; options: string[] | null; show_in_grid: boolean; sort_order: number
 }
+export interface Followup { id: string; document_id: string; doc_no: string; customer: string; status: Status; due_at: string; reason: string; suggested_text: string | null }
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }
 export interface AuditEvent { id: number; at: string; actor: string; entity: string; entity_id: string; event: string }
 

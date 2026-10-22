@@ -47,3 +47,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 40 | ai_actions rows for enquiry extraction and supplier document parsing (counts, flags, hash, OCR confidence; no prices), closing the deferred 'ai_actions logging' item | pytest 92 passed | ff41c8d |
 | 41 | UI reads the transition delivery field: failed send shows an error, no-contact shows a note | npm run build passes; not clicked against the live API | 4eb2261 |
 | 42 | Vault notes updated: what the second pass closed, what stays open (needs the deployed DB or a real login) | docs only | f440af3 |
+| 43 | Follow-up feature: scheduler's pending follow-ups now listed with a suggested message (GET /api/followups); owner-only send or skip (POST /api/followups/{id}), failed send stays pending, never sent twice; Alerts page section with Send/Skip buttons | pytest 94 passed, npm run build passes; UI not clicked against the live API | bddb5b5 |

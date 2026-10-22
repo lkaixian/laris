@@ -824,3 +824,73 @@ def test_global_search(env):
     assert e.c.get("/api/search", params={"q": "a"}, headers=e.O).status_code == 422
     assert e.c.get("/api/search", params={"q": "%%"}, headers=e.O).json()["documents"] == []
     assert e.c.get("/api/search", params={"q": "zzzz-nothing"}, headers=e.O).json()["contacts"] == []
+
+
+# ---------------------------------------------------------------- assistant (picks an intent; answers come from the database)
+def ask(e, who, intent, query=None, **extra):
+    e.ai.payload = {"intent": intent, "query": query, **extra}
+    return e.c.post("/api/assistant", json={"message": "x"}, headers=who)
+
+
+def test_assistant_answers_from_data_and_respects_role(env):
+    e = env
+    e.shock()  # stale cost on the sent seed quote
+    r = ask(e, e.O, "stale_costs").json()
+    assert "SAMPLE-QT-0001" in json.dumps(r["items"]) and "RM" in r["reply"] and r["source"] == "model"
+    assert "SAMPLE-QT-0001" in ask(e, e.O, "search", "SAMPLE-QT").json()["items"][0]["label"]
+    assert "Supplier A" in json.dumps(ask(e, e.O, "contacts", "acrylic").json()["items"])
+    assert "RM" in ask(e, e.O, "cost_of", "acrylic").json()["reply"]
+    assert "attention" not in ask(e, e.O, "attention").json()["reply"] and "cost rise" in ask(e, e.O, "attention").json()["reply"]
+    assert ask(e, e.O, "margin_report", days=30).json()["reply"].startswith("Last 30 days")
+    assert ask(e, e.O, "jobs").json()["reply"].startswith("Jobs:")
+    # staff: no cost or margin through the chat either
+    for intent in ("stale_costs", "margin_report", "cost_of"):
+        assert "only the owner" in ask(e, e.S, intent, "acrylic").json()["reply"], intent
+    att = ask(e, e.S, "attention").json()["reply"]
+    assert "cost rise" not in att and "RM" not in att
+    s = ask(e, e.S, "search", "acrylic").json()
+    assert not (keys(s) & STAFF_HIDE - {"stale"}) and "RM" not in s["reply"]
+
+
+def test_assistant_never_acts_and_survives_a_bad_model(env):
+    e = env
+    d = make_draft(e)
+    before = e.sql("select status from documents where id=%s", (d,))[0]["status"]
+    r = ask(e, e.O, "do_action", "approve QT-1").json()
+    assert "cannot change, approve, price or send" in r["reply"]
+    assert e.sql("select status from documents where id=%s", (d,))[0]["status"] == before
+    assert ask(e, e.O, "drop_database").json()["intent"] == "help"  # outside the closed list
+    e.ai.payload = {"intent": "search", "query": ["not", "a", "string"], "days": True}
+    assert e.c.post("/api/assistant", json={"message": "x"}, headers=e.O).status_code == 200
+    assert e.sql("select count(*) n from ai_actions where action='assistant_query'")[0]["n"] >= 3
+    # model down: labelled keyword fallback
+    e.ai.fail = True
+    k = e.c.post("/api/assistant", json={"message": "which quotes need a follow up?"}, headers=e.O).json()
+    assert k["source"] == "keywords" and k["intent"] == "followups"
+    assert e.c.post("/api/assistant", json={"message": "please approve and send everything"}, headers=e.O).json()["intent"] == "do_action"
+    assert e.c.post("/api/assistant", json={"message": ""}, headers=e.O).status_code == 422
+    assert e.c.post("/api/assistant", json={"message": "x" * 501}, headers=e.O).status_code == 422
+
+
+def test_assistant_is_rate_limited_and_masks_contact_details(env):
+    from src.api import assistant
+    e = env
+    assistant._HITS.clear()
+    for _ in range(assistant.LIMIT):
+        assert e.c.post("/api/assistant", json={"message": "jobs?"}, headers=e.O).status_code == 200
+    assert e.c.post("/api/assistant", json={"message": "jobs?"}, headers=e.O).status_code == 429
+    assistant._HITS.clear()
+    seen = []
+    real = e.svc.ilmu
+    import httpx
+    e.svc.ilmu = httpx.Client(transport=httpx.MockTransport(lambda req: (seen.append(req.content.decode()), httpx.Response(200, json={"choices": [{"message": {"content": "{\"intent\": \"help\"}"}}]}))[1]))
+    e.c.post("/api/assistant", json={"message": "call 012-345 6789 about a@b.my"}, headers=e.O)
+    assert seen and "345 6789" not in seen[0] and "a@b.my" not in seen[0]
+    e.svc.ilmu = real
+
+
+def test_assistant_keyword_fallback_strips_filler(env):
+    from src.api.assistant import fallback, phrase
+    assert phrase("find supplier for acrylic") == "acrylic" and phrase("who is Pak Ali?") == "Pak Ali"
+    assert fallback("how much does acrylic cost")["query"] == "acrylic"
+    assert fallback("SAMPLE-QT-0001")["intent"] == "search"

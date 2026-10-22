@@ -31,6 +31,9 @@ ALTER TYPE party_role ADD VALUE IF NOT EXISTS 'contractor';
 ALTER TABLE parties ADD COLUMN IF NOT EXISTS email text;
 ALTER TABLE parties ADD COLUMN IF NOT EXISTS notes text;
 
+-- The assistant logs which intent the model picked for each question.
+ALTER TYPE ai_action_t ADD VALUE IF NOT EXISTS 'assistant_query';
+
 -- Which tenant owns a WhatsApp business number (phone_number_id). Unmapped = single-tenant fallback.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;

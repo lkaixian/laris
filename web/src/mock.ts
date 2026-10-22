@@ -186,6 +186,12 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
   if (p === '/settings') { need(); return { min_margin_pct: '25.00', ssm_no: null, address: null, bank_details: null, sst_registered: false, sst_no: null } }
+  if (p === '/assistant/suggestions') return ['What needs my attention?', 'Find the acrylic supplier']
+  if (p === '/assistant' && method === 'POST') {
+    const stale = owner && Object.values(docs).some(d => d.doc.flags.cost_is_stale)
+    return { reply: stale ? 'SAMPLE answer (mock mode): 1 sent quote is hurt by a cost rise, RM400.00 of margin.' : 'SAMPLE answer (mock mode): nothing needs attention.',
+      intent: 'attention', items: [{ label: 'Stale costs', href: '#/alerts' }], source: 'keywords', suggestions: [] }
+  }
   if (p === '/search') {
     const term = (new URLSearchParams(q).get('q') ?? '').toLowerCase()
     const all = Object.values(docs).map(d => d.doc)

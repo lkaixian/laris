@@ -1,5 +1,6 @@
 # LARIS: Quotation Tracker for Malaysian SMEs
-n[![ci](https://github.com/lkaixian/laris/actions/workflows/ci.yml/badge.svg)](https://github.com/lkaixian/laris/actions/workflows/ci.yml)
+
+[![ci](https://github.com/lkaixian/laris/actions/workflows/ci.yml/badge.svg)](https://github.com/lkaixian/laris/actions/workflows/ci.yml)
 
 LARIS keeps the supplier prices behind each customer quote up to date, so a quote is not sent on an old cost without the owner knowing.
 

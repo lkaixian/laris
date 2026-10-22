@@ -40,7 +40,7 @@ export function SearchView({ q }: { q: string }) {
           )}
           {r.cost_items && r.cost_items.length > 0 && (
             <section aria-labelledby="si"><h2 id="si" className="mb-2 text-lg font-semibold">Current costs</h2>
-              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Current costs" tabIndex={0}>
+              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Current costs table" tabIndex={0}>
                 <table className="w-full min-w-max"><caption className="sr-only">Cost items matching {q}</caption>
                   <thead><tr><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Unit</th><th scope="col">Unit cost</th><th scope="col">Since</th></tr></thead>
                   <tbody>{r.cost_items.map(c => (

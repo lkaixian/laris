@@ -162,7 +162,7 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
           {c.current_costs && c.current_costs.length > 0 && (
             <section className="mt-6" aria-labelledby="costs">
               <h2 id="costs" className="mb-2 text-lg font-semibold">What they charge now</h2>
-              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Current costs" tabIndex={0}>
+              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Current costs table" tabIndex={0}>
                 <table className="w-full min-w-max"><caption className="sr-only">Current supplier costs for {c.name}</caption>
                   <thead><tr><th scope="col">Item</th><th scope="col">Unit</th><th scope="col">Unit cost</th><th scope="col">Since</th></tr></thead>
                   <tbody>{c.current_costs.map(x => <tr key={x.item_key}><td>{x.item_key}</td><td>{x.uom}</td><td className="tabular-nums">{rm(x.unit_cost)}</td><td>{x.effective_date}</td></tr>)}</tbody>

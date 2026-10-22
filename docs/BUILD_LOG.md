@@ -61,3 +61,4 @@ One line per completed step: date, what, evidence, commit. Newest at the bottom.
 | 54 | D1/D2: db/roles.sql (laris_app owns nothing: cannot disable audit or guard triggers, alter tables, or edit audit rows), DATABASE_URL_OWNER for startup migrations, tests/roles_check.mjs in CI; not yet tried on Replit's Postgres | roles_check ALL GREEN on PGlite, pytest 102 passed | 5ac6347 |
 | 55 | Vault note updated | docs only | b6d3231 |
 | 56 | Tech and Tools Declaration rows updated (FastAPI, APScheduler, openpyxl, reportlab, psycopg, CI, pytest, pypdf versions, UI wired to live API); demo script gains optional extras for PDF, follow-up, report, jobs | docs only | 0b798ed |
+| 57 | PDPA4: docs/privacy-and-breach-runbook.md (data map, requests from people, breach steps, honest limits; contact names left as REAL DATA); README minimisation line updated | docs only | 2d23706 |

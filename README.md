@@ -257,7 +257,7 @@ See `docs/deploy.md` for the Replit Reserved VM setup, Secrets list, webhook set
 - In real use, chats, voice notes, customer names and phone numbers are personal data under the Personal Data Protection Act 2010 as amended in 2024. The SME would be the controller. LARIS would act as a processor, which the amended Act makes directly liable for security. This is our reading of secondary sources, not legal advice.
 - Vendors that would receive personal data: Meta (WhatsApp Cloud API), Telegram (Bot API), ILMU (speech-to-text and extraction), RunPod (fallback speech-to-text), and Replit (hosting; data region not confirmed). Each needs a processing agreement and a cross-border review before real use.
 - Secondary sources say the amended Act requires a data protection officer for controllers and processors, and a breach notice to the Commissioner within 72 hours. Neither is set up for this prototype. [DPO NAME TBD]
-- Planned minimisation: keep the transcript and the structured quote, not the raw audio, and set a retention period. Not built yet.
+- Minimisation in place: chat text is blanked after `RETENTION_DAYS`, customers can be erased on request, contact details are masked before text reaches the model. See `docs/privacy-and-breach-runbook.md`.
 - A PDP public consultation paper on AI and personal data (No. 1/2026, dated 5 Oct 2026) is not law yet. Track it before any pilot.
 
 ## Team

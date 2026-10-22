@@ -946,3 +946,18 @@ def test_contractor_messages_do_not_become_enquiries(env, monkeypatch):
     n = len(e.svc.sent)
     assert wa_post(e, wa_msg(id="wamid.c1", type="text", text={"body": "10 small parts"})).status_code == 200
     assert len(e.svc.sent) == n and e.sql("select count(*) n from enquiries")[0]["n"] == 0
+
+
+def test_contacts_csv_owner_only_and_formula_safe(env):
+    e = env
+    e.c.post("/api/contacts", json={"role": "supplier", "name": "=HYPERLINK(\"x\")", "notes": "+1"}, headers=e.S)
+    assert e.c.get("/api/export/contacts.csv", headers=e.S).status_code == 403
+    r = e.c.get("/api/export/contacts.csv", headers=e.O)
+    rows = list(csv.reader(io.StringIO(r.text)))
+    assert r.headers["content-type"].startswith("text/csv") and rows[0][:2] == ["type", "name"] and len(rows) > 3
+    assert any(x[1].startswith("'=") and x[7] == "'+1" for x in rows[1:])  # neutralised, not executable in a spreadsheet
+    assert any("contact book exported" in x["event"] for x in e.sql("select event from audit_log"))
+
+
+def test_ready_checks_the_database(env):
+    assert env.c.get("/ready").json() == {"status": "ready"} and env.c.get("/health").status_code == 200

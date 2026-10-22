@@ -159,3 +159,25 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
         out["followups_pending"] = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
                                                 where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (t,)).fetchone()["n"]
     return reply(ctx, out)
+
+
+def _csv_safe(v):
+    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v  # spreadsheet formula injection
+
+
+@r.get("/export/contacts.csv")
+def export_contacts(ctx: Ctx = Depends(read_ctx)):
+    """Owner download of the whole contact book (names and numbers are personal data, so owner only)."""
+    import csv
+    import io
+
+    from fastapi.responses import Response
+    from .deps import require_owner
+    require_owner(ctx)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["type", "name", "chat_number", "email", "contact_person", "ssm_no", "address", "notes"])
+    for x in list_contacts(ctx, limit=100000):
+        w.writerow([_csv_safe(v) for v in (x["role"], x["name"], x["contact"], x["email"], x["attention"], x["ssm_no"], x["address"], x["notes"])])
+    audit(ctx, "parties", ctx.tenant_id, "contact book exported")
+    return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="contacts.csv"'})

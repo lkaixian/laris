@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from './api'
+import { api, download, MOCK } from './api'
 import type { DocSummary } from './api'
 import { Async, Status, msg, rm, useFetch } from './ui'
 
@@ -75,6 +75,7 @@ export function ContactsView({ owner, initialQuery = '' }: { owner: boolean; ini
         <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-2">
           {KINDS.map(([k, t]) => <button key={k} type="button" className="btn" aria-pressed={kind === k} onClick={() => setKind(k)}>{t}</button>)}
         </div>
+        {owner && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
         <button type="button" className="btn btn-primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>Add contact</button>
       </div>
       {adding && (
@@ -85,6 +86,7 @@ export function ContactsView({ owner, initialQuery = '' }: { owner: boolean; ini
             <button type="button" className="btn" onClick={() => { setAdding(false); setErr('') }}>Cancel</button></div>
         </form>
       )}
+      {err && !adding && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <p role="status" className="sr-only">{s.data ? `${n} ${n === 1 ? 'contact' : 'contacts'} found` : ''}</p>
       <Async s={s} empty={!n} emptyText={applied || kind ? 'No contact matches. Try fewer words or another type.' : 'No contacts yet. Add the first one.'}>
         <ul className="grid gap-2 md:grid-cols-2">

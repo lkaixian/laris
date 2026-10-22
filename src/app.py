@@ -69,6 +69,17 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/ready")
+def ready():
+    """Liveness plus the database: for a deploy check or an uptime monitor."""
+    try:
+        with db.tx("staff", "") as c:
+            c.execute("select 1")
+    except Exception:
+        return _err(503, "db_down", "database not reachable")
+    return {"status": "ready"}
+
+
 class SPA(StaticFiles):
     """Built frontend; unknown non-API paths fall back to index.html so client-side routes survive a reload."""
 

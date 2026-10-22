@@ -595,3 +595,20 @@ def test_margin_report_owner_only_and_adds_up(env):
     assert Decimal(rep["revenue"]) >= rows["rev"] and Decimal(rep["margin"]) == Decimal(rep["revenue"]) - Decimal(rep["cost"])
     assert rep["outcomes"].get("draft", 0) >= 1 and rep["stale_quotes"] >= 1 and Decimal(rep["stale_margin_lost"]) < 0
     assert rep["lowest_margin"] and e.c.get("/api/reports/margin?days=0", headers=e.O).status_code == 422
+
+
+# ---------------------------------------------------------------- job board
+def test_job_board_flow(env):
+    e = env
+    d = sent_quote_on_telegram(e)
+    assert tr(e, d, "read").status_code == 200
+    assert tr(e, d, "accepted").status_code == 200
+    assert tr(e, d, "job_created").status_code == 200
+    jobs = e.c.get("/api/jobs", headers=e.S).json()
+    j = [x for x in jobs if x["quote_id"] == d][0]
+    assert j["status"] == "todo" and j["customer"] and j["summary"] and "cost" not in json.dumps(j).lower()
+    assert e.c.post(f"/api/jobs/{j['id']}", json={"status": "doing"}, headers=e.S).json()["status"] == "doing"
+    assert e.c.post(f"/api/jobs/{j['id']}", json={"status": "bogus"}, headers=e.S).status_code == 422
+    assert e.c.post(f"/api/jobs/{uuid.uuid4()}", json={"status": "done"}, headers=e.S).status_code == 404
+    assert [x["status"] for x in e.c.get("/api/jobs", headers=e.O).json() if x["id"] == j["id"]] == ["doing"]
+    assert any(x["entity"] == "jobs" for x in e.c.get("/api/audit", headers=e.O).json())

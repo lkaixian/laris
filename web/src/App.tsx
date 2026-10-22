@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, ApiError, MOCK, NEXT } from './api'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Proposal, AuditEvent } from './api'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Proposal, AuditEvent } from './api'
 
 // ---------- helpers ----------
 const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -444,6 +444,53 @@ function Report() {
   )
 }
 
+const JOB_COLS: [Job['status'], string][] = [['todo', 'To do'], ['doing', 'In progress'], ['done', 'Done']]
+
+function JobsView() {
+  const s = useFetch<Job[]>('/jobs')
+  const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
+  const move = async (j: Job, status: Job['status']) => {
+    setErr(''); setNote('')
+    try { await api('POST', `/jobs/${j.id}`, { status }); setNote(`${j.quote_no} moved to ${JOB_COLS.find(c => c[0] === status)![1]}.`); s.reload() }
+    catch (e) { setErr(msg(e)) }
+  }
+  return (
+    <>
+      <h1 tabIndex={-1} className="text-2xl font-semibold">Jobs</h1>
+      <p className="mb-4 text-muted">Created when a customer accepts a quote ("Sign and create job" on the quote).</p>
+      {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
+      <p role="status" className="mb-2 text-sm">{note}</p>
+      <Async s={s} empty={!s.data?.length} emptyText="No jobs yet. A job appears when an accepted quote is signed.">
+        <div className="grid gap-4 md:grid-cols-3">
+          {JOB_COLS.map(([st, title]) => {
+            const list = (s.data ?? []).filter(j => j.status === st)
+            return (
+              <section key={st} aria-labelledby={`jobs-${st}`}>
+                <h2 id={`jobs-${st}`} className="mb-2 text-base font-semibold">{title} ({list.length})</h2>
+                <ul className="grid gap-2">
+                  {list.map(j => (
+                    <li key={j.id} className="card">
+                      <p className="font-semibold"><a className="link" href={`#/doc/${j.quote_id}`}>{j.quote_no}</a> <span className="font-normal">for {j.customer}</span></p>
+                      <p className="mt-1 text-sm">{j.summary}</p>
+                      <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {JOB_COLS.filter(c => c[0] !== st).map(([to, label]) => (
+                          <button key={to} type="button" className="btn" onClick={() => move(j, to)}>Move {j.quote_no} to {label}</button>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
+      </Async>
+    </>
+  )
+}
+
 function Followups({ owner }: { owner: boolean }) {
   const s = useFetch<Followup[]>('/followups')
   const [err, setErr] = useState('')
@@ -611,7 +658,7 @@ export default function App() {
   useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
   const firstNav = useRef(true)
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
-  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['activity', 'Activity']]
+  const nav = [...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['jobs', 'Jobs'], ['activity', 'Activity']]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -644,9 +691,10 @@ export default function App() {
         ) : !me ? <p role="status" className="text-muted">Loading...</p> : <>
           {route === 'alerts' && <AlertsView owner={owner} />}
           {route === 'tracker' && <TrackerView owner={owner} />}
+          {route === 'jobs' && <JobsView />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['alerts', 'tracker', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['alerts', 'tracker', 'jobs', 'activity', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

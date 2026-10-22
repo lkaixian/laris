@@ -177,6 +177,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/cost-items') { need(); return [] }
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
+  if (p === '/jobs') return []  // mock quotes never reach job_created
   if (p === '/followups') return []  // mock data has no quote old enough to chase
   if (p === '/field-proposals') { need(); return proposals.filter(x => x.status === 'pending') }
   if ((m = p.match(/^\/field-proposals\/([^/]+)\/decide$/)) && method === 'POST') {

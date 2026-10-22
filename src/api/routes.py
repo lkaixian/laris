@@ -247,6 +247,33 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
         (ctx.tenant_id,)).fetchall())
 
 
+@r.get("/jobs")
+def jobs(ctx: Ctx = Depends(read_ctx)):
+    """Job board: one card per accepted quote (selling side only, so staff see it too)."""
+    return reply(ctx, ctx.conn.execute(
+        """select j.id, j.status, j.created_at, d.id as quote_id, d.doc_no as quote_no, p.name as customer,
+                  (select coalesce(sum(round(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100), 2)), 0)
+                   from document_lines l where l.document_id = d.id and not l.is_header) as total,
+                  (select string_agg(l.description || ' x ' || trim(trailing '.' from trim(trailing '0' from l.qty::text)), '; ' order by l.line_no)
+                   from document_lines l where l.document_id = d.id and not l.is_header) as summary
+           from jobs j join documents d on d.id = j.quote_id join parties p on p.id = d.party_id
+           where j.tenant_id=%s order by j.created_at desc, j.id""", (ctx.tenant_id,)).fetchall())
+
+
+class JobMove(BaseModel, extra="forbid"):
+    status: Literal["todo", "doing", "done"]
+
+
+@r.post("/jobs/{job_id}")
+def move_job(job_id: UUID, body: JobMove, ctx: Ctx = Depends(write_ctx)):
+    old = ctx.conn.execute("select status from jobs where id=%s and tenant_id=%s for update", (job_id, ctx.tenant_id)).fetchone()
+    if not old:
+        raise ApiError(404, "not_found", "job not found")
+    if old["status"] != body.status:
+        ctx.conn.execute("update jobs set status=%s where id=%s", (body.status, job_id))  # jobs_audit trigger records it
+    return reply(ctx, {"id": job_id, "status": body.status})
+
+
 @r.get("/followups")
 def followups(ctx: Ctx = Depends(read_ctx)):
     """Quotes with no answer after the template's follow-up window, each with the suggested chase message."""

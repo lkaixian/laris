@@ -44,6 +44,7 @@ export interface MarginReport {
   won: number; lost: number; stale_quotes: number; stale_margin_lost: string
   lowest_margin: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
 }
+export interface Job { id: string; status: 'todo' | 'doing' | 'done'; quote_id: string; quote_no: string; customer: string; total: string; summary: string | null }
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }
 export interface AuditEvent { id: number; at: string; actor: string; entity: string; entity_id: string; event: string }
 

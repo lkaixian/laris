@@ -173,6 +173,22 @@ class Services:
             return telegram.send_message(to, text, client=self.http)
         raise ValueError(f"cannot send on {channel}")
 
+    def upload_media(self, data: bytes, mime: str, phone_id: str | None = None) -> str:
+        return whatsapp.upload_media(data, mime, client=self.http, phone_id=phone_id)
+
+    def send_image(self, to: str, media_id: str, note: str, phone_id: str | None = None) -> str:
+        """Photo + note to a supplier. Outside the 24h window only an approved template (image header) can open the chat."""
+        try:
+            return whatsapp.send_image(to, media_id, note, client=self.http, phone_id=phone_id)
+        except httpx.HTTPStatusError as e:
+            if not whatsapp.is_outside_window(e):
+                raise
+            tpl = os.environ.get("WHATSAPP_RFQ_TEMPLATE")
+            if not tpl:
+                raise RuntimeError("outside WhatsApp's 24h window and no WHATSAPP_RFQ_TEMPLATE is set; the supplier has to write to you first") from e
+            return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"), [" ".join(note.split())[:1000]],
+                                          header_image=media_id, client=self.http, phone_id=phone_id)
+
     def download(self, channel: str, ref: str, kind: str) -> tuple[bytes, str]:
         if channel == "whatsapp":
             return whatsapp.download_media(ref, client=self.http)

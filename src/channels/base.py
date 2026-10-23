@@ -12,3 +12,4 @@ class InboundMessage:
     media_ref: str | None = None  # WA media id / Telegram file_id
     at: datetime | None = None
     to: str | None = None  # the business number it arrived on (WhatsApp phone_number_id)
+    reply_to: str | None = None  # wamid of the message this one is a reply to (WhatsApp context.id)

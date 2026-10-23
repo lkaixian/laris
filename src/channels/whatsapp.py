@@ -52,6 +52,7 @@ def parse_inbound(payload: dict) -> list[InboundMessage]:
             msg = InboundMessage(
                 "whatsapp", m["id"], m.get("from", ""),
                 at=_ts(m["timestamp"]) if "timestamp" in m else None, to=to,
+                reply_to=(m.get("context") or {}).get("id"),  # wamid of our message this one answers
             )
             if t == "text":
                 msg.text = m["text"]["body"]
@@ -94,13 +95,34 @@ def send_text(to, text, *, client=None, token=None, phone_id=None) -> str:
     return _post({"to": to, "type": "text", "text": {"body": text}}, client, token, phone_id)
 
 
-def send_template(to, name, lang="en", params=(), *, client=None, token=None, phone_id=None) -> str:
-    tpl = {"name": name, "language": {"code": lang}}
+def send_template(to, name, lang="en", params=(), *, header_image=None, client=None, token=None, phone_id=None) -> str:
+    """header_image: media id for a template whose header is an image."""
+    tpl = {"name": name, "language": {"code": lang}, "components": []}
+    if header_image:
+        tpl["components"].append({"type": "header", "parameters": [{"type": "image", "image": {"id": header_image}}]})
     if params:
-        tpl["components"] = [
+        tpl["components"].append(
             {"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}
-        ]
+        )
+    if not tpl["components"]:
+        del tpl["components"]
     return _post({"to": to, "type": "template", "template": tpl}, client, token, phone_id)
+
+
+def send_image(to, media_id, caption, *, client=None, token=None, phone_id=None) -> str:
+    return _post({"to": to, "type": "image", "image": {"id": media_id, "caption": caption}}, client, token, phone_id)
+
+
+def upload_media(data: bytes, mime: str, *, client=None, token=None, phone_id=None) -> str:
+    """Upload once, send the id to many: -> media id (valid for the same phone number only)."""
+    r = _client(client).post(
+        f"{GRAPH}/{phone_id or os.environ['WHATSAPP_PHONE_NUMBER_ID']}/media",
+        data={"messaging_product": "whatsapp", "type": mime},
+        files={"file": ("item." + mime.split("/")[-1], data, mime)},
+        headers={"Authorization": f"Bearer {token or os.environ['WHATSAPP_TOKEN']}"},
+    )
+    r.raise_for_status()
+    return r.json()["id"]
 
 
 def download_media(media_id, *, client=None, token=None) -> tuple[bytes, str]:

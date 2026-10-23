@@ -62,8 +62,9 @@ def _limited(sender) -> bool:
 
 def _handle(conn, s, m):
     """-> reply text or None. Raises ApiError (caller rolls back to the savepoint)."""
-    if m.external_id and conn.execute("select 1 from messages where channel=%s and external_id=%s",
-                                      (m.channel, m.external_id)).fetchone():
+    if m.external_id and conn.execute("""select 1 from messages where channel=%s and external_id=%s
+                                         union all select 1 from rfq_replies where external_id=%s""",
+                                      (m.channel, m.external_id, m.external_id)).fetchone():
         return None  # provider retry
     digits = "".join(ch for ch in m.sender if ch.isdigit())
     if not digits:
@@ -98,6 +99,9 @@ def _handle(conn, s, m):
                 tid = t["id"]
                 p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
     if p["role"] == "supplier":
+        if actor is None and m.channel == "whatsapp" and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
+            pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
+            return "Thanks, we have your reply."
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
             res = pipeline.ingest_supplier_document(conn, tid, data=data, mime=mime, party_id=p["id"], channel=m.channel, actor=actor,

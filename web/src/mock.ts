@@ -100,9 +100,29 @@ const down = (t: string) => { if (/ilmu down/i.test(t)) throw new ApiError(502, 
 const contacts = () => {
   const seen = new Map<string, { id: string; role: 'customer' | 'supplier'; name: string }>()
   for (const d of Object.values(docs)) seen.set(d.doc.party.id, { id: d.doc.party.id, role: d.doc.direction === 'in' ? 'supplier' : 'customer', name: d.doc.party.name })
-  return [...seen.values()].map(c => ({ ...c, contact: null, email: null, attention: null, ssm_no: null, address: null, notes: 'SAMPLE contact (mock mode).',
+  seen.set('p4', { id: 'p4', role: 'supplier', name: 'SAMPLE Supplier B Footwear (synthetic)' })
+  seen.set('p5', { id: 'p5', role: 'supplier', name: 'SAMPLE Supplier C Leather (synthetic)' })
+  return [...seen.values()].map(c => ({ ...c, contact: c.role === 'supplier' ? `+60 12-555 ${c.id.replace(/\D/g, '').padStart(4, '0')}` : null, email: null, attention: null, ssm_no: null, address: null, notes: 'SAMPLE contact (mock mode).',
     documents: Object.values(docs).filter(d => d.doc.party.id === c.id).length, last_activity: null, value: null }))
 }
+
+// Mock price requests (Ask suppliers). Staff never get the price fields.
+const dot = (c: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><rect width="160" height="120" fill="${c}"/><circle cx="80" cy="60" r="34" fill="none" stroke="#e00000" stroke-width="4"/></svg>`)}`
+const rp = (reply_id: string, supplier_id: string, supplier_name: string, text: string, p: Partial<{ unit_price: string; min_qty: string; tiers: { min_qty: string; unit_price: string }[]; status: string }> = {}) =>
+  ({ reply_id, send_id: 's' + reply_id, supplier_id, supplier_name, text, unit_price: null as string | null, min_qty: null as string | null, tiers: [] as { min_qty: string; unit_price: string }[], status: 'waiting', ...p })
+const rfqs = [
+  { id: 'rfq-1', description: 'ballet flat, cream, strap', note: 'How much for the circled one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 36e5).toISOString(), image_url: dot('#e8dcc8'),
+    replies: [
+      rp('r1', 'p1', supA.name, 'RM 18 each, min 12 pairs. 100 pairs or more RM 16.', { unit_price: '18.0000', min_qty: '12', tiers: [{ min_qty: '100', unit_price: '16.0000' }], status: 'ready' }),
+      rp('r2', 'p4', 'SAMPLE Supplier B Footwear (synthetic)', 'RM 15.50 per pair, MOQ 24.', { unit_price: '15.5000', min_qty: '24', status: 'ready' }),
+      rp('r3', 'p5', 'SAMPLE Supplier C Leather (synthetic)', ''),
+    ] },
+  { id: 'rfq-2', description: 'brass buckle 25mm', note: 'How much for the circled one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 864e5).toISOString(), image_url: dot('#d6d9e0'),
+    replies: [
+      rp('r4', 'p4', 'SAMPLE Supplier B Footwear (synthetic)', 'RM 2.20 each, no MOQ.', { unit_price: '2.2000', min_qty: '1', status: 'needs_review' }),
+      rp('r5', 'p5', 'SAMPLE Supplier C Leather (synthetic)', ''),
+    ] },
+]
 
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
@@ -231,6 +251,28 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     }
     log('SAMPLE Owner', pr.id, `Field "${pr.key}" ${pr.status}`)
     return pr
+  }
+  if (p === '/rfq' && method === 'POST') {
+    const ids: string[] = body.getAll('supplier_ids').map(String), image = body.get('image')
+    const names = new Map(contacts().map(c => [c.id, c.name]))
+    const id = `rfq-${rfqs.length + 1}`
+    rfqs.unshift({ id, description: String(body.get('description')), note: String(body.get('note') ?? ''), created_at: new Date().toISOString(),
+      image_url: image instanceof Blob ? URL.createObjectURL(image) : dot('#ccc'), replies: ids.map((s, i) => rp(`${id}-r${i}`, s, names.get(s) ?? 'Supplier', '')) })
+    log(who, id, `price request sent to ${ids.length} supplier(s)`)
+    return { rfq_id: id, sends: ids.map(s => ({ supplier_id: s, status: 'sent', error: null })) }
+  }
+  if (p === '/rfq' && method === 'GET') {
+    return rfqs.map(x => owner ? x : { ...x, replies: x.replies.map(r => ({ ...r, text: '', unit_price: null, min_qty: null, tiers: [] })) })
+  }
+  if ((m = p.match(/^\/rfq\/([^/]+)\/replies\/([^/]+)\/accept$/)) && method === 'POST') {
+    need()
+    const r = rfqs.find(x => x.id === m![1])?.replies.find(x => x.reply_id === m![2])
+    if (!r) throw new ApiError(404, 'not_found', 'Reply not found.')
+    if (!String(body.item_key ?? '').trim()) throw new ApiError(422, 'item_key_required', 'item_key is required')
+    if (r.status === 'waiting') throw new ApiError(409, 'conflict', 'This supplier has not replied yet.')
+    r.status = 'accepted'
+    log(who, r.reply_id, `price accepted for ${body.item_key}`)
+    return { ok: true }
   }
   if (p === '/audit') {
     const after = Number(new URLSearchParams(q).get('after') ?? 0)

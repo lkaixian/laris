@@ -7,6 +7,7 @@ import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
 import { HomeView } from './Home'
+import { AskView } from './Ask'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -657,7 +658,7 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
-const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
+const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', ask: 'Ask suppliers', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
 
 export default function App() {
   const [hash, setHash] = useState(location.hash)
@@ -702,7 +703,7 @@ export default function App() {
   if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
   const runSearch = () => { const t = searchText.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
-  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
+  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -748,6 +749,7 @@ export default function App() {
           {route === 'alerts' && <AlertsView owner={owner} />}
           {route === 'tracker' && <TrackerView owner={owner} />}
           {route === 'contacts' && <ContactsView owner={owner} />}
+          {route === 'ask' && <AskView owner={owner} />}
           {route === 'assistant' && <AssistantView />}
           {route === 'search' && <SearchView q={decodeURIComponent(arg ?? '')} />}
           {route === 'contact' && arg && <ContactDetail id={arg} owner={owner} />}
@@ -757,7 +759,7 @@ export default function App() {
           {route === 'account' && <AccountView name={me.name} role={me.role} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'ask', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

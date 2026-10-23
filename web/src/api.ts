@@ -155,4 +155,15 @@ export async function download(path: string, filename: string): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-export const api = <T,>(method: 'GET' | 'POST', path: string, body?: unknown) => call<T>(method, path, role, body, true)
+// Image for <img>: the API needs the identity headers, so fetch it as a blob. Mock data and data/blob URLs pass through.
+export async function imageUrl(path: string): Promise<string> {
+  if (MOCK || !path.startsWith('/api/')) return path
+  const headers: Record<string, string> = { 'X-Role': role }
+  if (userId) headers['X-User'] = userId
+  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
+  const res = await fetch(path, { headers })
+  if (!res.ok) throw new ApiError(res.status, 'error', `Image failed (${res.status})`)
+  return URL.createObjectURL(await res.blob())
+}
+
+export const api =<T,>(method: 'GET' | 'POST', path: string, body?: unknown) => call<T>(method, path, role, body, true)

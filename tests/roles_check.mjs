@@ -36,4 +36,16 @@ await refuses('cannot update audit rows',"update audit_log set event='x'");
 await refuses('cannot truncate audit',"truncate audit_log");
 await refuses('cannot drop the guard trigger',"drop trigger documents_transition_guard on documents");
 await refuses('cannot alter a table',"alter table documents add column x int");
+// FORCE row level security: a plain (non-superuser) table owner obeys the policies too
+await db.exec("reset role");
+await db.exec("create role plain_owner nosuperuser nobypassrls; alter table parties owner to plain_owner; grant usage on schema public to plain_owner; grant execute on all functions in schema public to plain_owner");
+await db.exec("set role plain_owner");
+await db.exec(`select set_config('laris.tenant','${o}',false)`);
+ok(await n("select count(*)::int c from parties where name='Other Customer'")===0,'FORCE: table owner scoped to tenant A sees no tenant B rows');
+ok(await n("select count(*)::int c from parties")>0,'FORCE: table owner sees its own tenant rows');
+await db.exec("select set_config('laris.tenant','',false)");
+ok(await n("select count(*)::int c from parties")===0,'FORCE: table owner with no tenant set sees nothing');
+await db.exec("select set_config('laris.tenant','*',false)");
+ok(await n("select count(*)::int c from parties where name='Other Customer'")===1,"FORCE: table owner with '*' sees all");
+ok((await db.query("select rolsuper or rolbypassrls b from pg_roles where rolname=current_user")).rows[0].b===false,'FORCE: the owner role bypasses nothing');
 console.log(bad?'FAILED':'ALL GREEN');process.exit(bad?1:0);

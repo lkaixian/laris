@@ -95,6 +95,7 @@ class Env:
 def env(pg_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", pg_url)
     monkeypatch.setenv("ILMU_API_KEY", "test-key")
+    monkeypatch.setenv("DEMO_MODE", "1")  # header-only demo mode; tests of the real rule unset it
     with psycopg.connect(pg_url, autocommit=True) as c:
         c.execute("drop schema public cascade; create schema public")
     db.apply_schema(seed=True)

@@ -1,7 +1,9 @@
 """Request context (one transaction per request), JSON rendering, staff scrubbing, injectable services."""
 import hmac
 import json
+import logging
 import os
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -15,10 +17,11 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .. import db, ocr
-from ..auth import token_hash
+from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
 
+log = logging.getLogger("laris")
 Q4 = Decimal("0.0001")
 
 
@@ -78,8 +81,9 @@ def _open(request: Request, write: bool):
     """Identity, strongest first:
     1. a per-user API token (`Authorization: Bearer <token>`, stored only as SHA-256): user, role and tenant come from the DB row,
        X-Role / X-User are ignored;
-    2. the shared APP_TOKEN: demo mode, the caller still names its user with X-Role / X-User;
-    3. no token: demo mode too, unless APP_TOKEN or REQUIRE_USER_TOKEN=1 is set."""
+    2. the shared APP_TOKEN: demo mode only (auth.header_mode_allowed), the caller names its user with X-Role / X-User,
+       and that user must belong to the first tenant (never cross-tenant);
+    3. no token: demo mode too, only when auth.header_mode_allowed. Otherwise 401."""
     got = request.headers.get("authorization", "")
     tok = got[7:] if got.startswith("Bearer ") else None
     shared = os.environ.get("APP_TOKEN")
@@ -87,13 +91,17 @@ def _open(request: Request, write: bool):
     with db.tx("staff", "") as conn:
         u = conn.execute("""select u.id, u.tenant_id, u.name, u.role from users u
                             left join sessions s on s.user_id = u.id and s.token_sha256 = %(h)s and s.expires_at > now()
-                            where u.active and (s.token_sha256 is not null or u.token_sha256 = %(h)s)""",
+                            where u.active and (s.token_sha256 is not null
+                                  or (u.token_sha256 = %(h)s and (u.token_expires_at is null or u.token_expires_at > now())))""",
                          {"h": token_hash(tok)}).fetchone() if tok and not shared_ok else None
         if u:
             role = u["role"]
+            conn.execute("update sessions set last_seen_at = now() where token_sha256 = %s and (last_seen_at is null or last_seen_at < now() - interval '1 minute')",
+                         (token_hash(tok),))  # at most one write a minute per session
         else:
-            if os.environ.get("REQUIRE_USER_TOKEN") == "1" or (shared and not shared_ok) or (tok and not shared_ok):  # a token that matches nothing is never ignored
+            if (shared and not shared_ok) or (tok and not shared_ok) or not header_mode_allowed(conn):  # a token that matches nothing is never ignored
                 raise ApiError(401, "bad_token", "missing or invalid bearer token")
+            home = conn.execute("select id from tenants order by name, id limit 1").fetchone()["id"] if shared_ok else None
             role = (request.headers.get("x-role") or "staff").lower()
             if role not in ("owner", "staff"):
                 raise ApiError(400, "bad_role", "X-Role must be owner or staff")
@@ -106,9 +114,11 @@ def _open(request: Request, write: bool):
                 except ValueError:
                     raise ApiError(401, "bad_user", "X-User is not a uuid")
                 u = conn.execute("select id, tenant_id, name, role from users where id=%s and active", (uid,)).fetchone()
+                if u and home and u["tenant_id"] != home:
+                    u = None
             elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
-                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active order by name, id limit 1",
-                                 (role,)).fetchone()
+                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active and (%s::uuid is null or tenant_id=%s) order by name, id limit 1",
+                                 (role, home, home)).fetchone()
             else:
                 raise ApiError(401, "no_user", "X-User header required")
             if not u:
@@ -128,6 +138,10 @@ def write_ctx(request: Request):
     yield from _open(request, True)
 
 
+GENERIC = "the change conflicts with existing data"
+GUARD_MSGS = re.compile(r"illegal transition|audit_log is append-only|no inbound document|document \S+ is |\d+ line\(s\) need review")  # db/*.sql guards: safe to show
+
+
 @contextmanager
 def guarded():
     """Map DB guard / constraint errors to 403 / 409 (the statement must be the last thing before raising)."""
@@ -136,9 +150,10 @@ def guarded():
     except psycopg.errors.RaiseException as e:
         m = e.diag.message_primary or str(e)
         denied = m.startswith("role ") or m.startswith("approval needs")
-        raise ApiError(403 if denied else 409, "forbidden" if denied else "conflict", m)
+        raise ApiError(403 if denied else 409, "forbidden" if denied else "conflict", m if denied or GUARD_MSGS.match(m) else GENERIC)
     except (psycopg.errors.IntegrityError, psycopg.errors.DataError) as e:
-        raise ApiError(409, "conflict", e.diag.message_primary or str(e))
+        log.warning("constraint violation: %s", e.diag.message_primary)
+        raise ApiError(409, "conflict", GENERIC)  # constraint / column names stay in the server log, not the response
 
 
 def audit(ctx: Ctx, entity: str, entity_id, event: str, before=None, after=None):

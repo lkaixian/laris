@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from .. import pipeline, quote_pdf
 from ..errors import ApiError
+from ..tabular import MAGIC, sniff  # noqa: F401  (rfq.py imports MAGIC from here)
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, write_ctx
 
 log = logging.getLogger("laris")
@@ -25,8 +26,6 @@ r = APIRouter(prefix="/api")
 STATUSES = Literal["received", "draft", "parsed", "reviewed", "accepted", "in_cost_book", "approved", "sent", "read",
                    "job_created", "expired", "rejected", "cancelled", "superseded"]
 MAX_UPLOAD = 10_000_000  # app.py also refuses bigger Content-Length before the body is read
-MAGIC = ((b"%PDF", "application/pdf"), (b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "image/png"),
-         (b"RIFF", "image/webp"))  # the client-sent content type is not trusted: sniff
 REVIEWABLE = ("received", "parsed")  # 'in' statuses where staff may still edit lines (and see supplier prices)
 
 SUMMARY = """
@@ -40,6 +39,16 @@ select d.id, d.direction, d.kind, d.doc_no, d.party_id, p.name as party_name, d.
    or (d.status in ('received','parsed') and coalesce(jsonb_array_length(d.extraction->'doc_flags'), 0) > 0)) as needs_review
 from documents d join parties p on p.id = d.party_id
 """
+
+
+def read_capped(up: UploadFile, cap: int, msg: str) -> bytes:
+    """Read an upload in chunks and stop with 413 the moment it passes cap (does not trust the spooled size)."""
+    buf = bytearray()
+    while chunk := up.file.read(65536):
+        buf += chunk
+        if len(buf) > cap:
+            raise ApiError(413, "too_large", msg)
+    return bytes(buf)
 
 
 def summary(ctx: Ctx, d: dict) -> dict:
@@ -423,17 +432,15 @@ def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
 def ingest(request: Request, file: UploadFile | None = File(None), text: str | None = Form(None),
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
-    """Extra (not in the contract): upload a supplier PDF/photo or paste its text."""
-    data = file.file.read(MAX_UPLOAD + 1) if file else None
-    if data is not None and len(data) > MAX_UPLOAD:
-        raise ApiError(413, "too_large", "file over 10 MB")
+    """Extra (not in the contract): upload a supplier PDF/photo/XLSX/DOCX/CSV or paste its text."""
+    data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")
     mime = None
     if data:
-        mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
+        mime = sniff(data, file.filename, file.content_type)
         if not mime:
-            raise ApiError(415, "unsupported_media", "upload a PDF, JPEG, PNG or WebP")
+            raise ApiError(415, "unsupported_media", "upload a PDF, photo (JPEG, PNG, WebP), XLSX, DOCX or CSV; old .xls/.doc are not supported")
     res = pipeline.ingest_supplier_document(
         ctx.conn, ctx.tenant_id, data=data, mime=mime, text=text,
         supplier_name=supplier, kind=kind, actor=ctx.user_id, ilmu_client=svc(request).ilmu, ocr=svc(request).ocr)

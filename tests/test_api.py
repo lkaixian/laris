@@ -776,12 +776,12 @@ def test_login_sessions_and_user_management(env):
 def test_login_is_rate_limited_and_sessions_expire(env):
     from src import auth
     e = env
-    auth._FAILS.clear()
+    auth._ACCT.clear(); auth._IPS.clear()
     e.sql("update users set username='boss2', password_hash=%s where id=%s", (auth.hash_password("right password 1"), e.owner))
     for _ in range(auth.LIMIT):
         assert e.c.post("/api/login", json={"username": "boss2", "password": "wrong"}).status_code == 401
     assert e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).status_code == 429
-    auth._FAILS.clear()
+    auth._ACCT.clear(); auth._IPS.clear()
     tok = e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).json()["token"]
     e.sql("update sessions set expires_at = now() - interval '1 minute'")
     assert e.c.get("/api/me", headers={"Authorization": "Bearer " + tok}).status_code == 401
@@ -979,3 +979,48 @@ def test_database_hides_other_tenants_even_without_a_where_clause(env):
     with db.tx("owner", e.owner, "") as c:  # no tenant set: nothing
         assert c.execute("select count(*) n from documents").fetchone()["n"] == 0
     assert "Other Customer" not in json.dumps(e.c.get("/api/contacts", headers=e.O).json())
+
+
+# ---------------------------------------------------------------- header demo mode is closed unless it is really a demo
+def test_header_mode_rule(env, monkeypatch):
+    from src import auth
+    e = env
+    H = {"X-Role": "owner"}
+    assert e.c.get("/api/me", headers=H).status_code == 200 and e.c.get("/api/auth/config").json() == {"login_required": False}  # DEMO_MODE=1, no accounts
+    # an account with a password closes it, even with DEMO_MODE=1
+    e.sql("update users set username='boss', password_hash=%s where id=%s", (auth.hash_password("correct horse 1"), e.owner))
+    assert e.c.get("/api/me", headers=H).status_code == 401 and e.c.get("/api/me", headers=e.O).status_code == 401
+    assert e.c.get("/api/auth/config").json() == {"login_required": True}
+    tok = e.c.post("/api/login", json={"username": "boss", "password": "correct horse 1"}).json()["token"]
+    assert e.c.get("/api/me", headers={"Authorization": "Bearer " + tok}).status_code == 200
+    assert e.c.get("/api/me", headers={"Authorization": "Bearer nope", **H}).status_code == 401
+
+
+def test_header_mode_needs_demo_flag_on_shared_hosts(env, monkeypatch):
+    e = env
+    monkeypatch.delenv("DEMO_MODE")
+    assert e.c.get("/api/me", headers=e.O).status_code == 200  # plain local run
+    monkeypatch.setenv("REPL_DEPLOYMENT", "1")
+    assert e.c.get("/api/me", headers=e.O).status_code == 401 and e.c.get("/api/auth/config").json() == {"login_required": True}
+    monkeypatch.setenv("DEMO_MODE", "1")
+    assert e.c.get("/api/me", headers=e.O).status_code == 200 and e.c.get("/api/auth/config").json() == {"login_required": False}
+    monkeypatch.delenv("REPL_DEPLOYMENT")
+    monkeypatch.delenv("DEMO_MODE")
+    monkeypatch.setenv("APP_TOKEN", "s3cret")  # APP_TOKEN alone no longer grants free-choice identity
+    A = {"Authorization": "Bearer s3cret"}
+    assert e.c.get("/api/me", headers={**A, **e.O}).status_code == 401
+    assert e.c.get("/api/me", headers={**A, "X-Role": "owner", "X-User": e.staff}).status_code == 401
+    assert e.c.get("/api/auth/config").json() == {"login_required": True}
+    monkeypatch.setenv("REQUIRE_USER_TOKEN", "1")
+    monkeypatch.setenv("DEMO_MODE", "1")
+    assert e.c.get("/api/me", headers=e.O).status_code == 401  # REQUIRE_USER_TOKEN wins over DEMO_MODE
+
+
+def test_app_token_demo_is_single_tenant(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("APP_TOKEN", "s3cret")  # DEMO_MODE=1 from the fixture
+    A = {"Authorization": "Bearer s3cret"}
+    t2 = e.sql("insert into tenants(name, trade_template, min_margin_pct) values ('ZZ Other Shop','made_to_order',20) returning id")[0]["id"]
+    u2 = e.sql("insert into users(tenant_id, name, role) values (%s,'Zed','owner') returning id", (t2,))[0]["id"]
+    assert e.c.get("/api/me", headers={**A, "X-Role": "owner", "X-User": e.owner}).status_code == 200
+    assert e.c.get("/api/me", headers={**A, "X-Role": "owner", "X-User": str(u2)}).status_code == 401

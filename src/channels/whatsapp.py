@@ -5,11 +5,10 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .base import InboundMessage
+from .base import MAX_MEDIA, InboundMessage, read_capped
 
 GRAPH = "https://graph.facebook.com/v21.0"
 MEDIA_HOSTS = (".facebook.com", ".fbsbx.com", ".fbcdn.net", ".whatsapp.net")  # the bearer token only goes to Meta
-MAX_MEDIA = 20_000_000
 OUTSIDE_WINDOW = "131047"  # Graph error: free-form message outside the 24h customer-service window
 
 
@@ -60,6 +59,7 @@ def parse_inbound(payload: dict) -> list[InboundMessage]:
                 msg.media_kind = t
                 msg.media_ref = m[t]["id"]
                 msg.text = m[t].get("caption")
+                msg.media_name = m[t].get("filename")
             else:
                 continue
             out.append(msg)
@@ -135,8 +135,6 @@ def download_media(media_id, *, client=None, token=None) -> tuple[bytes, str]:
     u = httpx.URL(meta["url"])
     if u.scheme != "https" or not (u.host or "").endswith(MEDIA_HOSTS):
         raise ValueError(f"media host not allowed: {u.host}")
-    r = c.get(u, headers=h)
-    r.raise_for_status()
-    if len(r.content) > MAX_MEDIA:
-        raise ValueError("media over 20 MB")
-    return r.content, meta.get("mime_type", "")
+    with c.stream("GET", u, headers=h) as r:
+        r.raise_for_status()
+        return read_capped(r, MAX_MEDIA), meta.get("mime_type", "")

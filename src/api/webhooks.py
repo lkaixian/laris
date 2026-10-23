@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from .. import db, pipeline
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
+from ..tabular import sniff
 from ..templates import load_template
 from .deps import JR
 
@@ -106,6 +107,8 @@ def _handle(conn, s, m):
             return "Thanks, we have your reply."
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            if m.media_kind == "document":  # sheets/Word/CSV arrive as documents; Telegram gives no mime
+                mime = sniff(data, m.media_name, mime) or mime
             res = pipeline.ingest_supplier_document(conn, tid, data=data, mime=mime, party_id=p["id"], channel=m.channel, actor=actor,
                                                     external_id=m.external_id, ilmu_client=s.ilmu, ocr=s.ocr)
         elif m.text and not m.media_kind:

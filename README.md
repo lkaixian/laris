@@ -59,6 +59,7 @@ The idea is margin protection. The tracker is the plumbing.
 | ILMU client: speech-to-text, JSON extraction, RunPod fallback | In repo (`src/ilmu.py`). Endpoints not verified |
 | React frontend: tracker, document view, theme toggle, mock mode | In repo (`web/`). Wired to the API (user id from `/api/me`, optional `APP_TOKEN`); mock mode kept for demos |
 | Owner approval and staff view without margins | In repo: DB guard plus staff scrubbing on every response, tested in `tests/test_api.py`. Header identity is still simulated |
+| Supplier quotes as XLSX, DOCX and CSV (as well as PDF and photos), by upload or sent as a chat document | In repo (`src/tabular.py`, `src/pipeline.py`). Read as exact text, no OCR; old .xls/.doc refused |
 | Quote PDF, BOM (xlsx) and PO (csv) exports | In repo (`src/quote_pdf.py`, `src/api/routes.py`) |
 | Follow-up job with APScheduler, suggested chase message, owner sends or skips | In repo (`src/scheduler.py`, `/api/followups`) |
 | Sign-in for several users (scrypt passwords, hashed sessions, owner manages the team), Home dashboard, contact book for customers, suppliers and contractors, one search box, look-up assistant | In repo (`src/auth.py`, `src/api/auth_routes.py`, `src/api/contacts.py`, `src/api/assistant.py`, `web/src/`). Checked by click-through in headless Edge against the live API; not tried with a real ILMU key |

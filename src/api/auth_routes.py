@@ -1,5 +1,4 @@
 """Login, logout, password change and (owner) user management."""
-import os
 from uuid import UUID
 
 import psycopg
@@ -14,17 +13,15 @@ r = APIRouter(prefix="/api")
 USERNAME = r"^[A-Za-z0-9._-]{3,40}$"
 
 
-def login_required() -> bool:
-    """Header-only demo mode stays until real accounts exist (or the operator turns it off)."""
-    if os.environ.get("REQUIRE_USER_TOKEN") == "1" or os.environ.get("APP_TOKEN"):
-        return True
-    with db.tx("staff", "") as c:
-        return bool(c.execute("select 1 from users where password_hash is not null limit 1").fetchone())
+def _bearer_hash(request: Request) -> str:
+    got = request.headers.get("authorization", "")
+    return auth.token_hash(got[7:]) if got.startswith("Bearer ") else ""
 
 
 @r.get("/auth/config")
 def config():
-    return {"login_required": login_required()}
+    with db.tx("staff", "") as c:
+        return {"login_required": not auth.header_mode_allowed(c)}
 
 
 class Login(BaseModel, extra="forbid"):
@@ -34,19 +31,20 @@ class Login(BaseModel, extra="forbid"):
 
 @r.post("/login")
 def login(body: Login, request: Request):
-    key = f"{body.username.lower()}|{request.client.host if request.client else ''}"
-    if auth.throttled(key):
-        raise ApiError(429, "too_many_attempts", "Too many failed sign-ins. Wait 15 minutes and try again.")
+    key, ip = body.username.lower(), auth.client_ip(request)
+    if auth.throttled(key, ip):
+        raise ApiError(429, "too_many_attempts", "Too many failed sign-ins. Wait a few minutes and try again.")
     with db.tx("staff", "") as c:
         u = c.execute("""select id, name, role, password_hash from users where lower(username) = lower(%s) and active""",
                       (body.username,)).fetchone()
         ok = auth.verify_password(body.password, u["password_hash"] if u else None)
         if not (u and ok):
-            auth.failed(key)
+            auth.failed(key, ip)
             raise ApiError(401, "bad_credentials", "Wrong username or password.")
         auth.cleared(key)
+        if auth.needs_rehash(u["password_hash"]):  # weaker scrypt parameters than today's: upgrade now that we hold the plaintext
+            c.execute("update users set password_hash=%s where id=%s", (auth.hash_password(body.password), u["id"]))
         tok, exp = auth.new_session(c, u["id"], request.headers.get("user-agent", ""))
-        c.execute("delete from sessions where expires_at < now()")
     return {"token": tok, "expires_at": exp.isoformat(), "user": {"id": str(u["id"]), "name": u["name"], "role": u["role"]}}
 
 
@@ -66,14 +64,40 @@ class NewPassword(BaseModel, extra="forbid"):
 
 @r.post("/me/password")
 def change_password(body: NewPassword, request: Request, ctx: Ctx = Depends(write_ctx)):
-    row = ctx.conn.execute("select password_hash from users where id=%s", (ctx.user_id,)).fetchone()
+    key = f"pw:{ctx.user_id}"
+    if auth.throttled(key):
+        raise ApiError(429, "too_many_attempts", "Too many wrong passwords. Wait a few minutes and try again.")
+    row = ctx.conn.execute("select username, password_hash from users where id=%s", (ctx.user_id,)).fetchone()
     if not auth.verify_password(body.current, row["password_hash"]):
+        auth.failed(key)
         raise ApiError(403, "bad_credentials", "Current password is wrong.")
+    auth.cleared(key)
+    if why := auth.weak_password(body.new, row["username"]):
+        raise ApiError(422, "weak_password", why)
     ctx.conn.execute("update users set password_hash=%s where id=%s", (auth.hash_password(body.new), ctx.user_id))
-    got = request.headers.get("authorization", "")
-    keep = auth.token_hash(got[7:]) if got.startswith("Bearer ") else ""
-    ctx.conn.execute("delete from sessions where user_id=%s and token_sha256 <> %s", (ctx.user_id, keep))  # other devices sign in again
+    auth.revoke_credentials(ctx.conn, ctx.user_id, _bearer_hash(request))  # API token dies, other devices sign in again
     audit(ctx, "users", ctx.user_id, "password changed")
+    return reply(ctx, {"ok": True})
+
+
+# ---- own sessions (devices)
+@r.get("/me/sessions")
+def my_sessions(request: Request, ctx: Ctx = Depends(read_ctx)):
+    return reply(ctx, ctx.conn.execute(
+        """select id, created_at, last_seen_at, user_agent, token_sha256 = %s as current from sessions
+           where user_id=%s and expires_at > now() order by created_at desc""", (_bearer_hash(request), ctx.user_id)).fetchall())
+
+
+@r.post("/me/sessions/revoke-others")
+def revoke_other_sessions(request: Request, ctx: Ctx = Depends(write_ctx)):
+    n = ctx.conn.execute("delete from sessions where user_id=%s and token_sha256 <> %s", (ctx.user_id, _bearer_hash(request))).rowcount
+    return reply(ctx, {"revoked": n})
+
+
+@r.delete("/me/sessions/{sid}")
+def revoke_session(sid: UUID, ctx: Ctx = Depends(write_ctx)):
+    if not ctx.conn.execute("delete from sessions where id=%s and user_id=%s", (sid, ctx.user_id)).rowcount:
+        raise ApiError(404, "not_found", "session not found")
     return reply(ctx, {"ok": True})
 
 
@@ -97,6 +121,8 @@ class NewUser(BaseModel, extra="forbid"):
 @r.post("/users")
 def create_user(body: NewUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
+    if why := auth.weak_password(body.password, body.username):
+        raise ApiError(422, "weak_password", why)
     try:
         u = ctx.conn.execute(
             "insert into users(tenant_id, name, username, role, password_hash) values (%s,%s,%s,%s,%s) returning id, name, username, role, active",
@@ -118,7 +144,7 @@ class EditUser(BaseModel, extra="forbid"):
 def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
     c = ctx.conn
-    u = c.execute("select id, role, active from users where id=%s and tenant_id=%s for update", (uid, ctx.tenant_id)).fetchone()
+    u = c.execute("select id, username, role, active from users where id=%s and tenant_id=%s for update", (uid, ctx.tenant_id)).fetchone()
     if not u:
         raise ApiError(404, "not_found", "user not found")
     sets = body.model_dump(exclude_unset=True)
@@ -129,9 +155,11 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
                                       (ctx.tenant_id, uid)).fetchone():
         raise ApiError(409, "last_owner", "There must be at least one active owner.")
     if "password" in sets:
+        if why := auth.weak_password(sets["password"], u["username"]):
+            raise ApiError(422, "weak_password", why)
         sets["password_hash"] = auth.hash_password(sets.pop("password"))
     c.execute("update users set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(id)s", {**sets, "id": uid})
-    if "password_hash" in sets or sets.get("active") is False or "role" in sets:
-        c.execute("delete from sessions where user_id=%s", (uid,))  # force a fresh sign-in
+    if sets.keys() & {"password_hash", "active", "role"}:
+        auth.revoke_credentials(c, uid)  # API token and every session: force a fresh sign-in
     audit(ctx, "users", uid, "user changed: " + ",".join(sorted(k for k in sets if k != "password_hash")) + (", password" if "password_hash" in sets else ""))
     return reply(ctx, c.execute("select id, name, username, role, active from users where id=%s", (uid,)).fetchone())

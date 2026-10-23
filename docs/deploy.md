@@ -23,11 +23,28 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 - APScheduler starts only when `SCHEDULER=1` (set in `.replit`). Keep one worker (`run.sh` does).
 - `psycopg`, `APScheduler` and `python-multipart` are in `requirements.txt`. `pytest` and `pip-audit` live in `requirements-dev.txt`.
 - `.gitignore` ignores only the root `/package*.json`, so `web/package.json` and `web/package-lock.json` are committed.
-- Set `APP_TOKEN` on any public URL. Without it `/api` trusts the `X-Role` and `X-User` headers, which is only acceptable for synthetic demo data.
+- On any public URL, create a password account (below) and do not set `DEMO_MODE`. Header-only demo mode (anyone can send `X-Role: owner`) is acceptable only for synthetic demo data, and is off by default on a Replit deployment and whenever `APP_TOKEN` is set.
 
 ## First sign-in accounts
 
-Until an account has a password the app stays in header-only demo mode. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). From then on the login screen is shown, the owner adds everyone else on the Team page, and `REQUIRE_USER_TOKEN=1` removes the demo mode for good. Sessions last `SESSION_HOURS` (default 12).
+Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no sign-in) is allowed only while no account has a password, `REQUIRE_USER_TOKEN` is not `1`, and either `DEMO_MODE=1` is set or this is a plain local run (no `APP_TOKEN`, not a Replit deployment). Otherwise every `/api` call without a valid session or token gets 401. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). The moment one account has a password, demo mode is off for good, even if `DEMO_MODE=1`, and the login screen is shown; the owner adds everyone else on the Team page. `REQUIRE_USER_TOKEN=1` also forces it off before any account exists. `APP_TOKEN` only works in demo mode, and then only for users of the first tenant. Sessions last `SESSION_HOURS` (default 12).
+
+## Credentials: tokens, lockout, sessions
+
+- **API tokens expire.** `python scripts/create_token.py issue <user> [--days N]` prints the expiry (default 90 days); an expired token gets the same 401 as an unknown one. Tokens that existed before this change were given 90 days from the first start after the upgrade. `revoke` removes the token and every session of that user.
+- A password change, and an owner changing a user's role, active flag or password, also removes that user's API token and sessions (a self-service password change keeps only the current session). `create_token.py account` refuses a deactivated user unless you pass `--reactivate`.
+- **Sign-in lockout (in memory, one process):** 5 failed sign-ins for a username lock it for 1 minute, then 2, 4, 8 and at most 15 minutes for each further 5 failures; a success, or 15 minutes with no failures, resets it. A lapsed lock needs 5 new failures to lock again. Separately, one client address may make 30 failed sign-ins per 15 minutes across all usernames, then gets 429. The current-password check in `POST /api/me/password` is throttled per user the same way. A restart clears the counters. Set `TRUST_PROXY=1` on Replit so the address is the real client, not the proxy.
+- Passwords are scrypt N=2^16 (64 MiB per sign-in; size the instance accordingly). Older hashes keep working and are upgraded on the next successful sign-in. Very common passwords and a password equal to the username are refused.
+- Each user keeps at most 10 sessions (the oldest is dropped at sign-in); expired sessions are purged at sign-in. `db/auth.sql` (new columns) is applied on every start.
+
+## Transport hardening
+
+Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy` (camera for this origin only; the Ask page uses it) and a `Content-Security-Policy` (same-origin only, no CDNs, no frames). The CSP allows the one inline theme script in `web/dist/index.html` by SHA-256 hash, computed at startup from the built file; if you add another inline script, rebuild and restart. `Strict-Transport-Security` (1 year) is added only on https requests: the request scheme, or `X-Forwarded-Proto` when `TRUST_PROXY=1`. `/api/*` responses are `Cache-Control: no-store`.
+
+- `/docs`, `/redoc` and `/openapi.json` are off. Set `ENABLE_DOCS=1` for a developer machine only.
+- Upload caps: 10 MB for `/api/documents/ingest`, 8 MB for the Ask photo, 1 MB for webhooks, 20 MB for downloaded WhatsApp/Telegram media. POST/PUT/PATCH under `/api` and `/webhooks` must send `Content-Length`; chunked bodies get 411, oversized ones 413, and uploads are also cut off while being read. A reverse proxy in front must not re-chunk request bodies.
+- Images over 25 megapixels are refused (422) before OCR.
+- `CORS_ORIGINS` entries are trimmed; the app serves the UI itself, so leave it unset in production.
 
 ## Health check and backups
 
@@ -35,7 +52,7 @@ Until an account has a password the app stays in header-only demo mode. To switc
 
 ## Least-privilege database role (recommended before real customers)
 
-`db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production. `db/rls.sql` (applied on start) then limits that role to its own tenant's rows: a request sets `laris.tenant`, system work (login lookup, webhooks, scheduler) sets `*`. It does nothing for the schema owner, so use `DATABASE_URL_OWNER` plus a `laris_app` `DATABASE_URL` in production; with one owner URL RLS is bypassed.
+`db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production. `db/rls.sql` (applied on start) then limits that role to its own tenant's rows: a request sets `laris.tenant`, system work (login lookup, webhooks, scheduler) sets `*`. Tables are also set to `FORCE ROW LEVEL SECURITY`, so even the table owner is held to the tenant rules, as long as that database user is a plain user. A superuser (or a role with `BYPASSRLS`) skips row level security no matter what. **Replit's database user may be a superuser (UNVERIFIED):** if so, tenant isolation is OFF with a single `DATABASE_URL`. At startup the app checks this and logs `tenant isolation OFF: connected as a role that bypasses row level security`; it also warns when the connected user owns the audit log (an owner can switch off the audit triggers). Set `REQUIRE_RLS=1` to make the app refuse to start in that case. The fix is a `laris_app` role (`DATABASE_URL`) with the owner URL kept in `DATABASE_URL_OWNER`, or a separate Postgres (Neon, Supabase) where you create that role. Checked in CI by `tests/roles_check.mjs` and `tests/test_rls_force.py`.
 
 ## 1. Push the repo to GitHub
 
@@ -72,6 +89,8 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth | yes (sponsor proof) |
+| `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit |
+| `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
 
 Not secrets, already in `.replit` `[env]`: `SCHEDULER=1`.
@@ -95,7 +114,7 @@ Note: `run.sh` applies the schema only when the `documents` table is missing. If
 
 1. Click Deploy. Choose **Reserved VM**. Do not choose Autoscale. Autoscale sleeps when idle, and that would break Telegram and WhatsApp webhooks and APScheduler.
 2. **UNVERIFIED:** the deployment type label and the `deploymentTarget = "vm"` value in `.replit`. If the UI shows a different target name, set it to Reserved VM in the UI and keep the build and run commands from `.replit`.
-3. Build command (from `.replit`): `pip install -q -r requirements.txt && cd web && npm ci && npm run build`.
+3. Build command (from `.replit`): `PIP_USER=0 python -m pip install -q -r requirements.txt && cd web && npm ci && npm run build`.
 4. Run command (from `.replit`): `bash run.sh`.
 5. Wait for "Deployment is live". Then check `/health` on the deployment URL.
 6. Reserved VM bills while it is on. Check the price in the Replit console. The ADR figures are from a Feb 2025 table and may be stale (see `knowledge/06-tech-stack/adr-replit-hosting.md`).

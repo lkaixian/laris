@@ -13,9 +13,10 @@ from pydantic import BaseModel, Field
 
 from .. import pipeline
 from ..channels import telegram
+from ..channels.telegram import NOT_STARTED
 from ..errors import ApiError
 from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, write_ctx
-from .routes import MAGIC, Transition, transition
+from .routes import MAGIC, Transition, read_capped, transition
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
@@ -29,16 +30,16 @@ def _why(e: Exception, ch: str = "WhatsApp") -> str:
     """Short, safe reason shown to staff (no URLs, no tokens)."""
     if isinstance(e, httpx.HTTPStatusError):
         return f"{ch} refused it (HTTP {e.response.status_code})"
-    return str(e)[:200] if isinstance(e, RuntimeError) else f"could not reach {ch}"
+    if isinstance(e, RuntimeError) and (str(e) == NOT_STARTED or str(e).startswith(("outside WhatsApp's 24h window", "telegram "))):
+        return str(e)[:200]  # the app's own fixed messages; any other RuntimeError may carry internals
+    return f"could not reach {ch}"
 
 
 @r.post("/rfq")
 def ask(request: Request, image: UploadFile = File(...), description: str = Form(..., max_length=200),
         note: str = Form(DEFAULT_NOTE, max_length=300), circle: str | None = Form(None),
         supplier_ids: list[UUID] = Form(...), ctx: Ctx = Depends(write_ctx)):
-    data = image.file.read(MAX_IMAGE + 1)
-    if len(data) > MAX_IMAGE:
-        raise ApiError(413, "too_large", "photo over 8 MB")
+    data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
     mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
     if mime not in IMAGES:
         raise ApiError(415, "unsupported_media", "send a JPEG or PNG photo")

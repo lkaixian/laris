@@ -1,15 +1,15 @@
 # Replit config. Dev Run and Reserved VM deployment both use run.sh (single uvicorn worker).
 # Unverified on Replit: deploymentTarget value, [nix] channel, port mapping. Check in the Deployments pane.
 run = "bash run.sh"
-modules = ["python-3.12", "nodejs-20", "web", "postgresql-16"]
+modules = ["python-base-3.13"]
 
 [nix]
-channel = "stable-25_05"
+channel = "stable-24_05"
 packages = ["freetype", "glibcLocales", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "libyaml", "openjpeg", "postgresql", "tcl", "tesseract", "tk", "zlib"]
 
 [deployment]
 deploymentTarget = "vm"
-build = ["bash", "-c", "python -m pip install --no-user --prefix=\"$PWD/.pythonlibs\" -q -r requirements.txt && cd web && npm ci && npm run build"]
+build = ["bash", "-c", 'PIP_USER=0 python -m pip install --prefix="$PWD/.pythonlibs" -q -r requirements.txt && cd web && npm ci && npm run build']
 run = ["bash", "run.sh"]
 
 [[ports]]
@@ -20,6 +20,8 @@ externalPort = 80
 # SEED=1 is NOT set here: set it in Secrets for the one demo bootstrap, then remove it.
 [env]
 SCHEDULER = "1"
+
+PIP_USER = "0"
 
 [workflows]
 runButton = "Project"
@@ -45,9 +47,8 @@ task = "shell.exec"
 args = "bash run.sh"
 waitForPort = 5000
 
-
 [userenv]
 
 [userenv.shared]
 PIP_PREFIX = ".pythonlibs"
-PIP_USER = "false"
+PIP_USER = "0"

@@ -5,7 +5,14 @@ cd "$(dirname "$0")"
 
 : "${DATABASE_URL:?DATABASE_URL not set: add Replit PostgreSQL (Database tool) first}"
 
-pip install -q -r requirements.txt
+# Workflows do not inherit the shell's pip config. Install only into the
+# workspace user base, never the immutable Nix interpreter.
+export PYTHONUSERBASE="${PYTHONUSERBASE:-$PWD/.pythonlibs}"
+python -m pip install --user --break-system-packages -q -r requirements.txt
+
+# FastAPI serves the built React app from web/dist.
+npm ci --prefix web --no-audit --no-fund
+npm run build --prefix web
 
 # Bootstrap schema once. db/*.sql are not idempotent (CREATE TYPE, CREATE TABLE), so only run on an empty DB.
 # SEED=1 adds the synthetic demo seed on that first bootstrap. Remove SEED after the demo.
@@ -19,4 +26,4 @@ if [ "$(psql "$DATABASE_URL" -tAc "select to_regclass('public.documents') is not
 fi
 
 # --workers 1 is required: APScheduler (SCHEDULER=1) would start once per worker.
-exec uvicorn src.app:app --host 0.0.0.0 --port "${PORT:-5000}" --workers 1
+exec python -m uvicorn src.app:app --host 0.0.0.0 --port "${PORT:-5000}" --workers 1

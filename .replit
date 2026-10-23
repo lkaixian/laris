@@ -1,14 +1,15 @@
 # Replit config. Dev Run and Reserved VM deployment both use run.sh (single uvicorn worker).
 # Unverified on Replit: deploymentTarget value, [nix] channel, port mapping. Check in the Deployments pane.
 run = "bash run.sh"
-modules = ["python-3.12", "nodejs-20", "web"]
+modules = ["python-3.12", "nodejs-20", "web", "postgresql-16"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["freetype", "glibcLocales", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "libyaml", "openjpeg", "postgresql", "tcl", "tesseract", "tk", "zlib"]
 
 [deployment]
 deploymentTarget = "vm"
-build = ["bash", "-c", "pip install -q -r requirements.txt && cd web && npm ci && npm run build"]
+build = ["bash", "-c", "python -m pip install --user --break-system-packages -q -r requirements.txt && cd web && npm ci && npm run build"]
 run = ["bash", "run.sh"]
 
 [[ports]]
@@ -19,3 +20,27 @@ externalPort = 80
 # SEED=1 is NOT set here: set it in Secrets for the one demo bootstrap, then remove it.
 [env]
 SCHEDULER = "1"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash run.sh"
+waitForPort = 5000

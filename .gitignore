@@ -12,6 +12,9 @@ venv/
 .vscode/
 .idea/
 node_modules/
+.pythonlibs/
+web/dist/
+.pytest_cache/
 LARIS Logo.zip
 LARIS Logo/
 .shot-*.png

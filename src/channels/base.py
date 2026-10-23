@@ -10,6 +10,7 @@ class InboundMessage:
     text: str | None = None
     media_kind: str | None = None  # audio | image | document
     media_ref: str | None = None  # WA media id / Telegram file_id
+    media_name: str | None = None  # a document's file name, when the channel gives one
     at: datetime | None = None
     to: str | None = None  # the business number it arrived on (WhatsApp phone_number_id)
     reply_to: str | None = None  # provider id of the message this replies to: WhatsApp wamid, or Telegram "chat:message_id"

@@ -60,6 +60,7 @@ def parse_inbound(payload: dict) -> list[InboundMessage]:
                 msg.media_kind = t
                 msg.media_ref = m[t]["id"]
                 msg.text = m[t].get("caption")
+                msg.media_name = m[t].get("filename")
             else:
                 continue
             out.append(msg)

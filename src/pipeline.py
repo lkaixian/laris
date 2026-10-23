@@ -10,7 +10,7 @@ from statistics import mean
 
 from psycopg.types.json import Jsonb
 
-from . import ilmu, ocr as ocr_mod, pricing, validate
+from . import ilmu, ocr as ocr_mod, pricing, tabular, validate
 from .errors import ApiError
 from .templates import load_template
 
@@ -19,6 +19,7 @@ BIG = Decimal(10) ** 10
 
 SUPPLIER_SCHEMA = {
     "type": "object",
+    "description": "The text may be tab-separated spreadsheet rows: the header row maps columns to qty/uom/unit_price/min_qty/sku.",
     "properties": {
         "supplier_name": {"type": ["string", "null"]}, "doc_no": {"type": ["string", "null"]},
         "issued_on": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
@@ -207,11 +208,16 @@ def _source_text(data, mime, text, ocr):
             if not items:
                 raise ApiError(422, "no_text", "no text found in the image")
             return _rows(items), mean(i["conf"] for i in items)
+        if mime in (tabular.XLSX, tabular.DOCX, "text/csv", "application/csv"):  # exact cells: no OCR, no confidence
+            t = tabular.to_text(data, mime)
+            if not t.strip():
+                raise ApiError(422, "no_text", "no rows found in the file")
+            return t, None
     except ApiError:
         raise
     except Exception as e:  # OcrError, corrupt file, missing engine
         raise ApiError(422, "ocr_failed", f"could not read the document ({e}); key the lines in manually") from e
-    raise ApiError(415, "unsupported_media", f"cannot read {mime or 'unknown type'}; send text, PDF or an image")
+    raise ApiError(415, "unsupported_media", f"cannot read {mime or 'unknown type'}; send text, PDF, an image, XLSX, DOCX or CSV")
 
 
 JUMP_PCT = Decimal(20)

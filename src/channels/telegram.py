@@ -43,6 +43,7 @@ def parse_update(update: dict) -> InboundMessage | None:
         msg.media_kind, msg.media_ref = "image", m["photo"][-1]["file_id"]  # largest last
     elif "document" in m:
         msg.media_kind, msg.media_ref = "document", m["document"]["file_id"]
+        msg.media_name = m["document"].get("file_name")
     return msg
 
 

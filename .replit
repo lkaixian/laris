@@ -18,3 +18,4 @@ externalPort = 80
 # SEED=1 is NOT set here: set it in Secrets for the one demo bootstrap, then remove it.
 [env]
 SCHEDULER = "1"
+PIP_USER = "0"  # Replit exports PIP_USER=1 but its Python is a virtualenv; its own auto-installer fails on --user otherwise

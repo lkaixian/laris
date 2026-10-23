@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import os
 import re
 from contextlib import asynccontextmanager
@@ -23,6 +24,9 @@ async def lifespan(app):
         db.apply_schema()  # idempotent; SEED=1 loads the synthetic made-to-order demo
         with db.tx() as c:
             db.check_rls(c)
+        with db.tx("owner", "bootstrap") as c:
+            if (note := db.bootstrap_owner(c)) != "off":
+                logging.getLogger("laris").warning("bootstrap owner: %s", note)  # never logs the password
     sch = scheduler.start() if os.environ.get("SCHEDULER") == "1" else None
     yield
     if sch:

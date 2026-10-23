@@ -75,3 +75,22 @@ def check_rls(conn) -> None:
         log.warning(msg)
     if owns:
         log.warning("connected role owns audit_log, so it can disable the audit and guard triggers; use db/roles.sql laris_app")
+
+
+def bootstrap_owner(conn) -> str:
+    """First sign-in without a shell: BOOTSTRAP_OWNER_USERNAME + BOOTSTRAP_OWNER_PASSWORD (Replit Secrets) give the first
+    owner a password, once, and only while nobody has one yet. Remove both secrets afterwards. Returns what happened."""
+    from . import auth  # local: auth imports db
+    user, pw = os.environ.get("BOOTSTRAP_OWNER_USERNAME", "").strip(), os.environ.get("BOOTSTRAP_OWNER_PASSWORD", "")
+    if not user or not pw:
+        return "off"
+    if conn.execute("select 1 from users where password_hash is not null limit 1").fetchone():
+        return "skipped: an account already has a password (remove the BOOTSTRAP_OWNER_* secrets)"
+    if len(pw) < auth.MIN_PASSWORD or (why := auth.weak_password(pw, user)):
+        return "refused: the bootstrap password is too short or too common"
+    o = conn.execute("select id from users where role='owner' and active order by tenant_id, name, id limit 1").fetchone()
+    if not o:
+        return "refused: no active owner exists"
+    conn.execute("update users set username=%s, password_hash=%s where id=%s", (user, auth.hash_password(pw), o["id"]))
+    auth.revoke_credentials(conn, o["id"])
+    return f"owner can now sign in as {user} (remove the BOOTSTRAP_OWNER_* secrets)"

@@ -27,6 +27,8 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 
 ## First sign-in accounts
 
+**Deployed on Replit with its own database (no Shell access to it):** add two Secrets, `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD` (10+ characters, not a common password), then publish. At startup the first active owner gets that login, but only while nobody has a password yet; the log says `bootstrap owner: ...` and never prints the password. Then **delete both Secrets**. This also switches header-only demo mode off, because an account now has a password.
+
 Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no sign-in) is allowed only while no account has a password, `REQUIRE_USER_TOKEN` is not `1`, and either `DEMO_MODE=1` is set or this is a plain local run (no `APP_TOKEN`, not a Replit deployment). Otherwise every `/api` call without a valid session or token gets 401. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). The moment one account has a password, demo mode is off for good, even if `DEMO_MODE=1`, and the login screen is shown; the owner adds everyone else on the Team page. `REQUIRE_USER_TOKEN=1` also forces it off before any account exists. `APP_TOKEN` only works in demo mode, and then only for users of the first tenant. Sessions last `SESSION_HOURS` (default 12).
 
 ## Credentials: tokens, lockout, sessions

@@ -6,6 +6,7 @@ import httpx
 import psycopg
 
 from src import db
+from src.api import deps
 from src.api.deps import Services
 from src.channels import whatsapp
 from support.fixtures import env, pg_url  # noqa: F401
@@ -255,6 +256,7 @@ def test_price_extraction_ready_vs_needs_review(env, monkeypatch):
         ({"unit_price": 4, "status": "ready", "tiers": "none"}, "ready", "4"),  # the model cannot set status, and junk tiers are ignored
     ]
     for n, (payload, status, price) in enumerate(cases):
+        deps.HITS.clear()  # 11 asks in one test: more than the per-user allowance
         ask(e, [sup["A"]])
         e.ai.payload = payload
         assert reply_in(e, f"price {n}", mid=f"wamid.c{n}").status_code == 200

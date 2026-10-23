@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import re
+import time
+from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -154,6 +156,20 @@ def guarded():
     except (psycopg.errors.IntegrityError, psycopg.errors.DataError) as e:
         log.warning("constraint violation: %s", e.diag.message_primary)
         raise ApiError(409, "conflict", GENERIC)  # constraint / column names stay in the server log, not the response
+
+
+# ponytail: in-memory per process (single worker); a restart clears it. Tests clear HITS.
+HITS = defaultdict(deque)
+
+
+def throttle(key: str, limit: int, window: int, msg: str, hits=HITS):
+    """Sliding window: at most `limit` calls per `key` in `window` seconds, else 429 (the existing error shape)."""
+    now, q = time.monotonic(), hits[key]
+    while q and now - q[0] > window:
+        q.popleft()
+    if len(q) >= limit:
+        raise ApiError(429, "slow_down", msg)
+    q.append(now)
 
 
 def audit(ctx: Ctx, entity: str, entity_id, event: str, before=None, after=None):

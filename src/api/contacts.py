@@ -103,12 +103,17 @@ def edit_contact(pid: UUID, body: ContactEdit, ctx: Ctx = Depends(write_ctx)):
         raise ApiError(422, "empty", "nothing to change")
     if "name" in sets and sets["name"] is None:
         raise ApiError(422, "bad_name", "a contact needs a name")
-    with guarded():
-        row = ctx.conn.execute("update parties set " + ", ".join(f"{k}=%({k})s" for k in sets)
-                               + " where id=%(id)s and tenant_id=%(t)s returning id", {**sets, "id": pid, "t": ctx.tenant_id}).fetchone()
-    if not row:
+    old = ctx.conn.execute("select role, name, contact from parties where id=%s and tenant_id=%s for update", (pid, ctx.tenant_id)).fetchone()
+    if not old:
         raise ApiError(404, "not_found", "contact not found")
-    audit(ctx, "parties", pid, "contact changed: " + ",".join(sorted(sets)))
+    if old["role"] == "supplier" and not ctx.owner and sets.keys() & {"name", "contact"}:  # where a supplier's chat is routed: owner only
+        raise ApiError(403, "owner_only", "only the owner may change a supplier's name or number")
+    with guarded():
+        ctx.conn.execute("update parties set " + ", ".join(f"{k}=%({k})s" for k in sets)
+                         + " where id=%(id)s and tenant_id=%(t)s", {**sets, "id": pid, "t": ctx.tenant_id})
+    moved = "contact" in sets and sets["contact"] != old["contact"]
+    audit(ctx, "parties", pid, "contact changed: " + ",".join(sorted(sets)), {"contact": old["contact"]} if moved else None,
+          {"contact": sets["contact"]} if moved else None)
     return reply(ctx, {"id": pid})
 
 

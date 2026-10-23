@@ -15,7 +15,7 @@ from .. import pipeline
 from ..channels import telegram
 from ..channels.telegram import NOT_STARTED
 from ..errors import ApiError
-from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, write_ctx
+from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, throttle, write_ctx
 from .routes import MAGIC, Transition, read_capped, transition
 
 log = logging.getLogger("laris")
@@ -39,6 +39,7 @@ def _why(e: Exception, ch: str = "WhatsApp") -> str:
 def ask(request: Request, image: UploadFile = File(...), description: str = Form(..., max_length=200),
         note: str = Form(DEFAULT_NOTE, max_length=300), circle: str | None = Form(None),
         supplier_ids: list[UUID] = Form(...), ctx: Ctx = Depends(write_ctx)):
+    throttle(f"rfq:{ctx.user_id}", 10, 600, "Too many supplier requests in 10 minutes. Wait a while.")  # each one messages suppliers
     data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
     mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
     if mime not in IMAGES:

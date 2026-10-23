@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from .. import pipeline, quote_pdf
 from ..errors import ApiError
 from ..tabular import MAGIC, sniff  # noqa: F401  (rfq.py imports MAGIC from here)
-from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, write_ctx
+from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, throttle, write_ctx
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
@@ -207,7 +207,8 @@ def edit_line(doc_id: UUID, line_id: UUID, body: LineEdit, ctx: Ctx = Depends(wr
         new = ctx.conn.execute(
             "update document_lines set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(id)s returning *",
             {**sets, "id": line_id}).fetchone()
-    audit(ctx, "document_lines", line_id, "review edit: " + ",".join(sorted(sets)),
+    price = f" (price {old['unit_price']} -> {new['unit_price']})" if "unit_price" in sets else ""  # supplier price: the feed shows it to the owner only
+    audit(ctx, "document_lines", line_id, "review edit: " + ",".join(sorted(sets)) + price,
           {k: old[k] for k in sets}, {k: new[k] for k in sets})
     return reply(ctx, line_json(ctx, new, d, hidden_attr_keys(ctx)))
 
@@ -408,10 +409,11 @@ def decide_proposal(pid: UUID, body: Decision, ctx: Ctx = Depends(write_ctx)):
 @r.get("/audit")
 def audit_feed(after: int = Query(0, ge=0), ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, ctx.conn.execute(
-        """select a.id, a.at, coalesce(u.name, a.actor) as actor, a.entity, a.entity_id, a.event
+        """select a.id, a.at, coalesce(u.name, a.actor) as actor, a.entity, a.entity_id,
+                  case when %(o)s or a.entity <> 'document_lines' then a.event else split_part(a.event, ' (price', 1) end as event
            from audit_log a left join users u on u.id::text = a.actor
-           where a.tenant_id=%s and a.id > %s and (%s or a.entity <> 'cost_items') order by a.id limit 500""",
-        (ctx.tenant_id, after, ctx.owner)).fetchall())
+           where a.tenant_id=%(t)s and a.id > %(after)s and (%(o)s or a.entity <> 'cost_items') order by a.id limit 500""",
+        {"t": ctx.tenant_id, "after": after, "o": ctx.owner}).fetchall())
 
 
 class Enquiry(BaseModel, extra="forbid"):
@@ -422,6 +424,7 @@ class Enquiry(BaseModel, extra="forbid"):
 
 @r.post("/enquiries/simulate")
 def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
+    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # each one costs a model call
     cust = pipeline.party(ctx.conn, ctx.tenant_id, "customer", body.customer or "Walk-in customer (simulated)")
     res = pipeline.handle_enquiry(ctx.conn, ctx.tenant_id, cust, body.channel, body.text, actor=ctx.user_id,
                                   ilmu_client=svc(request).ilmu)
@@ -433,6 +436,7 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
     """Extra (not in the contract): upload a supplier PDF/photo/XLSX/DOCX/CSV or paste its text."""
+    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # shared with simulate: both cost a model call
     data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")

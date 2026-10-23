@@ -144,6 +144,9 @@ class EditUser(BaseModel, extra="forbid"):
 def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
     c = ctx.conn
+    # Lock every active owner (in id order, so two edits cannot deadlock) before reading anything: two simultaneous demotions
+    # then queue, and the second one sees the first one's result when it counts owners.
+    owners = {o["id"] for o in c.execute("select id from users where tenant_id=%s and role='owner' and active order by id for update", (ctx.tenant_id,))}
     u = c.execute("select id, username, role, active from users where id=%s and tenant_id=%s for update", (uid, ctx.tenant_id)).fetchone()
     if not u:
         raise ApiError(404, "not_found", "user not found")
@@ -151,8 +154,7 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     loses_owner = u["role"] == "owner" and u["active"] and (sets.get("role") == "staff" or sets.get("active") is False)
-    if loses_owner and not c.execute("select 1 from users where tenant_id=%s and role='owner' and active and id<>%s limit 1",
-                                      (ctx.tenant_id, uid)).fetchone():
+    if loses_owner and not owners - {uid}:
         raise ApiError(409, "last_owner", "There must be at least one active owner.")
     if "password" in sets:
         if why := auth.weak_password(sets["password"], u["username"]):

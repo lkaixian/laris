@@ -2,7 +2,6 @@
 every answer is composed here from the database for the signed-in role. It cannot change anything, set a price or send a
 message: requests to do so are refused with a link to the screen where a person does it."""
 import logging
-import time
 from collections import defaultdict, deque
 
 from fastapi import APIRouter, Depends, Request
@@ -11,7 +10,7 @@ from pydantic import BaseModel, Field
 from .. import ilmu, pipeline
 from ..errors import ApiError
 from .contacts import list_contacts, like
-from .deps import Ctx, read_ctx, reply, svc, write_ctx
+from .deps import Ctx, read_ctx, reply, svc, throttle, write_ctx
 from .routes import SUMMARY, summary
 
 log = logging.getLogger("laris")
@@ -154,12 +153,7 @@ class Ask(BaseModel, extra="forbid"):
 
 @r.post("/assistant")
 def assistant(body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
-    now, hits = time.monotonic(), _HITS[str(ctx.user_id)]
-    while hits and now - hits[0] > WINDOW:
-        hits.popleft()
-    if len(hits) >= LIMIT:
-        raise ApiError(429, "slow_down", "Too many questions in a minute. Wait a moment.")
-    hits.append(now)
+    throttle(str(ctx.user_id), LIMIT, WINDOW, "Too many questions in a minute. Wait a moment.", _HITS)
     source = "model"
     try:
         out = ilmu.extract_json(pipeline.redact(body.message), SCHEMA, client=svc(request).ilmu)

@@ -51,8 +51,8 @@ app.include_router(assistant.r)
 app.include_router(webhooks.r)
 
 
-def _err(status, code, msg):
-    return JR({"error": {"code": code, "message": msg}}, status_code=status)
+def _err(status, code, msg, **extra):
+    return JR({"error": {"code": code, "message": msg, **extra}}, status_code=status)
 
 
 @app.middleware("http")
@@ -106,7 +106,7 @@ async def _secure_headers(request, call_next):
 
 @app.exception_handler(ApiError)
 async def _api_error(_, e: ApiError):
-    return _err(e.status, e.code, e.message)
+    return _err(e.status, e.code, e.message, **e.extra)
 
 
 @app.exception_handler(StarletteHTTPException)

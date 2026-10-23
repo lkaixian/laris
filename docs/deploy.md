@@ -43,7 +43,7 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 | `SIGNUP_DEV_ECHO` = `1` | **Local demos only, never on a real deployment.** While email is off, signup/resend/forgot also return the code as `dev_code`. Ignored when `MAILTRAP_API_TOKEN` is set |
 | `SECRET_KEY` | optional key for the code HMAC (see above) |
 
-Notes: an email address belongs to one account across all tenants. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
+Notes: one email may have an account in several businesses (`db/multi.sql` replaces the old global unique index on the email with one per tenant; applied on every start, safe to repeat). Sign-in with such an email asks which business (409 `choose_business`) when the password fits several; a password reset by emailed code changes the password of ALL accounts with that email. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
 
 ## Software licence (optional; off until a public key is set)
 

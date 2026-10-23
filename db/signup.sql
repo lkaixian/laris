@@ -1,9 +1,8 @@
 -- Self-service registration and password reset by emailed code. Applied by the owner on every start (idempotent), after rbac.sql.
--- An email belongs to ONE account across all tenants (login by email must be unambiguous), compared case-insensitively.
+-- An email is unique per tenant, compared case-insensitively (db/multi.sql); one person may own accounts in several businesses.
 -- A signup is inactive until email_verified_at is set; the login query only accepts active users.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email text CHECK (length(email) <= 254);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz;
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_uq ON users (lower(email)) WHERE email IS NOT NULL;
 
 -- One-time codes, stored only as an HMAC (src/api/signup.py). attempts counts wrong guesses; 5 kill the code.
 CREATE TABLE IF NOT EXISTS email_codes (

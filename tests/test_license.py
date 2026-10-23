@@ -231,9 +231,22 @@ def test_unverified_email_and_licence_reuse(env, on):
     e.sql("update users set email=%s, email_verified_at=now() where id=%s", (mail2, o2["X-User"]))
     r = e.c.post("/api/license", json={"key": lic.sign(KEY, mail2, "pro", 25, 30)}, headers=o2)
     assert r.status_code == 200  # a different licence is fine
-    e.sql("update users set email='moved@shop.test' where id=%s", (e.owner,))  # the first owner's address changes; emails are unique across tenants
+    e.sql("update users set email='moved@shop.test' where id=%s", (e.owner,))  # the first owner's address changes
     e.sql("update users set email=%s where id=%s", (MAIL, o2["X-User"]))  # the second tenant's owner now holds the address the key was issued to
     r = e.c.post("/api/license", json={"key": t}, headers=o2)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "license_in_use"
+
+
+def test_one_email_two_businesses_each_activates_its_own_licence(env, on):
+    e = env
+    verified_owner(e)
+    o2 = other_tenant(env)
+    e.sql("update users set email=%s, email_verified_at=now() where id=%s", (MAIL, o2["X-User"]))  # the same person owns both businesses
+    k1, k2 = token(plan="standard"), token(plan="pro", seats=25)
+    assert activate(e, k1).status_code == 200
+    assert e.c.post("/api/license", json={"key": k2}, headers=o2).status_code == 200
+    assert status(e)["plan"] == "standard" and e.c.get("/api/license", headers=o2).json()["plan"] == "pro"
+    r = e.c.post("/api/license", json={"key": k1}, headers=o2)  # one licence id binds one tenant only
     assert r.status_code == 409 and r.json()["error"]["code"] == "license_in_use"
 
 

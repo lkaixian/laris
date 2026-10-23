@@ -55,8 +55,3 @@ def verification_mail(code: str, name: str) -> tuple[str, str, str]:
 def reset_mail(code: str, name: str) -> tuple[str, str, str]:
     return _mail("Your LARIS password reset code", [f"Hello {name},", f"Your LARIS password reset code is {code}. It expires in 10 minutes.",
                                                     "If you did not ask for it, ignore this email; your password has not changed."])
-
-
-def exists_mail() -> tuple[str, str, str]:
-    return _mail("You already have a LARIS account", ["Someone tried to register this email address, but it already has a LARIS account.",
-                                                      "Sign in with it, or use Forgot password. If this was not you, ignore this email."])

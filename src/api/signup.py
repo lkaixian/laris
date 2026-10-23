@@ -7,7 +7,6 @@ import os
 import secrets
 from typing import Annotated
 
-import psycopg
 from fastapi import APIRouter, BackgroundTasks, Request
 from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 
@@ -61,33 +60,36 @@ class Reset(Verify):
     new_password: str = Field(min_length=auth.MIN_PASSWORD, max_length=200)
 
 
-def _digest(user_id, purpose: str, code: str) -> str:
+def _digest(ident, purpose: str, code: str) -> str:
     """Keyed with SECRET_KEY, else a key derived from DATABASE_URL (secret, and the same on every restart and instance). The key stays out
     of the database: with only 10^6 possible codes, an unkeyed hash from a stolen row would fall to brute force."""
     key = (os.environ.get("SECRET_KEY") or "laris-codes:" + db.url()).encode()
-    return hmac.new(key, f"{purpose}:{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(key, f"{purpose}:{ident}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def _issue(c, user_id, tenant_id, purpose: str) -> str:
-    """A fresh code; every older one of the same purpose dies."""
-    code = f"{secrets.randbelow(10 ** 6):06d}"
+def _issue(c, user_id, tenant_id, purpose: str, code: str | None = None, ident=None) -> str:
+    """A fresh code (or `code`, to share one across accounts); every older one of the same purpose dies for this user.
+    `ident` is what the code is bound to: the user (default), or the email for a reset code valid for all its accounts."""
+    code = code or f"{secrets.randbelow(10 ** 6):06d}"
     c.execute("update email_codes set used_at = now() where user_id=%s and purpose=%s and used_at is null", (user_id, purpose))
     c.execute("insert into email_codes(purpose, user_id, tenant_id, code_hash, expires_at) values (%s,%s,%s,%s, now() + %s * interval '1 minute')",
-              (purpose, user_id, tenant_id, _digest(user_id, purpose, code), MINUTES))
+              (purpose, user_id, tenant_id, _digest(ident or user_id, purpose, code), MINUTES))
     return code
 
 
-def _redeem(c, u, purpose: str, code: str) -> bool:
-    """True once, for the user's newest live code. A wrong guess counts (the caller commits it); MAX_TRIES wrong ones kill the code."""
-    row = c.execute("""select id, code_hash from email_codes where user_id=%s and purpose=%s and used_at is null and expires_at > now() and attempts < %s
-                       order by created_at desc, id desc limit 1 for update""", (u["id"], purpose, MAX_TRIES)).fetchone() if u else None
-    good = hmac.compare_digest(_digest(u["id"] if u else "", purpose, code), row["code_hash"] if row else "0" * 64)
-    if not (row and good):
-        if row:
-            c.execute("update email_codes set attempts = attempts + 1 where id=%s", (row["id"],))
-        return False
-    c.execute("update email_codes set used_at = now() where id=%s", (row["id"],))
-    return True
+def _redeem(c, users, purpose: str, code: str, email: str | None = None):
+    """The matched code row, once, among the live codes of `users` (None if none). Verify codes are bound to one user, so a code only
+    activates its own account; with `email` (reset) one code is valid for the email and all its rows are spent together.
+    A wrong guess counts against every live row (the caller commits it); MAX_TRIES wrong ones kill the code."""
+    rows = c.execute("""select id, user_id, code_hash from email_codes where user_id = any(%s) and purpose=%s and used_at is null
+                        and expires_at > now() and attempts < %s order by created_at desc, id desc for update""",
+                     ([u["id"] for u in users], purpose, MAX_TRIES)).fetchall() if users else []
+    hits = [r for r in rows if hmac.compare_digest(_digest(email or r["user_id"], purpose, code), r["code_hash"])]
+    if not hits:
+        c.execute("update email_codes set attempts = attempts + 1 where id = any(%s)", ([r["id"] for r in rows],))
+        return None
+    c.execute("update email_codes set used_at = now() where id = any(%s)", ([r["id"] for r in (rows if email else hits)],))
+    return hits[0]
 
 
 def _echo(code: str) -> dict:
@@ -100,7 +102,7 @@ def _guard(request: Request, what: str, email: str, n_ip: int, n_email: int, win
     throttle(f"{what}:{email}", n_email, window, "Too many requests for this email. Try again later.")
 
 
-def _drop_pending(c, u):
+def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
     """Delete an unverified signup: the user (its codes cascade) and, since it was alone in it, the tenant it created."""
     c.execute("delete from users where id=%s", (u["id"],))
     if not c.execute("select 1 from users where tenant_id=%s", (u["tenant_id"],)).fetchone():
@@ -114,41 +116,34 @@ def signup(body: Signup, request: Request, bg: BackgroundTasks):
     _guard(request, "signup", body.email, 5, 3, 3600)
     if why := auth.weak_password(body.password, body.email.split("@")[0]):
         raise ApiError(422, "weak_password", why)
-    pw = auth.hash_password(body.password)  # also for an existing email, so the answer takes the same time
-    echo = {}
-    try:
-        with db.tx("owner", "signup") as c:
-            u = c.execute("select id, tenant_id, email_verified_at from users where lower(email)=%s for update", (body.email,)).fetchone()
-            if u and u["email_verified_at"]:
-                mail = (body.email, *mailer.exists_mail())
-            else:
-                if u:
-                    _drop_pending(c, u)  # a retry replaces the earlier unverified attempt
-                try:
-                    tid = db.create_tenant(c, body.business_name, body.trade_template)
-                except TemplateError:
-                    raise ApiError(422, "unknown_template", "unknown trade template")
-                uid = c.execute("insert into users(tenant_id, name, email, role, password_hash, active) values (%s,%s,%s,'owner',%s,false) returning id",
-                                (tid, body.owner_name, body.email, pw)).fetchone()["id"]
-                code = _issue(c, uid, tid, "verify")
-                mail, echo = (body.email, *mailer.verification_mail(code, body.owner_name)), _echo(code)
-                if not mailer.enabled():
-                    log.warning("signup created but email is off (MAILTRAP_API_TOKEN unset): nobody receives the code")
-    except psycopg.errors.UniqueViolation:  # two signups for one email at the same moment: the other one wins
-        return {**OK}
-    bg.add_task(svc(request).mail, *mail, category="signup")
-    return {**OK, **echo}
+    pw = auth.hash_password(body.password)
+    with db.tx("owner", "signup") as c:
+        # the same email may own other businesses; only an earlier unverified attempt (alone in its own tenant) is replaced
+        for u in c.execute("""select id, tenant_id from users u where lower(email)=%s and not active and email_verified_at is null
+                              and not exists (select 1 from users o where o.tenant_id=u.tenant_id and o.id<>u.id) for update""", (body.email,)).fetchall():
+            _drop_pending(c, u)
+        try:
+            tid = db.create_tenant(c, body.business_name, body.trade_template)
+        except TemplateError:
+            raise ApiError(422, "unknown_template", "unknown trade template")
+        uid = c.execute("insert into users(tenant_id, name, email, role, password_hash, active) values (%s,%s,%s,'owner',%s,false) returning id",
+                        (tid, body.owner_name, body.email, pw)).fetchone()["id"]
+        code = _issue(c, uid, tid, "verify")
+        if not mailer.enabled():
+            log.warning("signup created but email is off (MAILTRAP_API_TOKEN unset): nobody receives the code")
+    bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code, body.owner_name), category="signup")
+    return {**OK, **_echo(code)}
 
 
 @r.post("/signup/verify")
 def verify(body: Verify, request: Request):
     throttle(f"verify:ip:{auth.client_ip(request)}", 30, 900, "Too many requests. Try again later.")
     with db.tx("owner", "signup") as c:
-        u = c.execute("select id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchone()
-        ok = _redeem(c, u, "verify", body.code)
-        if ok:
-            c.execute("update users set active=true, email_verified_at=now() where id=%s", (u["id"],))
-    if not ok:
+        us = c.execute("select id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchall()
+        hit = _redeem(c, us, "verify", body.code)  # bound to its own user: another pending account of this email stays pending
+        if hit:
+            c.execute("update users set active=true, email_verified_at=now() where id=%s", (hit["user_id"],))
+    if not hit:
         raise ApiError(400, *BAD_CODE)
     return {"ok": True}
 
@@ -171,10 +166,12 @@ def forgot(body: EmailOnly, request: Request, bg: BackgroundTasks):
     _guard(request, "forgot", body.email, 10, 3, 900)
     echo = {}
     with db.tx("owner", "signup") as c:
-        u = c.execute("select id, tenant_id, name from users where lower(email)=%s and active and email_verified_at is not null for update", (body.email,)).fetchone()
-        if u:
-            code = _issue(c, u["id"], u["tenant_id"], "reset")
-            bg.add_task(svc(request).mail, body.email, *mailer.reset_mail(code, u["name"]), category="password-reset")
+        us = c.execute("select id, tenant_id, name from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
+        if us:
+            code = None  # ONE code for the email: one row per account, all bound to the email
+            for u in us:
+                code = _issue(c, u["id"], u["tenant_id"], "reset", code, body.email)
+            bg.add_task(svc(request).mail, body.email, *mailer.reset_mail(code, us[0]["name"]), category="password-reset")
             echo = _echo(code)
     return {**OK, **echo}
 
@@ -185,14 +182,17 @@ def reset(body: Reset, request: Request):
     if why := auth.weak_password(body.new_password, body.email.split("@")[0]):
         raise ApiError(422, "weak_password", why)  # before the code is spent
     with db.tx("owner", "signup") as c:
-        u = c.execute("select id, username from users where lower(email)=%s and active and email_verified_at is not null for update", (body.email,)).fetchone()
-        ok = _redeem(c, u, "reset", body.code)
-        if ok:
-            c.execute("update users set password_hash=%s where id=%s", (auth.hash_password(body.new_password), u["id"]))
-            auth.revoke_credentials(c, u["id"])  # API token and every session
+        us = c.execute("select id, username from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
+        ok = _redeem(c, us, "reset", body.code, body.email)
+        if ok:  # the code proves the mailbox: every verified active account with this email gets the new password
+            pw = auth.hash_password(body.new_password)
+            for u in us:
+                c.execute("update users set password_hash=%s where id=%s", (pw, u["id"]))
+                auth.revoke_credentials(c, u["id"])  # API token and every session
     if not ok:
         raise ApiError(400, *BAD_CODE)
     auth.cleared(body.email)
-    if u["username"]:
-        auth.cleared(u["username"].lower())
+    for u in us:
+        if u["username"]:
+            auth.cleared(u["username"].lower())
     return {"ok": True}

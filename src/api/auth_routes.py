@@ -39,22 +39,33 @@ def config():
 
 
 class Login(BaseModel, extra="forbid"):
-    username: str = Field(min_length=1, max_length=40)
+    username: str = Field(min_length=1)  # a user name or an email (up to 254); longer or odd input is just a non-match (401), never a 422
     password: str = Field(min_length=1, max_length=200)
+    business_id: UUID | None = None  # an email with accounts in several businesses: which one to sign in to
 
 
 @r.post("/login")
 def login(body: Login, request: Request):
-    key, ip = body.username.lower(), auth.client_ip(request)
+    who = body.username[:255]  # (the request body size is capped elsewhere)
+    key, ip = who.lower(), auth.client_ip(request)
     if auth.throttled(key, ip):
         raise ApiError(429, "too_many_attempts", "Too many failed sign-ins. Wait a few minutes and try again.")
     with db.tx("staff", "") as c:
-        u = c.execute("""select id, name, role, password_hash from users where (lower(username) = lower(%s) or lower(email) = lower(%s)) and active""",
-                      (body.username, body.username)).fetchone()  # an email works as the user name; unverified signups are not active
-        ok = auth.verify_password(body.password, u["password_hash"] if u else None)
-        if not (u and ok):
+        cands = c.execute("""select u.id, u.name, u.role, u.password_hash, t.id as tenant_id, coalesce(t.display_name, t.name) as business
+                             from users u join tenants t on t.id = u.tenant_id
+                             where u.active and (lower(u.username) = lower(%s) or (lower(u.email) = lower(%s) and u.email_verified_at is not null))
+                               and (%s::uuid is null or u.tenant_id = %s) order by t.name, u.id limit 5""",
+                          (who, who, body.business_id, body.business_id)).fetchall()  # an email works as the user name
+        if not cands:
+            auth.verify_password(body.password, None)  # one dummy scrypt: timing does not reveal unknown accounts
+        good = [u for u in cands if auth.verify_password(body.password, u["password_hash"])]
+        if not good:
             auth.failed(key, ip)
             raise ApiError(401, "bad_credentials", "Wrong username or password.")
+        if len(good) > 1:  # a correct password for several businesses: nothing is signed in, and it is not a failure
+            raise ApiError(409, "choose_business", "Choose which business to sign in to",
+                           businesses=[{"id": str(u["tenant_id"]), "name": u["business"]} for u in good])
+        u = good[0]
         auth.cleared(key)
         if auth.needs_rehash(u["password_hash"]):  # weaker scrypt parameters than today's: upgrade now that we hold the plaintext
             c.execute("update users set password_hash=%s where id=%s", (auth.hash_password(body.password), u["id"]))

@@ -89,3 +89,14 @@ Say: "LARIS. Know which price you quoted on, and when it goes stale." Show repo 
 - Every `[REAL DATA needed]` replaced, or the sentence cut.
 - No keys, no real phone numbers, no real names on screen.
 - Link tested in an incognito window. Deadline: Sun 25 Oct 2026, 7:59:59 AM (handbook); submit Saturday night.
+
+## Sign up, verify, licence (optional 60 second add-on)
+
+Not part of the 7 minute cut. Use it when the audience asks how a new business gets in.
+
+1. Signed out, the app opens on the LARIS sign-in screen. Click "Create a business account".
+2. Fill business name, your name, email, trade type (Made to order, or Food and catering) and a password; the checklist ticks as you type. Create account.
+3. Enter the 6-digit code from the email. On a demo deployment with email off, the box "Demo code" shows it (mock mode: 123456). The sixth digit submits.
+4. You land on sign-in with "Your account is ready. Sign in to continue." and the email filled in. Sign in.
+5. On a licensed deployment with no key yet, the owner sees "Activate your licence": paste the `LARIS1.` key and Activate. "Don't have a licence?" opens the plan cards and request form; "Continue in read-only mode" lets people look around while writes stay blocked.
+6. Admin, Licence shows plan, seats used, expiry, and whether the date was checked by internet time. Mock mode: add `?licence=missing` to the URL.

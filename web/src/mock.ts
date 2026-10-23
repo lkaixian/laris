@@ -167,12 +167,61 @@ const roleOf = (key: string) => roles.find(r => r.key === key)
 const branding = { display_name: null as string | null, brand_color: null as string | null, logo_data_url: null as string | null }
 const setting = { min_margin_pct: '25.00', ssm_no: null as string | null, address: null as string | null, bank_details: null as string | null, sst_registered: false, sst_no: null as string | null }
 
+
+// ---- onboarding and licence (step 97). Verify accepts 123456. Licence is off (enforced:false) unless the URL has ?licence=missing|expired|expiring.
+const flag = new URLSearchParams(location.search).get('licence') ?? ''
+const lic = { status: flag === 'expiring' ? 'expiring' : flag === 'expired' ? 'expired' : flag === 'missing' ? 'missing' : 'active', plan: null as string | null, seats: null as number | null, expires_at: null as string | null, days_left: null as number | null }
+if (flag === 'expiring') Object.assign(lic, { plan: 'standard', seats: 10, expires_at: ago(-9), days_left: 9 })
+if (flag === 'expired') Object.assign(lic, { plan: 'standard', seats: 10, expires_at: ago(3), days_left: -3 })
+const licBlocked = () => !!flag && !['active', 'expiring'].includes(lic.status)
+const PLANS = [{ key: 'starter', name: 'Starter', seats: 3, price: 'Contact us' }, { key: 'standard', name: 'Standard', seats: 10, price: 'Contact us' }, { key: 'pro', name: 'Pro', seats: 25, price: 'Contact us' }]
+const NEUTRAL = 'If this email can be used, we sent a 6-digit code'
+const devCode = () => (flag === 'nodev' ? {} : { dev_code: '123456' })
+function mockPublic(method: string, p: string, body: any): unknown {
+  const email = String(body?.email ?? '').trim()
+  if (method === 'POST' && p === '/signup') {
+    if (!['made_to_order', 'fnb_catering'].includes(body.trade_template)) throw new ApiError(422, 'unknown_template', 'That business type is not available.')
+    if (String(body.password).length < 10) throw new ApiError(422, 'weak_password', 'That password is too weak. Use at least 10 characters.')
+    if (/^(password|1234567890)/i.test(String(body.password))) throw new ApiError(422, 'weak_password', 'That password is too common. Pick a longer, less guessable one.')
+    return { ok: true, message: NEUTRAL, ...devCode() }
+  }
+  if (method === 'POST' && (p === '/signup/resend' || p === '/password/forgot')) return { ok: true, message: NEUTRAL, ...devCode() }
+  if (method === 'POST' && (p === '/signup/verify' || p === '/password/reset')) {
+    if (body.code !== '123456') throw new ApiError(400, 'invalid_code', 'invalid or expired code')
+    if (p === '/password/reset' && String(body.new_password).length < 10) throw new ApiError(422, 'weak_password', 'That password is too weak. Use at least 10 characters.')
+    return { ok: true, email }
+  }
+  return undefined
+}
+function mockLicense(method: string, p: string, owner: boolean, body: any): unknown {
+  if (method === 'GET' && p === '/license/plans') return { plans: PLANS }
+  if (method === 'GET' && p === '/license') {
+    return { ...lic, seats_used: 2, enforced: !!flag, read_only: licBlocked(), clock: flag ? { source: 'system', trusted_at: null, rollback: flag === 'expired' } : null }
+  }
+  if (method === 'POST' && p === '/license') {
+    if (!owner) throw new ApiError(403, 'owner_only', 'owner role required')
+    const key = String(body.key ?? '').trim()
+    if (!key.startsWith('LARIS1.') || key.length < 14) throw new ApiError(422, 'invalid_license', 'That licence key is not valid. (not for this email)')
+    Object.assign(lic, { status: 'active', plan: 'standard', seats: 10, expires_at: ago(-365), days_left: 365 })
+    return { ...lic, seats_used: 2, enforced: !!flag, read_only: false, clock: { source: 'system', trusted_at: null, rollback: false } }
+  }
+  if (method === 'POST' && p === '/license/request') {
+    if (!owner) throw new ApiError(403, 'owner_only', 'owner role required')
+    if (flag === 'noemail') throw new ApiError(422, 'email_needed', 'The owner account needs a verified email.')
+    return { ok: true, id: 'req-1' }
+  }
+  return undefined
+}
+
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
   const who = owner ? 'SAMPLE Owner' : 'SAMPLE Staff'
   const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
+  if (/^\/(signup|password\/(forgot|reset))/.test(p)) { const r = mockPublic(method, p, body); if (r !== undefined) return r }
+  if (p.startsWith('/license')) { const r = mockLicense(method, p, owner, body); if (r !== undefined) return r }
+  if (method !== 'GET' && licBlocked() && !p.startsWith('/me')) throw new ApiError(402, 'license_required', 'Your licence is missing or expired, so changes are not allowed.')
   if (p === '/me') {
     const r = roleOf(role)!
     return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: r.permissions, name: who,

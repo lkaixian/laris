@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { api, ApiError } from './api'
+import { useWriteGate } from './Licence'
 import { ActionError, Async, PageHeader, focusTop, useAction, useFetch } from './ui'
 import { useToast } from './Toast'
 
@@ -70,6 +71,7 @@ function Editor({ role, data, onDone }: { role: RoleRow | null; data: Roles; onD
 
 // Owner: who can do what. The role a person holds is chosen on the Team page.
 export function RolesView({ owner }: { owner: boolean }) {
+  const gate = useWriteGate()
   const s = useFetch<Roles>('/roles')
   const [editing, setEditing] = useState<string>()   // role id, or 'new'
   const [confirm, setConfirm] = useState('')
@@ -86,7 +88,7 @@ export function RolesView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Roles" description="A role is a set of permissions. Everyone holds one role, chosen on the Team page. Changing what a role can do applies at once."
-        actions={editing !== 'new' && <button type="button" className="btn btn-primary" onClick={() => { setEditing('new'); setConfirm('') }}>New role</button>} />
+        actions={editing !== 'new' && <button type="button" className="btn btn-primary" {...gate(() => { setEditing('new'); setConfirm('') })}>New role</button>} />
       <ActionError err={del.err} onRetry={() => last.current?.()} label="Try again" />
       <Async s={s} rows={3} empty={!d} emptyText="No roles.">
         {d && <>

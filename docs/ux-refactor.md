@@ -46,6 +46,32 @@ Behaviour, API calls, mock contracts, permission gating and every existing `#/..
 4. Permission gate: one line in `NEED` in `api.ts` (team, roles, settings are owner-only there already).
 5. Login, register, verify and licence screens: add a value to `gate` in `AppShell` (App.tsx) and render it before `<Shell>`; the shell and pages only render once `gate` is `ready`. `ToastProvider` wraps everything, so toasts work on those screens too.
 
+## Onboarding and licence screens (step 97)
+
+New files: `web/src/Signup.tsx` (Register, Forgot), `web/src/Licence.tsx` (gate, banner, Licence page, purchase page, `useLicense`, `useWriteGate`), `AuthPage` in `Login.tsx`. API: `publicApi()` (no identity headers) and the 402 hook in `api.ts`.
+
+**Routes**
+
+| Hash | Who | What |
+| --- | --- | --- |
+| `#/login` (and any route while signed out) | public | Sign in: "Email or username", show/hide, Caps Lock hint, Forgot password, Create a business account. 429 cooldown, one-time notice and the access-token fallback (only when `/api/auth/config` says login is not required) are unchanged |
+| `#/register` | public | Business form, live password checklist, then the 6-digit code step (auto-submits on the 6th digit, single in-flight guard), Resend with 30 s cooldown, pending email in `sessionStorage` (`laris.pending`). Verified: sign-in with the email prefilled and "Your account is ready. Sign in to continue." |
+| `#/forgot` | public | Email, then code + new password (+ checklist), then sign-in with a success notice |
+| `#/licence` | signed in | Licence page (status, plan, seats, expiry, clock source, rollback warning, activate form; staff see status only). Nav item under Admin, only while licensing is enforced |
+| `#/purchase` | signed in, owner | Plans (`GET /api/license/plans`), request form (`POST /api/license/request`) |
+
+**Gates in `AppShell`** (order): `checking` skeleton; signed-out screens (`gate === 'login'` or a public route while no session): Login / Register / Forgot, full width, no sidebar; then, once `/api/me` and `/api/license` have answered, if `enforced` and status is not `active`/`expiring` and the person has not chosen read-only: `LicenceGate` (owner: activate, staff: ask the owner; `#/purchase` renders in the same minimal `Frame`); otherwise the normal `Shell`. `enforced:false` renders nothing licence-related (no banner, no nav item).
+
+**Read-only**: `LicenceBanner` (slim, above the page) when `read_only` or `expiring`. `useWriteGate()` gives `{aria-disabled, title}` and drops the click while read-only; applied to Upload quote (Tracker), Add contact, New role. Other write buttons are not gated: the server answers `402 license_required`, `api.ts` raises `laris:license402`, the shell shows a toast with an "Open licence" link and re-reads the licence. The user is never signed out by a 402. A 409 `seat_limit` from Team shows through the existing `ActionError`.
+
+**Walk it in mock mode** (`cd web && npx vite --mode mock --port 5175`)
+
+- `/#/login`, `/#/register`, `/#/forgot`: any code but `123456` is refused, `123456` is accepted. The mock answer carries `dev_code` (shown as "Demo code"); `?licence=nodev` hides it.
+- Licence is off by default. `/?licence=missing#/home` (gate), `?licence=expired`, `?licence=expiring` (banner only). Any key starting `LARIS1.` with 14+ characters activates; others give 422. `?licence=noemail` makes the purchase request answer 422 `email_needed`.
+- Mock sign-in accepts anything. The licence gate's Sign out returns to the sign-in screen.
+
+Add a new pre-login screen: add a route check before the licence gate in `AppShell` and render it inside `AuthPage`.
+
 ## Could not verify / not done
 
 - Not run against a real backend (only `dev:mock`). `scripts/a11y.mjs` needs a seeded server with accounts, so it was skipped; instead axe-core was run through `scripts/cdp.mjs` on 16 mock pages at 1100px light and 390px dark (see the report for results). Real sign-in, Sign out in the user menu, the idle dialog and IdleGuard were not exercised in a browser.
@@ -53,3 +79,4 @@ Behaviour, API calls, mock contracts, permission gating and every existing `#/..
 - `docs/demo-script.md` still says "top menu" and "role selector top right"; the menu is now the left sidebar (drawer on phones). The role picker is still top right on desktop.
 - Doc lines and Ask replies tables scroll sideways at 390px (with hint) instead of turning into cards.
 - The Jobs board counters on Home link to the whole board, not a single column.
+- Onboarding and licence screens (step 97) were only walked against `dev:mock`: no real backend round trip, no real email, no real signed licence key. The access-token fallback on Sign in depends on `/api/auth/config` (login_required false); there is no separate flag for APP_TOKEN.

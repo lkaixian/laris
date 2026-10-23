@@ -7,6 +7,7 @@ import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { useToast } from './Toast'
+import { licenceOn } from './Licence'
 
 /*
   App shell: grouped sidebar (>= md, collapsible to icons), top bar + slide-over drawer (< md), header with org mark,
@@ -37,11 +38,12 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'team', label: 'Team', icon: 'team' },
     { key: 'roles', label: 'Roles', icon: 'roles' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
+    { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
   ] },
 ]
 
 // Routes that are children of a nav item: the parent stays marked while you are on them.
-const PARENT: Record<string, string> = { doc: 'tracker', contact: 'contacts' }
+const PARENT: Record<string, string> = { doc: 'tracker', contact: 'contacts', purchase: 'licence' }
 
 export const visibleNav = (me: Me | undefined, owner: boolean) =>
   NAV.map(g => ({ ...g, items: g.items.filter(i => canOpen(i.key, owner) && (i.when?.(me) ?? true)) })).filter(g => g.items.length)
@@ -148,10 +150,10 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
 
 export interface ShellProps {
   me?: Me; hash: string; route: string; dark: boolean; setDark: (d: boolean) => void
-  owner: boolean; role: Role; onRole: (r: Role) => void; children: ReactNode
+  owner: boolean; role: Role; onRole: (r: Role) => void; banner?: ReactNode; children: ReactNode
 }
 
-export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, children }: ShellProps) {
+export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, banner, children }: ShellProps) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
   const [q, setQ] = useState('')
@@ -212,6 +214,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, chi
             </div>
           </header>
           {MOCK && <div role="region" aria-label="Sample data notice" className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</div>}
+          {banner}
           <main id="main" tabIndex={-1} key={role} className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">{children}</main>
         </div>
       </div>

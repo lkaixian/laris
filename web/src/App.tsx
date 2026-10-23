@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, can, canOpen, ApiError } from './api'
+import type { License } from './api'
 import Login from './Login'
+import { Register, Forgot } from './Signup'
+import { LicenseProvider, LicenceGate, LicenceBanner, LicenceView, PurchaseView, Frame, blocked, useWriteGate, setLicenceOn } from './Licence'
 import { Shell } from './Shell'
 import { ToastProvider, useToast } from './Toast'
 import IdleGuard from './Idle'
@@ -133,6 +136,7 @@ let savedFilter = ''  // list state kept for this visit, so Back from a document
 
 // arg: 'review' and 'open' pre-select a filter (Home links), 'upload' opens the upload form.
 function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
+  const gate = useWriteGate()
   const s = useFetch<Tracker>('/tracker')
   const [filter, setFilterRaw] = useState(arg === 'review' || arg === 'open' ? arg : savedFilter)
   const setFilter = (v: string) => { savedFilter = v; setFilterRaw(v) }
@@ -165,7 +169,7 @@ function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   return (
     <>
       <PageHeader title="Quote tracker" description="Supplier quotes you received and customer quotes you sent, in one place."
-        actions={can('upload_documents') && <button type="button" className="btn btn-primary" onClick={() => openForm('quote-file')}>Upload quote</button>} />
+        actions={can('upload_documents') && <button type="button" className="btn btn-primary" {...gate(() => openForm('quote-file'))}>Upload quote</button>} />
       <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-semibold">
         Filter
         <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
@@ -758,6 +762,8 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
   account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} /> },
   activity: { title: 'Activity log', render: () => <ActivityView /> },
+  licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
+  purchase: { title: 'Get a licence', render: c => <PurchaseView owner={c.owner} backHref="#/licence" /> },
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
 }
 
@@ -804,13 +810,25 @@ function AppShell() {
   const [tries, setTries] = useState(0)
   // 'login' shows the sign-in screen: when the server needs accounts and this tab has no session, or the session ended.
   const [gate, setGate] = useState<'checking' | 'login' | 'ready'>(MOCK ? 'ready' : 'checking')
+  const [demo, setDemo] = useState(false)  // the server still accepts the shared access token (login not required)
+  // Licence: undefined until read. Not enforced (the usual case) means nothing in the UI changes. `roOk`: the person chose to continue read-only.
+  const [lic, setLic] = useState<License>()
+  const [licTries, setLicTries] = useState(0)
+  const [roOk, setRoOk] = useState(false)
   useEffect(() => {
-    if (MOCK) return
-    authConfig().then(c => setGate(c.login_required && !getToken() ? 'login' : 'ready'), () => setGate('ready'))
-    const out = () => { setMe(undefined); setGate('login') }
+    if (!MOCK) authConfig().then(c => { setDemo(!c.login_required); setGate(c.login_required && !getToken() ? 'login' : 'ready') }, () => setGate('ready'))
+    const out = () => { setMe(undefined); setLic(undefined); setRoOk(false); setGate('login') }
     addEventListener('laris:signedout', out)
-    return () => removeEventListener('laris:signedout', out)
-  }, [])
+    const l402 = () => { toast('Your licence is missing or expired, so that change was not saved.', { href: '#/licence', label: 'Open licence' }); setLicTries(t => t + 1) }
+    addEventListener('laris:license402', l402)
+    return () => { removeEventListener('laris:signedout', out); removeEventListener('laris:license402', l402) }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (gate !== 'ready' || !me) return
+    let live = true
+    api<License>('GET', '/license').then(l => { if (live) { setLicenceOn(l.enforced); setLic(l) } }, () => { if (live) { setLicenceOn(false); setLic({ status: 'active', plan: null, seats: null, seats_used: 0, expires_at: null, days_left: null, enforced: false, read_only: false, clock: null }) } })
+    return () => { live = false }
+  }, [gate, me?.id, licTries])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (gate !== 'ready') return
     let live = true
@@ -840,17 +858,29 @@ function AppShell() {
   }, [hash])
   const onRole = (r: Role) => { setRole(r); setRoleState(r); toast(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
-  if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
+  // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
+  if (gate === 'login' || (['login', 'register', 'forgot'].includes(route) && (MOCK || !getToken()))) {
+    if (route === 'register') return <Register dark={dark} setDark={setDark} />
+    if (route === 'forgot') return <Forgot dark={dark} setDark={setDark} />
+    return <Login dark={dark} setDark={setDark} demo={demo} onDone={() => { if (route === 'login') location.hash = '#/home'; setGate('ready'); setTries(t => t + 1) }} />
+  }
+  const orgName = me?.org.name ?? 'LARIS'
+  if (me && lic && blocked(lic) && !roOk) {
+    // Enforced and unusable: activation instead of the app (the purchase page is the one other screen).
+    if (route === 'purchase') return <OrgCtx value={orgName}><Frame org={orgName} dark={dark} setDark={setDark} wide><PurchaseView owner={owner} backHref="#/licence" /></Frame></OrgCtx>
+    return <LicenceGate lic={lic} owner={owner} org={orgName} dark={dark} setDark={setDark} reload={() => setLicTries(t => t + 1)} onReadOnly={() => setRoOk(true)} />
+  }
   const entry = PAGES[route]
   return (
-    <OrgCtx value={me?.org.name ?? 'LARIS'}>
-      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole}>
+    <LicenseProvider value={{ lic, readOnly: !!lic?.enforced && lic.read_only, reload: () => setLicTries(t => t + 1) }}>
+    <OrgCtx value={orgName}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<LicenceBanner lic={lic} owner={owner} />}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>Could not identify the signed-in user: {meErr}</p>
             <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
           </div>
-        ) : !me ? <Skeleton rows={4} /> : (
+        ) : !me || !lic ? <Skeleton rows={4} /> : (
           <div key={route + (route === 'doc' || route === 'contact' ? arg : '')} className="page-in">
             {!canOpen(route, owner) ? <>
               <PageHeader title={entry?.title ?? 'Page'} />
@@ -861,5 +891,6 @@ function AppShell() {
       </Shell>
       {!MOCK && getAccount() && <IdleGuard />}
     </OrgCtx>
+    </LicenseProvider>
   )
 }

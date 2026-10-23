@@ -27,6 +27,7 @@ const P = {
   check: 'M5 12.5l4.5 4.5L19 7',
   plus: 'M12 5v14 M5 12h14',
   upload: 'M12 16V4 M7 9l5-5 5 5 M4 20h16',
+  key: 'M14 10a4 4 0 1 1-3.9 3L3 20v-3l2-1v-2l2-1 3.1-3.1A4 4 0 0 1 14 10z M16 8h.01',
   inbox: 'M3 13l3-8h12l3 8v6H3z M3 13h5l1 3h6l1-3h5',
 } as const
 

@@ -98,6 +98,11 @@ export const getAccount = (): string | null => { try { return sessionStorage.get
 // One-time notice for the sign-in screen, set when the server ended the session (not on a deliberate sign out).
 let notice = ''
 export const takeNotice = () => { const n = notice; notice = ''; return n }
+export const setNotice = (t: string) => { notice = t }
+// Email carried from the sign-up or reset flow to the sign-in form; read once.
+let prefill = ''
+export const setPrefill = (e: string) => { prefill = e }
+export const takePrefill = () => { const e = prefill; prefill = ''; return e }
 export const signedOut = (ended = false) => { if (ended) notice = 'Your session ended, please sign in again.'; setToken(null); userId = ''; window.dispatchEvent(new Event('laris:signedout')) }
 // Single flight: only a 401 for the token still in use signs out. The first one clears it, so parallel 401s (and late ones after a new sign-in) do nothing.
 const expired = (res: Response, sent: string | null) => { if (res.status === 401 && sent && getToken() === sent) signedOut(true) }
@@ -108,6 +113,7 @@ export async function authConfig(): Promise<{ login_required: boolean }> {
 }
 
 export async function login(username: string, password: string): Promise<void> {
+  if (MOCK) return  // mock mode has no accounts: any entry signs in
   let res: Response
   try {
     res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
@@ -130,11 +136,35 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
 
+// ---- licence (docs/licensing.md). A 402 license_required on a write never signs out: it raises an event, the shell refreshes the licence and shows a toast with a link.
+export interface License {
+  status: 'missing' | 'active' | 'expiring' | 'expired' | 'invalid' | 'clock_unverified'; plan: string | null; seats: number | null; seats_used: number
+  expires_at: string | null; days_left: number | null; enforced: boolean; read_only: boolean
+  clock: { source: 'ntp' | 'system'; trusted_at: string | null; rollback: boolean } | null
+}
+const licence402 = (e: unknown) => { if (e instanceof ApiError && e.status === 402 && e.code === 'license_required') window.dispatchEvent(new Event('laris:license402')) }
+
+// Public endpoints (signup, verify, password reset): no identity headers, no sign-out on 401.
+export async function publicApi<T,>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  if (MOCK) {
+    const { mock } = await import('./mock')
+    await new Promise(res => setTimeout(res, 150))
+    return mock(method, path, role, body) as T
+  }
+  let res: Response
+  try {
+    res = await fetch('/api' + path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
+  } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
+  return data as T
+}
+
 const call = async <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, r: Role, body: unknown, withUser: boolean): Promise<T> => {
   if (MOCK) {
     const { mock } = await import('./mock')
     await new Promise(res => setTimeout(res, 120))
-    return mock(method, path, r, body) as T
+    try { return mock(method, path, r, body) as T } catch (e) { licence402(e); throw e }
   }
   const form = body instanceof FormData
   const sent = getToken()
@@ -150,7 +180,11 @@ const call = async <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: strin
   }
   const data = await res.json().catch(() => null)
   expired(res, sent)  // expired or revoked: back to the sign-in screen with a notice
-  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
+  if (!res.ok) {
+    const err = new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
+    licence402(err)
+    throw err
+  }
   return data as T
 }
 

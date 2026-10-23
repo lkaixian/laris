@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Ref } from 'react'
 import { api, can, download, MOCK } from './api'
 import type { DocSummary } from './api'
+import { useWriteGate } from './Licence'
 import { Async, EmptyState, PageHeader, Status, TableRegion, msg, rm, useFetch } from './ui'
 import { useToast } from './Toast'
 
@@ -52,6 +53,7 @@ let saved = { q: '', kind: '' as Kind | '' }  // list state kept for this visit,
 
 // arg 'new' opens the Add contact form (Home quick action).
 export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean; arg?: string; initialQuery?: string }) {
+  const gate = useWriteGate()
   const [q, setQRaw] = useState(initialQuery || saved.q)
   const [kind, setKindRaw] = useState<Kind | ''>(saved.kind)
   const setQ = (v: string) => { saved.q = v; setQRaw(v) }
@@ -82,7 +84,7 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       <PageHeader title="Contacts" description="Customers, suppliers and contractors in one place. Chat numbers saved here are how LARIS recognises who is writing."
         actions={<>
           {can('export_data') && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
-          <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} onClick={() => setAdding(!adding)}>Add contact</button>
+          <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...gate(() => setAdding(!adding))}>Add contact</button>
         </>} />
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-semibold">Search contacts

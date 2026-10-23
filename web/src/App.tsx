@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, logout } from './api'
+import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, logout } from './api'
 import Login from './Login'
+import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
@@ -703,7 +704,7 @@ export default function App() {
   if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
   const runSearch = () => { const t = searchText.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
-  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : [])]
+  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : []), ...(MOCK ? [['account', 'Account']] : [])]
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -736,6 +737,7 @@ export default function App() {
           {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') || (route === 'contact' && k === 'contacts') ? 'page' : undefined}>{t}</a>)}
         </nav>
       </header>
+      {!MOCK && getAccount() && <IdleGuard />}
       <p role="status" className="sr-only">{roleNote}</p>
       {MOCK && <p className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</p>}
       <main id="main" tabIndex={-1} key={role} className="mx-auto max-w-6xl px-4 py-5">

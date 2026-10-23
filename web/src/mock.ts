@@ -124,6 +124,14 @@ const rfqs = [
     ] },
 ]
 
+// Mock sessions (Account page): this device plus two others, so sign out one and sign out all others both have something to do.
+const minsAgo = (n: number) => new Date(Date.now() - n * 6e4).toISOString()
+const sessions = [
+  { id: 'se1', created_at: minsAgo(90), last_seen_at: minsAgo(0), user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', current: true },
+  { id: 'se2', created_at: minsAgo(60 * 30), last_seen_at: minsAgo(45), user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', current: false },
+  { id: 'se3', created_at: minsAgo(60 * 24 * 6), last_seen_at: null, user_agent: null, current: false },
+]
+
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
@@ -131,6 +139,19 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
   if (p === '/me') return { id: owner ? 'sample-owner' : 'sample-staff', role, name: who, org: { name: 'SAMPLE Signage Works (synthetic)', logo_url: null } }
+  if (p === '/me/password' && method === 'POST') return { ok: true }
+  if (p === '/me/sessions' && method === 'GET') return sessions
+  if (p === '/me/sessions/revoke-others' && method === 'POST') {
+    const n = sessions.filter(x => !x.current).length
+    for (let i = sessions.length - 1; i >= 0; i--) if (!sessions[i].current) sessions.splice(i, 1)
+    return { revoked: n }
+  }
+  if ((m = p.match(/^\/me\/sessions\/([^/]+)$/)) && method === 'DELETE') {
+    const i = sessions.findIndex(x => x.id === m![1] && !x.current)
+    if (i < 0) throw new ApiError(404, 'not_found', 'Session not found.')
+    sessions.splice(i, 1)
+    return { ok: true }
+  }
   if (p === '/tracker') {
     const all = Object.values(docs).map(withProv).map(d => d.doc).map(s => owner ? s : { ...s, flags: { ...s.flags, cost_is_stale: false } })
     return { received: all.filter(d => d.direction === 'in'), sent: all.filter(d => d.direction === 'out') }

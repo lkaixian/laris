@@ -8,7 +8,7 @@ import pytest
 
 from src import auth, db, mailer
 from src.api import deps
-from support.fixtures import env, pg_url  # noqa: F401
+from support.fixtures import env, pg_url, same  # noqa: F401
 
 PW = "correct horse 1"
 BODY = {"business_name": "Acme Print", "owner_name": "Ann Lee", "email": "Ann@Example.com", "password": PW, "trade_template": "made_to_order"}
@@ -110,10 +110,10 @@ def test_wrong_code_five_times_then_dead(env):
     code = last_code(e)
     for _ in range(5):
         r = verify(e, wrong(code))
-        assert r.status_code == 400 and r.json()["error"] == {"code": "invalid_code", "message": "invalid or expired code"}
+        assert r.status_code == 400 and (r.json()["error"]["code"], r.json()["error"]["message"]) == ("invalid_code", "invalid or expired code")
     assert verify(e, code).status_code == 400  # even the right one is dead now
     assert not e.sql("select active from users where email='ann@example.com'")[0]["active"]
-    assert verify(e, wrong(code), email="nobody@example.com").json() == verify(e, wrong(code)).json()  # unknown email: same answer
+    assert same(verify(e, wrong(code), email="nobody@example.com"), verify(e, wrong(code)))  # unknown email: same answer
     e.c.post("/api/signup/resend", json={"email": "ann@example.com"})
     assert verify(e, last_code(e)).status_code == 200  # a new code works
 
@@ -246,7 +246,7 @@ def test_reset_errors_are_uniform_and_weak_password_refused(env):
     w = reset(e, code, pw="password1234")
     assert w.status_code == 422 and w.json()["error"]["code"] == "weak_password"
     a, b = reset(e, wrong(code)), reset(e, wrong(code), email="ghost@example.com")
-    assert a.status_code == b.status_code == 400 and a.json() == b.json()
+    assert a.status_code == b.status_code == 400 and same(a, b)
     assert reset(e, code).status_code == 200  # the weak try did not spend the code
 
 
@@ -365,11 +365,11 @@ def test_login_ignores_inactive_and_unverified_and_unknown_business(env):
     assert login(e, "ann@example.com").status_code == 200  # only one candidate left
     bad = e.c.post("/api/login", json={"username": "ann@example.com", "password": PW, "business_id": tid(e, "Second Co")})
     nobody = e.c.post("/api/login", json={"username": "ghost@example.com", "password": PW})
-    assert bad.status_code == 401 and bad.json() == nobody.json()
+    assert bad.status_code == 401 and same(bad, nobody)
     assert signup(e, business_name="Third Co").status_code == 202  # pending: ignored
     assert login(e, "ann@example.com").status_code == 200
     other = e.c.post("/api/login", json={"username": "ann@example.com", "password": PW, "business_id": "00000000-0000-0000-0000-000000000000"})
-    assert other.status_code == 401 and other.json() == nobody.json()
+    assert other.status_code == 401 and same(other, nobody)
 
 
 def test_login_accepts_a_long_email_and_answers_odd_ones_with_401(env):
@@ -459,7 +459,7 @@ def test_reset_wrong_attempts_count_per_email_and_kill_the_code(env):
         assert reset(e, wrong(code)).status_code == 400
     assert reset(e, code).status_code == 400  # dead for all rows
     assert e.sql("select count(*) n from email_codes where purpose='reset' and attempts >= 5")[0]["n"] == 2
-    assert reset(e, code, email="ghost@example.com").json() == reset(e, code).json()
+    assert same(reset(e, code, email="ghost@example.com"), reset(e, code))
     assert forgot(e, "ghost@example.com").json() == forgot(e).json()
 
 

@@ -6,16 +6,28 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from uuid import uuid4
+
+import psycopg
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match
+
+from . import logsetup
+
+logsetup.setup()  # before the modules below log anything
 
 from . import db, scheduler
 from .api import assistant, auth_routes, contacts, invites, license_routes, listings, rfq, roles, routes, signup, webhooks
 from .api.deps import JR, Services
 from .errors import ApiError
+
+
+log = logging.getLogger("laris")
+RID = re.compile(r"[A-Za-z0-9._-]{8,64}")
 
 
 @asynccontextmanager
@@ -26,7 +38,9 @@ async def lifespan(app):
             db.check_rls(c)
         with db.tx("owner", "bootstrap") as c:
             if (note := db.bootstrap_owner(c)) != "off":
-                logging.getLogger("laris").warning("bootstrap owner: %s", note)  # never logs the password
+                log.warning("bootstrap owner: %s", note)  # never logs the password
+    else:
+        log.error("DATABASE_URL is not set: the API cannot serve database requests")
     sch = scheduler.start() if os.environ.get("SCHEDULER") == "1" else None
     yield
     if sch:
@@ -52,8 +66,14 @@ app.include_router(assistant.r)
 app.include_router(webhooks.r)
 
 
-def _err(status, code, msg, **extra):
-    return JR({"error": {"code": code, "message": msg, **extra}}, status_code=status)
+def _err(status, code, msg, headers=None, **extra):
+    return JR({"error": {"code": code, "message": msg, "request_id": logsetup.request_id.get(), **extra}}, status_code=status, headers=headers)
+
+
+def _log_err(request, status, code, cause=None):
+    """One line per ApiError / 5xx: never the query string, the body or the cause's text."""
+    log.log(logging.ERROR if status >= 500 else logging.WARNING, "%s %s -> %s %s cause=%s", request.method, request.url.path, status, code,
+            type(cause).__name__ if cause else "-")
 
 
 @app.middleware("http")
@@ -88,7 +108,13 @@ CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe
 
 @app.middleware("http")  # defined last = outermost, so it also decorates the 411 / 413 above
 async def _secure_headers(request, call_next):
-    resp = await call_next(request)
+    try:
+        resp = await call_next(request)
+    except Exception as e:  # ServerErrorMiddleware sits outside this one, so build the 500 here to keep the headers
+        s = request.state
+        log.error("unhandled error: %s %s tenant=%s user=%s", request.method, request.url.path,
+                  getattr(s, "tenant_id", "-"), getattr(s, "user_id", "-"), exc_info=e)
+        resp = _err(500, "internal", "Something went wrong on our side. Quote this reference if you contact support.")
     h = resp.headers
     h["X-Content-Type-Options"] = "nosniff"
     h["Referrer-Policy"] = "no-referrer"
@@ -105,19 +131,55 @@ async def _secure_headers(request, call_next):
     return resp
 
 
+@app.middleware("http")  # defined last = outermost: every response, even Starlette's own errors, carries the id
+async def _request_id(request, call_next):
+    rid = request.headers.get("x-request-id", "")
+    rid = rid if RID.fullmatch(rid) else uuid4().hex[:12]
+    logsetup.request_id.set(rid)
+    request.state.request_id = rid
+    resp = await call_next(request)
+    resp.headers["X-Request-Id"] = rid
+    return resp
+
+
 @app.exception_handler(ApiError)
-async def _api_error(_, e: ApiError):
+async def _api_error(request, e: ApiError):
+    _log_err(request, e.status, e.code, e.__cause__)
     return _err(e.status, e.code, e.message, **e.extra)
 
 
 @app.exception_handler(StarletteHTTPException)
-async def _http_error(_, e):
-    return _err(e.status_code, "http_error", str(e.detail))
+async def _http_error(request, e):
+    if e.status_code >= 500:
+        _log_err(request, e.status_code, "http_error", e.__cause__)
+    return _err(e.status_code, "not_found" if e.status_code == 404 else "http_error", str(e.detail), headers=getattr(e, "headers", None))
+
+
+_JARGON = re.compile(r"^(Value error|Assertion failed), ")
 
 
 @app.exception_handler(RequestValidationError)
 async def _validation(_, e):
-    return _err(422, "invalid_request", "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()))
+    fields = []
+    for x in e.errors():
+        loc = [str(p) for p in x["loc"]]
+        fields.append({"field": ".".join(loc[1:] if loc[0] in ("body", "query", "path", "header", "cookie") else loc),
+                       "message": _JARGON.sub("", x["msg"])})
+    f = fields[0]
+    return _err(422, "invalid_request", f"{f['field']}: {f['message']}" if f["field"] else f["message"], fields=fields)
+
+
+@app.exception_handler(psycopg.errors.IntegrityError)
+async def _conflict(request, e):
+    log.warning("constraint violation (%s %s): %s [%s]", request.method, request.url.path, e.diag.message_primary, e.diag.constraint_name)
+    return _err(409, "conflict", "That conflicts with something that already exists.")
+
+
+@app.exception_handler(psycopg.OperationalError)
+@app.exception_handler(psycopg.InterfaceError)
+async def _db_down(request, e):
+    _log_err(request, 503, "db_unavailable", e)
+    return _err(503, "db_unavailable", "The database is not reachable. Try again in a moment.")
 
 
 @app.get("/health")
@@ -128,16 +190,31 @@ def health():
 @app.get("/ready")
 def ready():
     """Liveness plus the database: for a deploy check or an uptime monitor."""
-    try:
-        with db.tx("staff", "") as c:
-            c.execute("select 1")
-    except Exception:
-        return _err(503, "db_down", "database not reachable")
+    why = ""
+    reason = "db_url_missing" if not os.environ.get("DATABASE_URL") else None
+    if not reason:
+        try:
+            with db.tx("staff", "", timeout=3) as c:
+                c.execute("set local statement_timeout = '3s'")
+                if c.execute("select to_regclass('public.tenants') t").fetchone()["t"] is None:
+                    reason = "schema_missing"
+        except Exception as e:
+            reason, why = "db_unreachable", f" ({type(e).__name__}: {(str(e).splitlines() or [''])[0]})"
+    if reason:
+        log.warning("not ready: %s%s", reason, why)
+        return JR({"status": "not_ready", "reason": reason}, status_code=503)
     return {"status": "ready"}
 
 
 class SPA(StaticFiles):
     """Built frontend; unknown non-API paths fall back to index.html so client-side routes survive a reload."""
+
+    async def __call__(self, scope, receive, send):
+        p = scope["path"]
+        if scope["type"] == "http" and p.startswith(("/api/", "/webhooks/")):  # no route took it: 405 if one matches the path, else 404
+            partial = any(r.matches(scope)[0] == Match.PARTIAL for r in scope["app"].router.routes)
+            raise StarletteHTTPException(405 if partial else 404, "Method Not Allowed" if partial else "Not Found")
+        await super().__call__(scope, receive, send)
 
     async def get_response(self, path, scope):
         try:

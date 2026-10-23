@@ -15,6 +15,12 @@ from src.app import app
 from .pg import pg_url  # noqa: F401  (re-exported fixture)
 
 
+def same(*rs):
+    """Equal JSON bodies, ignoring the per-response error.request_id."""
+    bodies = [{**r.json(), "error": {k: v for k, v in r.json()["error"].items() if k != "request_id"}} if "error" in r.json() else r.json() for r in rs]
+    return all(b == bodies[0] for b in bodies)
+
+
 class AI:
     """What the mocked ILMU chat endpoint answers next. `fail` = HTTP 500."""
     payload: dict = {}

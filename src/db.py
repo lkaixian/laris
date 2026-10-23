@@ -16,10 +16,10 @@ def url() -> str:
 
 
 @contextmanager
-def tx(role="staff", actor="", tenant="*"):
+def tx(role="staff", actor="", tenant="*", timeout=15):
     """Commit on clean exit, roll back on exception. prepare_threshold=None keeps PGlite/pgbouncer happy.
     tenant '*' is for work that crosses tenants on purpose; request code narrows it once the user is known (db/rls.sql)."""
-    with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None, connect_timeout=15) as conn:
+    with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None, connect_timeout=timeout) as conn:
         conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
                      (role, str(actor or ""), str(tenant)))
         yield conn

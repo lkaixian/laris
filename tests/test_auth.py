@@ -6,7 +6,7 @@ import pathlib
 import pytest
 
 from src import auth
-from support.fixtures import env, pg_url  # noqa: F401
+from support.fixtures import env, pg_url, same  # noqa: F401
 
 PW = "correct horse 1"
 
@@ -50,7 +50,7 @@ def test_expired_token_is_401_like_unknown(env):
     H = give_token(e, e.owner, expires="now() - interval '1 second'")
     bad = e.c.get("/api/me", headers=H)
     unknown = e.c.get("/api/me", headers=bearer("nope"))
-    assert bad.status_code == unknown.status_code == 401 and bad.json() == unknown.json()
+    assert bad.status_code == unknown.status_code == 401 and same(bad, unknown)
     assert give_token(e, e.owner) and e.c.get("/api/me", headers=H).status_code == 200
     e.sql("update users set token_expires_at=null where id=%s", (e.owner,))  # legacy / hand-set: no expiry
     assert e.c.get("/api/me", headers=H).status_code == 200

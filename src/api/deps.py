@@ -144,6 +144,7 @@ def _open(request: Request, write: bool):
         # demo header "staff" on an owner's id acts with the staff defaults, never the owner's everything
         granted = perms.ALL if role == "owner" else perms.grant(u["permissions"]) if u["role"] == "staff" else perms.DEFAULT_STAFF
         ctx = Ctx(conn, role, u["id"], u["tenant_id"], u["name"], granted)
+        request.state.tenant_id, request.state.user_id = u["tenant_id"], u["id"]  # only for the error log line
         if write:
             lic.gate(request.url.path, ctx)  # 402 while an enforced installation has no usable licence (reads stay open)
         yield ctx

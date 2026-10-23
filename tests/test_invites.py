@@ -226,9 +226,9 @@ def test_expired_used_unknown_and_tampered_tokens_are_one_uniform_404(env, O):
     seen = []
     for bad in (t, t_used, tampered, "nope", "x" * 200, t.upper()):
         for res in (preview(e, bad), accept(e, bad, username="zed")):
-            assert res.status_code == 404 and res.json() == {"error": INVALID}, bad
-            seen.append(res.text)
-    assert len(set(seen)) == 1
+            assert res.status_code == 404 and res.json()["error"] == {**INVALID, "request_id": res.json()["error"]["request_id"]}, bad
+            seen.append({k: v for k, v in res.json()["error"].items() if k != "request_id"})
+    assert all(x == seen[0] for x in seen)
     assert preview(e, "x" * 201).status_code == 422 and e.c.post("/api/invites/preview", json={}).status_code == 422
     assert e.sql("select count(*) n from users where username='zed'")[0]["n"] == 0
 

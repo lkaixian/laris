@@ -1,6 +1,10 @@
 fastapi==0.159.1
 uvicorn==0.34.0
 httpx==0.28.1
+# Pin security-sensitive transitive dependencies for runtime and publishing installs.
+anyio==4.15.1
+certifi==2026.10.23
+idna==3.20
 pyyaml==6.0.2
 pypdf==6.21.2
 pillow==13.0.0

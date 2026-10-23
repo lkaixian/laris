@@ -41,11 +41,11 @@
 @layer base {
   body { @apply bg-bg text-ink font-sans text-base; }
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) { *, ::before, ::after { transition: none !important; animation: none !important; } }
 }
 
 @layer components {
-  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:opacity-50; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:cursor-wait aria-disabled:opacity-50; }
   /* --brand, --brand-hover, --on-brand are set from the organisation colour (applyBrand in ui.tsx); unset keeps the accent. */
   .btn-primary { border-color: var(--brand, var(--accent)); background-color: var(--brand, var(--accent)); color: var(--on-brand, var(--on-accent)); }
   .btn-primary:hover { border-color: var(--brand-hover, var(--accent-hover)); background-color: var(--brand-hover, var(--accent-hover)); }
@@ -55,10 +55,22 @@
   .badge { @apply inline-block rounded-ui border border-line px-2 py-0.5 text-xs font-semibold text-ink; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
   .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }
-  .navlink { @apply inline-flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-semibold text-muted transition-colors hover:text-ink; }
-  .navlink[aria-current="page"] { @apply text-ink; border-color: var(--brand, var(--accent)); }
+  /* App shell navigation. Active item = bold text + tinted background + a bar on the left (never colour alone). */
+  .sidelink { @apply relative flex min-h-11 items-center gap-3 rounded-ui px-3 text-sm font-medium text-muted transition-colors hover:bg-tint hover:text-ink; }
+  .sidelink[aria-current="page"] { @apply bg-tint font-bold text-ink; box-shadow: inset 3px 0 0 var(--brand, var(--accent)); }
+  .sidegroup { @apply px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted; }
+  /* Loading placeholder: static block, pulses only when motion is allowed. */
+  .skeleton { @apply rounded-ui bg-soft; animation: pulse-soft 1.4s ease-in-out infinite; }
+  .toast { @apply flex w-full items-start gap-2 rounded-ui border border-line bg-surface px-3 py-2 text-sm text-ink shadow-lg; border-left: 4px solid var(--brand, var(--accent)); animation: page-in 150ms ease-out; }
+  .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
+  .page-in { animation: page-in 150ms ease-out; }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
   th { @apply px-3 py-2 text-left text-xs font-semibold text-muted; }
   td { @apply px-3 py-2 align-top text-sm; }
   tbody tr { @apply border-t border-soft; }
 }
+
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pulse-soft { 50% { opacity: 0.55; } }
+@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

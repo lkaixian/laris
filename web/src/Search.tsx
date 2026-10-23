@@ -1,6 +1,5 @@
-import { useEffect } from 'react'
 import type { DocSummary } from './api'
-import { Async, Status, rm, useFetch } from './ui'
+import { Async, PageHeader, Status, TableRegion, rm, useFetch } from './ui'
 
 interface Hit { id: string; role: string; name: string; contact: string | null; email: string | null; documents: number }
 interface Result {
@@ -10,13 +9,11 @@ interface Result {
 
 export function SearchView({ q }: { q: string }) {
   const s = useFetch<Result>(`/search?q=${encodeURIComponent(q)}`)
-  useEffect(() => { document.title = `Search: ${q} · LARIS` }, [q])
   const r = s.data
   const n = r ? r.contacts.length + r.documents.length + (r.cost_items?.length ?? 0) : 0
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Search results for "{q}"</h1>
-      <p role="status" className="mb-4 text-muted">{r ? `${n} ${n === 1 ? 'result' : 'results'}` : ''}</p>
+      <PageHeader title={`Search results for "${q}"`} description={<span role="status">{r ? `${n} ${n === 1 ? 'result' : 'results'}` : ''}</span>} />
       <Async s={s} empty={q.trim().length < 2 || (!!r && n === 0)} emptyText={q.trim().length < 2 ? 'Type at least 2 characters.' : 'Nothing matches. Try a document number, a name, or an item.'}>
         {r && <div className="grid gap-6">
           {r.contacts.length > 0 && (
@@ -40,13 +37,13 @@ export function SearchView({ q }: { q: string }) {
           )}
           {r.cost_items && r.cost_items.length > 0 && (
             <section aria-labelledby="si"><h2 id="si" className="mb-2 text-lg font-semibold">Current costs</h2>
-              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Current costs table" tabIndex={0}>
+              <TableRegion label="Current costs table">
                 <table className="w-full min-w-max"><caption className="sr-only">Cost items matching {q}</caption>
                   <thead><tr><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Unit</th><th scope="col">Unit cost</th><th scope="col">Since</th></tr></thead>
                   <tbody>{r.cost_items.map(c => (
                     <tr key={c.id}><td>{c.item_key}</td><td><a className="link" href={`#/contact/${c.supplier_id}`}>{c.supplier}</a></td>
                       <td>{c.uom}</td><td className="tabular-nums">{rm(c.unit_cost)}</td><td>{c.effective_date}</td></tr>))}</tbody>
-                </table></div></section>
+                </table></TableRegion></section>
           )}
         </div>}
       </Async>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { msg, useFetch } from './ui'
+import { PageHeader, msg, useFetch } from './ui'
 
 interface Answer { reply: string; intent: string; items: { label: string; href: string }[]; source: 'model' | 'keywords'; suggestions: string[] }
 type Turn = { from: 'me'; text: string } | { from: 'bot'; a: Answer } | { from: 'err'; text: string }
@@ -13,7 +13,6 @@ export function AssistantView() {
   const [busy, setBusy] = useState(false)
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
-  useEffect(() => { document.title = 'Assistant · LARIS' }, [])
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [turns])
 
   const ask = async (q: string) => {
@@ -30,8 +29,7 @@ export function AssistantView() {
 
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Assistant</h1>
-      <p className="mb-4 max-w-2xl text-muted">Ask about your quotes, contacts, costs and jobs. It looks things up for you. It cannot change, approve, price or send anything: you do that on the quote.</p>
+      <PageHeader title="Assistant" description="Ask about your quotes, contacts, costs and jobs. It looks things up for you. It cannot change, approve, price or send anything: you do that on the quote." />
       <div className="card flex max-w-2xl flex-col gap-3">
         <div role="log" aria-live="polite" aria-label="Conversation" className="flex min-h-48 flex-col gap-3">
           {turns.length === 0 && <p className="text-sm text-muted">Nothing asked yet. Pick a question below or type your own.</p>}

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, logout, can, canOpen, ApiError } from './api'
+import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, can, canOpen, ApiError } from './api'
 import Login from './Login'
+import { Shell } from './Shell'
+import { ToastProvider, useToast } from './Toast'
 import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
 import { RolesView } from './Roles'
@@ -10,8 +12,8 @@ import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
 import { HomeView } from './Home'
 import { AskView } from './Ask'
-import { CatalogView, canUpload } from './Listings'
-import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status, applyBrand } from './ui'
+import { CatalogView } from './Listings'
+import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
 
@@ -36,7 +38,7 @@ function DocCard({ d, owner }: { d: DocSummary; owner: boolean }) {
   )
 }
 
-function UploadQuote({ onDone }: { onDone: () => void }) {
+function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boolean; onToggle: (o: boolean) => void }) {
   const [text, setText] = useState('')
   const [supplier, setSupplier] = useState('')
   const [formErr, setFormErr] = useState('')
@@ -62,11 +64,11 @@ function UploadQuote({ onDone }: { onDone: () => void }) {
     })
   }
   return (
-    <details className="card mt-3">
+    <details className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Upload supplier quote</summary>
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Quote file (PDF, photo or text)
-          <input ref={file} type="file" accept=".pdf,.txt,image/*" className="input py-2 font-normal" />
+          <input id="quote-file" ref={file} type="file" accept=".pdf,.txt,image/*" className="input py-2 font-normal" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">Or paste the quote text
           <textarea className="input min-h-24 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
@@ -93,7 +95,7 @@ function UploadQuote({ onDone }: { onDone: () => void }) {
 }
 
 const CHANNELS = [['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'], ['web', 'Web'], ['upload', 'Upload']]
-function SimulateEnquiry() {
+function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: boolean) => void }) {
   const [channel, setChannel] = useState('telegram')
   const [text, setText] = useState('')
   const [formErr, setFormErr] = useState('')
@@ -107,7 +109,7 @@ function SimulateEnquiry() {
     })
   }
   return (
-    <details className="card mt-3">
+    <details className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Simulate customer enquiry</summary>
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Channel it arrived on
@@ -116,7 +118,7 @@ function SimulateEnquiry() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">Enquiry text
-          <textarea className="input min-h-24 py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
+          <textarea id="enquiry-text" className="input min-h-24 py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
         </label>
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Pricing the enquiry...' : 'Create draft quote from enquiry'}</button></div>
@@ -126,35 +128,60 @@ function SimulateEnquiry() {
   )
 }
 
-function TrackerView({ owner }: { owner: boolean }) {
+const OPEN_QUOTE = ['draft', 'approved', 'sent', 'read']
+let savedFilter = ''  // list state kept for this visit, so Back from a document returns to the same filtered list
+
+// arg: 'review' and 'open' pre-select a filter (Home links), 'upload' opens the upload form.
+function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   const s = useFetch<Tracker>('/tracker')
-  const [filter, setFilter] = useState('')
+  const [filter, setFilterRaw] = useState(arg === 'review' || arg === 'open' ? arg : savedFilter)
+  const setFilter = (v: string) => { savedFilter = v; setFilterRaw(v) }
+  useEffect(() => { if (arg === 'review' || arg === 'open') setFilter(arg) }, [arg])
+  const [up, setUp] = useState(arg === 'upload')
+  const [sim, setSim] = useState(false)
+  const [tick, setTick] = useState(0)
+  const focusId = useRef(arg === 'upload' ? 'quote-file' : '')
+  // Open a form and put the cursor in it once it exists (the lanes only render after the tracker has loaded).
+  const openForm = (id: string) => { (id === 'quote-file' ? setUp : setSim)(true); focusId.current = id; setTick(t => t + 1) }
+  useEffect(() => {
+    if (!focusId.current || !s.data) return
+    const id = focusId.current; focusId.current = ''
+    requestAnimationFrame(() => { const el = document.getElementById(id); el?.scrollIntoView({ block: 'center' }); el?.focus() })
+  }, [tick, s.data])
   const all = [...(s.data?.received ?? []), ...(s.data?.sent ?? [])]
   const statuses = [...new Set(all.map(d => d.status))].sort()
-  const pick = (l: DocSummary[]) => l.filter(d => !filter || d.status === filter)
+  const match = (d: DocSummary) => !filter || (filter === 'review' ? d.flags.needs_review : filter === 'open' ? d.direction === 'out' && OPEN_QUOTE.includes(d.status) : d.status === filter)
+  const pick = (l: DocSummary[]) => l.filter(match)
   const shown = pick(all).length
-  const lane = (title: string, hint: string, l: DocSummary[], extra: ReactNode) => (
+  const filterName = filter === 'review' ? 'needing review' : filter === 'open' ? 'open customer quotes' : `with status ${label(filter)}`
+  const lane = (title: string, hint: string, l: DocSummary[], extra: ReactNode, empty: { title: string; hint: string; action?: { label: string; onClick: () => void } }) => (
     <section aria-labelledby={title} className="min-w-0">
       <h2 id={title} className="border-b-2 border-accent pb-1 text-lg font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
       {extra}
-      {l.length ? <ul className="mt-3 divide-y divide-soft border-b border-soft bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul> : <p className="py-3 text-muted">{filter ? `No documents with status ${label(filter)}.` : 'No documents yet.'}</p>}
+      {l.length ? <ul className="mt-3 divide-y divide-soft rounded-ui border border-soft bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
+        : <div className="mt-3">{filter ? <p className="py-3 text-muted">No documents {filterName}. <button type="button" className="link" onClick={() => setFilter('')}>Show all</button></p> : <EmptyState {...empty} />}</div>}
     </section>
   )
   return (
     <>
-      <h1 tabIndex={-1} className="mb-3 text-2xl font-semibold">Quote tracker</h1>
+      <PageHeader title="Quote tracker" description="Supplier quotes you received and customer quotes you sent, in one place."
+        actions={can('upload_documents') && <button type="button" className="btn btn-primary" onClick={() => openForm('quote-file')}>Upload quote</button>} />
       <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-semibold">
-        Filter by status
+        Filter
         <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          {statuses.map(x => <option key={x} value={x}>{label(x)}</option>)}
+          <option value="">All documents</option>
+          <option value="review">Needs review</option>
+          <option value="open">Open customer quotes</option>
+          {statuses.map(x => <option key={x} value={x}>Status: {label(x)}</option>)}
         </select>
       </label>
       <p role="status" className="sr-only">{s.data ? `Showing ${shown} ${shown === 1 ? 'document' : 'documents'}` : ''}</p>
-      <Async s={s}>
+      <Async s={s} rows={4}>
         <div className="grid gap-8 md:grid-cols-2">
-          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), can('upload_documents') ? <><UploadQuote onDone={s.reload} />{!MOCK && <ManualQuote onDone={s.reload} />}</> : null)}
-          {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry />)}
+          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), can('upload_documents') ? <><UploadQuote onDone={s.reload} open={up} onToggle={setUp} />{!MOCK && <ManualQuote onDone={s.reload} />}</> : null,
+            { title: 'No supplier quotes yet.', hint: 'Upload a PDF, a photo or pasted text and LARIS reads the prices for you.', action: can('upload_documents') ? { label: 'Upload a supplier quote', onClick: () => openForm('quote-file') } : undefined })}
+          {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry open={sim} onToggle={setSim} />,
+            { title: 'No customer quotes yet.', hint: 'A quote appears here when a customer asks for a price.', action: { label: 'Try a sample enquiry', onClick: () => openForm('enquiry-text') } })}
         </div>
       </Async>
     </>
@@ -214,61 +241,59 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
   const f = useFetch<Field[]>('/fields')
   const [reason, setReason] = useState('')
   const [err, setErr] = useState('')
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState('')  // the status being moved to, shown on that button while it runs
+  const toast = useToast()
   const d = s.data
   const cols = (f.data ?? []).filter(x => x.show_in_grid).sort((a, b) => a.sort_order - b.sort_order)
   const actions = d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []
   const edit = !!d && d.doc.direction === 'in' && REVIEWABLE.includes(d.doc.status)
   const docNo = d?.doc.id === id ? d.doc.doc_no ?? 'Document' : undefined
-  useEffect(() => { document.title = `${docNo ?? 'Loading document'} · LARIS` }, [docNo])
   // Arrived by navigation (focus is parked on main): move it to the heading once the document is there.
   useEffect(() => { if (docNo && document.activeElement === document.getElementById('main')) focusTop() }, [docNo])
   const move = async (to: string) => {
     if (busy) return
-    setBusy(true); setErr(''); setNote('')
+    setBusy(to); setErr('')
     try {
       const r = await api<{ delivery?: string }>('POST', `/documents/${id}/transition`, { to, reason: reason.trim() || undefined })
-      setReason(''); setNote(`${docNo} moved to ${label(to)}.`); s.reload(); focusTop()
+      setReason(''); s.reload(); focusTop()
+      if (r.delivery === 'not_sent') toast(`${docNo} moved to ${label(to)}. No chat contact on file, so nothing was sent.`)
+      else toast(`${docNo} moved to ${label(to)}.`)
       if (r.delivery === 'failed') setErr('Marked as sent, but the message to the customer did not go through. Send the quote PDF by hand.')
-      else if (r.delivery === 'not_sent') setNote(`${docNo} moved to ${label(to)}. No chat contact on file, so nothing was sent.`)
-    } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
+    } catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   const save = async (path: string, name: string) => {
-    setErr(''); setNote('')
-    try { await download(path, name); setNote(`${name} downloaded.`) } catch (e) { setErr(msg(e)) }
+    setErr('')
+    try { await download(path, name); toast(`${name} downloaded.`) } catch (e) { setErr(msg(e)) }
   }
   const lineOf = (lineId?: string) => d?.lines.find(l => l.id === lineId)
   return (
     <>
-      <p className="mb-2"><a className="link inline-flex min-h-11 items-center" href="#/tracker">Back to tracker</a></p>
-      <Async s={s} empty={false}>
+      {!d && <PageHeader back={{ href: '#/tracker', label: 'Back to tracker' }} />}
+      <Async s={s} empty={false} rows={5}>
         {d && (
           <>
-            <h1 tabIndex={-1} className="text-2xl font-semibold">{d.doc.doc_no ?? 'No document number'}</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-              <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
-              <Status v={d.doc.status} />
-              {costs && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
-              <span className="text-muted">Total {rm(d.doc.total)}</span>
-            </p>
-            {d.doc.direction === 'out' && !MOCK && (
-              <p className="mt-2 flex flex-wrap gap-2">
+            <PageHeader back={{ href: '#/tracker', label: 'Back to tracker' }} title={d.doc.doc_no ?? 'No document number'}
+              meta={<>
+                <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
+                <Status v={d.doc.status} />
+                {costs && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
+                <span className="text-muted">Total {rm(d.doc.total)}</span>
+              </>}
+              actions={d.doc.direction === 'out' && !MOCK && <>
                 <button type="button" className="btn" onClick={() => save(`/documents/${id}/pdf`, `${d.doc.doc_no}.pdf`)}>Download quote PDF</button>
                 {can('export_data') && costs && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
                   <button type="button" className="btn" onClick={() => save(`/export/bom.xlsx?quote_id=${id}`, `bom-${d.doc.doc_no}.xlsx`)}>Download BOM (xlsx)</button>
                   <button type="button" className="btn" onClick={() => save(`/export/po.csv?quote_id=${id}`, `po-${d.doc.doc_no}.csv`)}>Download purchase list (csv)</button>
                 </>}
-              </p>
-            )}
+              </>} />
 
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
             <div className="min-w-0 lg:order-1">
             <h2 className="mb-1 text-lg font-semibold">Lines</h2>
-            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. Lines marked Needs review are unclear on the source document.</p>}
+            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. The item key is a short code that links the line to your cost book, for example acrylic_3mm_sheet. Lines marked Needs review are unclear on the source document.</p>}
             {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
             {d.lines.length === 0 ? <p className="card text-muted">This document has no lines.</p> : (
-              <div className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label="Lines" tabIndex={0}>
+              <TableRegion label="Lines">
                 <table className="w-full min-w-max">
                   <caption className="sr-only">Lines of {d.doc.doc_no ?? 'this document'}</caption>
                   <thead><tr>
@@ -277,16 +302,15 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
                     {edit && <th scope="col">Action</th>}
                   </tr></thead>
-                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { setNote(`Line ${n} saved.`); s.reload() }} />)}</tbody>
+                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { toast(`Line ${n} saved.`); s.reload() }} />)}</tbody>
                 </table>
-              </div>
+              </TableRegion>
             )}
             </div>
 
             <aside className="grid gap-6 lg:order-2">
             <section className="card border-l-4 border-l-accent" aria-labelledby="actions">
               <h2 id="actions" className="font-semibold">Decision</h2>
-              <p role="status" className="text-sm">{note}</p>
               {!actions.length && <p className="text-sm text-muted">This document is {label(d.doc.status)}. No further actions.</p>}
               {actions.length > 0 && !owner && !actions.some(a => !a.owner) && <p className="text-sm text-muted">Only the owner can decide on this quote. Switch the simulated role to owner to try it.</p>}
               {actions.some(a => !a.owner || owner) && (
@@ -296,7 +320,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                   </label>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {actions.filter(a => !a.owner || owner).map(a => (
-                      <button key={a.to} aria-disabled={busy || undefined} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{a.label}</button>
+                      <button key={a.to} aria-disabled={!!busy || undefined} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{busy === a.to ? 'Working...' : a.label}</button>
                     ))}
                   </div>
                 </>
@@ -373,19 +397,19 @@ const JOB_COLS: [Job['status'], string][] = [['todo', 'To do'], ['doing', 'In pr
 function JobsView() {
   const s = useFetch<Job[]>('/jobs')
   const [err, setErr] = useState('')
-  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState('')  // "<job id>:<status>" while that move runs
+  const toast = useToast()
   const move = async (j: Job, status: Job['status']) => {
-    setErr(''); setNote('')
-    try { await api('POST', `/jobs/${j.id}`, { status }); setNote(`${j.quote_no} moved to ${JOB_COLS.find(c => c[0] === status)![1]}.`); s.reload() }
-    catch (e) { setErr(msg(e)) }
+    if (busy) return
+    setErr(''); setBusy(`${j.id}:${status}`)
+    try { await api('POST', `/jobs/${j.id}`, { status }); toast(`${j.quote_no} moved to ${JOB_COLS.find(c => c[0] === status)![1]}.`); s.reload() }
+    catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Jobs</h1>
-      <p className="mb-4 text-muted">Created when a customer accepts a quote ("Sign and create job" on the quote).</p>
+      <PageHeader title="Jobs" description={'Created when a customer accepts a quote ("Sign and create job" on the quote).'} />
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
-      <p role="status" className="mb-2 text-sm">{note}</p>
-      <Async s={s} empty={!s.data?.length} emptyText="No jobs yet. A job appears when an accepted quote is signed.">
+      <Async s={s} rows={3} shape="cards" empty={!s.data?.length} emptyText="No jobs yet." emptyHint="A job appears when a customer accepts a quote and it is signed." emptyAction={{ label: 'Open the tracker', href: '#/tracker/open' }}>
         <div className="grid gap-4 md:grid-cols-3">
           {JOB_COLS.map(([st, title]) => {
             const list = (s.data ?? []).filter(j => j.status === st)
@@ -400,7 +424,7 @@ function JobsView() {
                       <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {JOB_COLS.filter(c => c[0] !== st).map(([to, label]) => (
-                          <button key={to} type="button" className="btn" onClick={() => move(j, to)}>Move {j.quote_no} to {label}</button>
+                          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} onClick={() => move(j, to)}>{busy === `${j.id}:${to}` ? 'Moving...' : `Move ${j.quote_no} to ${label}`}</button>
                         ))}
                       </div>
                     </li>
@@ -464,7 +488,7 @@ function ManualQuote({ onDone }: { onDone: () => void }) {
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn" onClick={() => setRows([...rows, blank()])}>Add a line</button>
-          <button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Saving...' : 'Add to tracker'}</button>
+          <button type="submit" className="btn" aria-disabled={a.busy || undefined}>{a.busy ? 'Saving...' : 'Add to tracker'}</button>
         </div>
       </form>
       <ActionError err={a.err} onRetry={submit} label="Retry saving" />
@@ -477,10 +501,11 @@ function SettingsView({ owner }: { owner: boolean }) {
   const s = useFetch<Settings>('/settings')
   const [f, setF] = useState<Settings>()
   const [err, setErr] = useState('')
-  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
   const [logoErr, setLogoErr] = useState('')
+  const toast = useToast()
   useEffect(() => { if (s.data) setF(s.data) }, [s.data])
-  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1><p className="card mt-3 text-muted">You do not have access. Only the owner changes settings.</p></>
+  if (!owner) return <><PageHeader title="Settings" /><p className="card text-muted">You do not have access. Only the owner changes settings.</p></>
   const text = (k: 'ssm_no' | 'address' | 'bank_details' | 'sst_no', name: string) => (
     <label className="flex flex-col gap-1 text-sm font-semibold">{name}
       <input className="input font-normal" value={f?.[k] ?? ''} onChange={e => f && setF({ ...f, [k]: e.target.value })} /></label>
@@ -499,27 +524,27 @@ function SettingsView({ owner }: { owner: boolean }) {
     r.readAsDataURL(file)
   }
   const save = async () => {
-    if (!f) return
-    setErr(''); setNote('')
+    if (!f || busy) return
+    setErr('')
     if (!colourOk) return setErr('The brand colour must be a hex colour like #0f5c47.')
+    setBusy(true)
     try {
       const out = await api<Settings>('POST', '/settings', {
         display_name: f.display_name?.trim() || null, brand_color: colour ? colour.toLowerCase() : null, logo_data_url: f.logo_data_url || null,
         min_margin_pct: f.min_margin_pct, ssm_no: f.ssm_no ?? '', address: f.address ?? '', bank_details: f.bank_details ?? '',
         sst_registered: f.sst_registered, sst_no: f.sst_no ?? '' })
-      setF(out); setNote('Settings saved.')
+      setF(out); toast('Settings saved.')
       window.dispatchEvent(new Event('laris:branding'))
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 413 ? 'The logo is too large. Use an image under 200 KB.'
         : e instanceof ApiError && e.status === 415 ? 'The logo must be a PNG, JPEG or WebP image.'
         : e instanceof ApiError && e.status === 422 && /colou?r/i.test(e.code + e.message) ? 'The brand colour is not valid. Use a hex colour like #0f5c47.' : msg(e))
-    }
+    } finally { setBusy(false) }
   }
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1>
-      <p className="mb-4 text-muted">The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save.</p>
-      <Async s={s} empty={false}>
+      <PageHeader title="Settings" description="The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save." />
+      <Async s={s} empty={false} rows={4}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
             <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
@@ -548,7 +573,8 @@ function SettingsView({ owner }: { owner: boolean }) {
               </div>
             </fieldset>
             <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
-              <input className="input font-normal" inputMode="decimal" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} /></label>
+              <input className="input font-normal" inputMode="decimal" aria-describedby="mf-help" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} />
+              <Hint id="mf-help">Margin is profit as a share of the selling price. A quote below this is flagged for review.</Hint></label>
             {text('ssm_no', 'SSM registration number')}
             {text('address', 'Business address')}
             {text('bank_details', 'Bank details for payment')}
@@ -556,8 +582,7 @@ function SettingsView({ owner }: { owner: boolean }) {
               <input type="checkbox" checked={f.sst_registered} onChange={e => setF({ ...f, sst_registered: e.target.checked })} /> Registered for SST</label>
             {f.sst_registered && text('sst_no', 'SST registration number')}
             {err && <p role="alert" className="text-sm text-warn">{err}</p>}
-            <p role="status" className="text-sm">{note}</p>
-            <div><button type="submit" className="btn btn-primary">Save settings</button></div>
+            <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save settings'}</button></div>
           </form>
         )}
       </Async>
@@ -568,19 +593,20 @@ function SettingsView({ owner }: { owner: boolean }) {
 function Followups() {
   const s = useFetch<Followup[]>('/followups')
   const [err, setErr] = useState('')
-  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState('')  // "<id>:<action>" while that call runs
+  const toast = useToast()
   const act = async (f: Followup, action: 'send' | 'skip') => {
-    setErr(''); setNote('')
-    try { await api('POST', `/followups/${f.id}`, { action }); setNote(action === 'send' ? `Follow-up for ${f.doc_no} sent.` : `Follow-up for ${f.doc_no} skipped.`); s.reload() }
-    catch (e) { setErr(msg(e)) }
+    if (busy) return
+    setErr(''); setBusy(`${f.id}:${action}`)
+    try { await api('POST', `/followups/${f.id}`, { action }); toast(action === 'send' ? `Follow-up for ${f.doc_no} sent.` : `Follow-up for ${f.doc_no} skipped.`); s.reload() }
+    catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   return (
-    <section className="mt-10 border-t border-soft pt-6" aria-labelledby="fu">
+    <section id="followups" className="mt-10 scroll-mt-20 border-t border-soft pt-6" aria-labelledby="fu">
       <h2 id="fu" className="text-base font-semibold">Quotes waiting for a reply</h2>
       <p className="mb-2 text-sm text-muted">No answer after the follow-up window. Read the message, then send it or skip. Nothing is sent without you.</p>
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
-      <p role="status" className="mb-2 text-sm">{note}</p>
-      <Async s={s} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up.">
+      <Async s={s} rows={2} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up." emptyHint="When a customer has not answered after the follow-up window, the quote shows up here.">
         <ul className="grid gap-2 md:grid-cols-2">
           {s.data?.map(f => (
             <li key={f.id} className="card">
@@ -588,8 +614,8 @@ function Followups() {
               <p className="mt-1 text-sm text-muted">{f.reason}</p>
               <p className="mt-2 text-sm">{f.suggested_text ?? 'No chat contact on file: call the customer, then skip this.'}</p>
               {can('manage_followups') && <div className="mt-3 flex flex-wrap gap-2">
-                {f.suggested_text && <button type="button" className="btn btn-primary" onClick={() => act(f, 'send')}>Send follow-up for {f.doc_no}</button>}
-                <button type="button" className="btn" onClick={() => act(f, 'skip')}>Skip {f.doc_no}</button>
+                {f.suggested_text && <button type="button" className="btn btn-primary" aria-disabled={!!busy || undefined} onClick={() => act(f, 'send')}>{busy === `${f.id}:send` ? 'Sending...' : `Send follow-up for ${f.doc_no}`}</button>}
+                <button type="button" className="btn" aria-disabled={!!busy || undefined} onClick={() => act(f, 'skip')}>{busy === `${f.id}:skip` ? 'Skipping...' : `Skip ${f.doc_no}`}</button>
               </div>}
             </li>
           ))}
@@ -603,17 +629,20 @@ function Proposals() {
   const s = useFetch<Proposal[]>('/field-proposals')
   const [err, setErr] = useState('')
   const [type, setType] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState('')
+  const toast = useToast()
   const decide = async (p: Proposal, decision: 'approve' | 'ignore') => {
-    setErr('')
-    try { await api('POST', `/field-proposals/${p.id}/decide`, { decision, type: type[p.id] ?? 'text', label: p.key.replace(/_/g, ' ') }); s.reload(); focusTop() }
-    catch (e) { setErr(msg(e)) }
+    if (busy) return
+    setErr(''); setBusy(`${p.id}:${decision}`)
+    try { await api('POST', `/field-proposals/${p.id}/decide`, { decision, type: type[p.id] ?? 'text', label: p.key.replace(/_/g, ' ') }); toast(decision === 'approve' ? `${p.key} added as a column.` : `${p.key} ignored.`); s.reload(); focusTop() }
+    catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   return (
     <section className="mt-10 border-t border-soft pt-6" aria-labelledby="newf">
       <h2 id="newf" className="text-base font-semibold">New fields seen on documents</h2>
       <p className="mb-2 text-sm text-muted">A field the extractor found that is not a column yet. Nothing becomes a column until you approve it.</p>
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
-      <Async s={s} empty={!s.data?.length} emptyText="No unknown fields waiting for a decision.">
+      <Async s={s} rows={2} empty={!s.data?.length} emptyText="No unknown fields waiting for a decision.">
         <ul className="grid gap-2 md:grid-cols-2">
           {s.data?.map(p => (
             <li key={p.id} className="card">
@@ -625,8 +654,8 @@ function Proposals() {
                 </select>
               </label>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button className="btn btn-primary" onClick={() => decide(p, 'approve')}>Add {p.key} as column</button>
-                <button className="btn" onClick={() => decide(p, 'ignore')}>Ignore {p.key}</button>
+                <button className="btn btn-primary" aria-disabled={!!busy || undefined} onClick={() => decide(p, 'approve')}>{busy === `${p.id}:approve` ? 'Adding...' : `Add ${p.key} as column`}</button>
+                <button className="btn" aria-disabled={!!busy || undefined} onClick={() => decide(p, 'ignore')}>{busy === `${p.id}:ignore` ? 'Ignoring...' : `Ignore ${p.key}`}</button>
               </div>
             </li>
           ))}
@@ -636,17 +665,17 @@ function Proposals() {
   )
 }
 
-function AlertsView() {
+function AlertsView({ arg }: { arg?: string }) {
   const s = useFetch<Alert[]>('/alerts/stale-costs')
+  useEffect(() => { if (arg === 'followups') requestAnimationFrame(() => document.getElementById('followups')?.scrollIntoView({ block: 'start' })) }, [arg])
   const n = s.data?.length ?? 0
   const lost = (s.data ?? []).reduce((a, x) => a + Number(x.margin_delta), 0)
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1>
+      <PageHeader title="Stale-cost alerts" description="Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically." />
       {can('view_reports') && <Report />}
-      <p className="mb-6 text-muted">Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically.</p>
       <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
-      <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost.">
+      <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost." emptyHint="You will see a quote here if a supplier raises a price after you quoted.">
         <ul className="grid gap-2">
           {s.data?.map(a => (
             <li key={a.quote_id + a.item_key} className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-l-4 border-l-amber">
@@ -655,7 +684,7 @@ function AlertsView() {
               <p className="mt-1 text-sm">{a.item_key}: cost {rm(a.old_cost)} to {rm(a.current_cost)}</p>
               <p className="mt-2 flex flex-wrap items-center gap-2"><span className="badge badge-warn">Margin down {rm(String(Math.abs(Number(a.margin_delta))))}</span><Status v={a.status} /></p>
               </div>
-              <a className="btn btn-primary" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
+              <a className="btn" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
             </li>
           ))}
         </ul>
@@ -688,11 +717,10 @@ function ActivityView() {
   useEffect(() => { poll(); const t = setInterval(poll, 4000); return () => clearInterval(t) }, [])
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Activity log</h1>
-      <p className="mb-3 text-sm text-muted">Checks for new events every 4 seconds.{checked && ` Last checked ${checked}.`}</p>
+      <PageHeader title="Activity log" description={`Checks for new events every 4 seconds.${checked ? ` Last checked ${checked}.` : ''}`} />
       <p role="status" className="sr-only">{announce}</p>
       {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button className="btn mt-3" onClick={poll}>Retry loading</button></div>}
-      {loading ? <p role="status" className="text-muted">Loading...</p> : events.length === 0 && !error ? <p className="card text-muted">No activity yet.</p> : (
+      {loading ? <Skeleton rows={5} shape="text" /> : events.length === 0 && !error ? <EmptyState title="No activity yet." hint="Uploads, approvals and sign-ins are listed here as they happen." /> : (
         <ol className="grid gap-2">
           {events.map(e => (
             <li key={e.id} className="card text-sm">
@@ -706,25 +734,74 @@ function ActivityView() {
   )
 }
 
-// ---------- Shell ----------
-const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', ask: 'Ask suppliers', catalog: 'Catalog photos', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', roles: 'Roles', account: 'Account' }
+// ---------- Pages and shell ----------
+/*
+  ADD A PAGE: write the view component, add one entry to PAGES (hash route -> title + render), add a nav item in Shell.tsx NAV,
+  and, if it needs a permission, one line in NEED in api.ts. Start the view with <PageHeader title=... /> (it sets <title> and is the focus target).
+  Detail pages use PageHeader's `back` prop and a route like #/thing/<id> (arg).
+*/
+interface PageCtx { me: Me; owner: boolean; arg?: string }
+const NotFound = () => <><PageHeader title="Page not found" /><EmptyState title="That page does not exist." action={{ label: 'Open the tracker', href: '#/tracker' }} /></>
+const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }> = {
+  home: { title: 'Home', render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
+  alerts: { title: 'Stale-cost alerts', render: c => <AlertsView arg={c.arg} /> },
+  tracker: { title: 'Quote tracker', render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },
+  contacts: { title: 'Contacts', render: c => <ContactsView owner={can('view_costs')} arg={c.arg} /> },
+  contact: { title: 'Contact', render: c => c.arg ? <ContactDetail id={c.arg} owner={can('view_costs')} /> : <NotFound /> },
+  ask: { title: 'Ask suppliers', render: () => <AskView owner={can('view_replies_prices')} /> },
+  catalog: { title: 'Catalog photos', render: c => <CatalogView me={c.me} owner={c.owner} id={c.arg} /> },
+  assistant: { title: 'Assistant', render: () => <AssistantView /> },
+  search: { title: 'Search', render: c => <SearchView q={decodeURIComponent(c.arg ?? '')} /> },
+  jobs: { title: 'Jobs', render: () => <JobsView /> },
+  settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} /> },
+  team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
+  roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
+  account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} /> },
+  activity: { title: 'Activity log', render: () => <ActivityView /> },
+  doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
+}
+
+const routeOf = (h: string) => h.split('/')[1] || 'home'
+
+// Put a list page back where the reader left it (after Back from a document). Waits for the content to be tall enough; stops if the reader scrolls.
+function restoreScroll(y: number) {
+  let n = 0, stop = false
+  const off = () => { stop = true }
+  const evs = ['wheel', 'touchstart', 'keydown'] as const
+  evs.forEach(e => addEventListener(e, off, { once: true, passive: true }))
+  const tick = () => { if (stop) return; scrollTo(0, y); if (Math.abs(scrollY - y) < 2 || ++n > 180) return; requestAnimationFrame(tick) }
+  requestAnimationFrame(tick)
+  return () => { stop = true; evs.forEach(e => removeEventListener(e, off)) }
+}
 
 export default function App() {
+  return <ToastProvider><AppShell /></ToastProvider>
+}
+
+/*
+  Sign-in states live here: `gate` is 'checking' | 'login' | 'ready'. A new pre-login screen (register, verify, licence) is another gate
+  value rendered before the <Shell>; pages only ever render inside the shell once the gate is 'ready' and /api/me has answered.
+*/
+function AppShell() {
+  const toast = useToast()
   const [hash, setHash] = useState(location.hash)
   const [role, setRoleState] = useState<Role>(getRole())
-  const [roleNote, setRoleNote] = useState('')
-  useEffect(() => { const h = () => setHash(location.hash); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h) }, [])
+  const prev = useRef({ from: location.hash, now: location.hash })
+  const seen = useRef(new Map<string, number>())  // route -> scrollY when it was left
+  useEffect(() => {
+    history.scrollRestoration = 'manual'
+    const h = () => {
+      seen.current.set(routeOf(prev.current.now), scrollY)  // read before React swaps the page
+      prev.current = { from: prev.current.now, now: location.hash }
+      setHash(location.hash)
+    }
+    addEventListener('hashchange', h); return () => removeEventListener('hashchange', h)
+  }, [])
   const [dark, setDark] = useState(document.documentElement.dataset.theme === 'dark')
   // The user id comes from GET /api/me (X-Role only). Re-resolved whenever the simulated role changes; nothing renders before it.
   const [me, setMe] = useState<Me>()
   const [meErr, setMeErr] = useState('')
   const [tries, setTries] = useState(0)
-  const [searchText, setSearchText] = useState('')
-  const searchBox = useRef<HTMLInputElement>(null)
-  useEffect(() => {  // "/" jumps to the search box, like most list tools
-    const k = (e: KeyboardEvent) => { if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); searchBox.current?.focus() } }
-    addEventListener('keydown', k); return () => removeEventListener('keydown', k)
-  }, [])
   // 'login' shows the sign-in screen: when the server needs accounts and this tab has no session, or the session ended.
   const [gate, setGate] = useState<'checking' | 'login' | 'ready'>(MOCK ? 'ready' : 'checking')
   useEffect(() => {
@@ -743,86 +820,46 @@ export default function App() {
     return () => { live = false }
   }, [role, tries, gate])
   const owner = role === 'owner'
-  const signedIn = !!getToken()
   const [, page, arg] = hash.split('/')
   const route = page || 'home'
-  useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · ${me?.org.name ?? 'LARIS'}` }, [route, me?.org.name])
   useEffect(() => applyBrand(me?.org), [me?.org])
   // Branding saved on the Settings page: re-read /me without blanking the page.
   useEffect(() => {
     const h = () => resolveMe(role).then(setMe, () => undefined)
     addEventListener('laris:branding', h); return () => removeEventListener('laris:branding', h)
   }, [role])
+  // On navigation: back to a list from a document restores its scroll position, any other route change starts at the top; focus goes to the page heading.
   const firstNav = useRef(true)
-  useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
-  if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
+  useEffect(() => {
+    if (firstNav.current) { firstNav.current = false; return }
+    const to = routeOf(hash), from = routeOf(prev.current.from)
+    const y = (from === 'doc' || from === 'contact') && to !== from ? seen.current.get(to) : undefined
+    if (!y && to !== from) scrollTo(0, 0)
+    focusTop(!!y || to !== from)
+    return y ? restoreScroll(y) : undefined
+  }, [hash])
+  const onRole = (r: Role) => { setRole(r); setRoleState(r); toast(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }
+  if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
-  const runSearch = () => { const t = searchText.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
-  const nav = [['home', 'Home'], ['alerts', 'Stale costs'], ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ...(canUpload(me) ? [['catalog', 'Catalog photos']] : []), ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ['team', 'Team'], ['roles', 'Roles'], ['settings', 'Settings'], ...(MOCK ? [['account', 'Account']] : [])].filter(([k]) => canOpen(k, owner))
+  const entry = PAGES[route]
   return (
-    <>
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
-      <header className="border-b border-soft bg-surface">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
-          <div className="flex min-w-0 flex-1 basis-60 items-center gap-3">
-            <span className="shrink-0"><Brand dark={dark} /></span>
-            {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line" /><OrgMark org={me.org} /></>}
-          </div>
-          <ThemeToggle dark={dark} setDark={setDark} />
-          {signedIn ? (
-            <span className="flex flex-wrap items-center gap-2 text-sm">
-              <a className="link inline-flex min-h-11 items-center" href="#/account">{me ? `${me.name} (${me.role_name ?? me.role})` : 'Account'}</a>
-              <button type="button" className="btn" onClick={() => logout()}>Sign out</button>
-            </span>
-          ) : <label className="flex items-center gap-2 text-sm font-semibold">
-            Role (simulated)
-            <select className="input" value={role} onChange={e => { const r = e.target.value as Role; setRole(r); setRoleState(r); setRoleNote(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }}>
-              <option value="owner">Owner</option><option value="staff">Staff</option>
-            </select>
-          </label>}
-        </div>
-        <form role="search" className="mx-auto flex max-w-6xl gap-2 px-4 pb-2" onSubmit={e => { e.preventDefault(); runSearch() }}>
-          <label className="sr-only" htmlFor="gs">Search everything</label>
-          <input id="gs" ref={searchBox} type="search" className="input min-w-0 flex-1" placeholder="Search (press / to focus)"
-            value={searchText} onChange={e => setSearchText(e.target.value)} />
-          <button type="submit" className="btn">Search</button>
-        </form>
-        <nav aria-label="Main" className="mx-auto flex max-w-6xl flex-wrap px-1">
-          {nav.map(([k, t]) => <a key={k} className="navlink" href={`#/${k}`} aria-current={route === k || (route === 'doc' && k === 'tracker') || (route === 'contact' && k === 'contacts') ? 'page' : undefined}>{t}</a>)}
-        </nav>
-      </header>
-      {!MOCK && getAccount() && <IdleGuard />}
-      <p role="status" className="sr-only">{roleNote}</p>
-      {MOCK && <p className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</p>}
-      <main id="main" tabIndex={-1} key={role} className="mx-auto max-w-6xl px-4 py-5">
+    <OrgCtx value={me?.org.name ?? 'LARIS'}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>Could not identify the signed-in user: {meErr}</p>
             <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
           </div>
-        ) : !me ? <p role="status" className="text-muted">Loading...</p> : !canOpen(route, owner) ? <>
-          <h1 tabIndex={-1} className="text-2xl font-semibold">{TITLES[route]}</h1>
-          <p role="alert" className="card mt-3 text-muted">You do not have access to this page. Ask the owner to change your role if you need it.</p>
-        </> : <>
-          {route === 'home' && <HomeView owner={can('view_costs')} name={me.name} />}
-          {route === 'alerts' && <AlertsView />}
-          {route === 'tracker' && <TrackerView owner={can('view_costs')} />}
-          {route === 'contacts' && <ContactsView owner={can('view_costs')} />}
-          {route === 'ask' && <AskView owner={can('view_replies_prices')} />}
-          {route === 'catalog' && <CatalogView me={me} owner={owner} id={arg} />}
-          {route === 'assistant' && <AssistantView />}
-          {route === 'search' && <SearchView q={decodeURIComponent(arg ?? '')} />}
-          {route === 'contact' && arg && <ContactDetail id={arg} owner={can('view_costs')} />}
-          {route === 'jobs' && <JobsView />}
-          {route === 'settings' && <SettingsView owner={owner} />}
-          {route === 'team' && <TeamView owner={owner} meId={me.id} />}
-          {route === 'roles' && <RolesView owner={owner} />}
-          {route === 'account' && <AccountView name={me.name} role={me.role_name ?? me.role} />}
-          {route === 'activity' && <ActivityView />}
-          {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'ask', 'catalog', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'roles', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
-        </>}
-      </main>
-    </>
+        ) : !me ? <Skeleton rows={4} /> : (
+          <div key={route + (route === 'doc' || route === 'contact' ? arg : '')} className="page-in">
+            {!canOpen(route, owner) ? <>
+              <PageHeader title={entry?.title ?? 'Page'} />
+              <p role="alert" className="card text-muted">You do not have access to this page. Ask the owner to change your role if you need it.</p>
+            </> : entry ? entry.render({ me, owner, arg }) : <NotFound />}
+          </div>
+        )}
+      </Shell>
+      {!MOCK && getAccount() && <IdleGuard />}
+    </OrgCtx>
   )
 }

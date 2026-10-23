@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { api, ApiError } from './api'
-import { ActionError, Async, useAction, useFetch } from './ui'
+import { ActionError, Async, PageHeader, focusTop, useAction, useFetch } from './ui'
+import { useToast } from './Toast'
 
 interface RoleRow { id: string; key: string; name: string; class: 'owner' | 'staff'; is_system: boolean; permissions: string[]; users: number }
 interface Perm { key: string; label: string; description: string; group: string; default: boolean }
@@ -72,24 +73,22 @@ export function RolesView({ owner }: { owner: boolean }) {
   const s = useFetch<Roles>('/roles')
   const [editing, setEditing] = useState<string>()   // role id, or 'new'
   const [confirm, setConfirm] = useState('')
-  const [note, setNote] = useState('')
+  const toast = useToast()
   const del = useAction()
   const last = useRef<() => void>(undefined)
-  const head = useRef<HTMLHeadingElement>(null)
-  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Roles</h1><p className="card mt-3 text-muted">You do not have access. Only the owner manages roles.</p></>
-  const done = (text: string) => { setEditing(undefined); setConfirm(''); if (text) setNote(text); s.reload(); head.current?.focus() }
+  if (!owner) return <><PageHeader title="Roles" /><p className="card text-muted">You do not have access. Only the owner manages roles.</p></>
+  const done = (text: string) => { setEditing(undefined); setConfirm(''); if (text) toast(text); s.reload(); focusTop() }
   const remove = (r: RoleRow) => {
-    last.current = () => remove(r); setNote('')
+    last.current = () => remove(r)
     del.run(async () => { try { await api('DELETE', `/roles/${r.id}`) } catch (e) { throw friendly(e) }; done(`Role ${r.name} deleted.`) })
   }
   const d = s.data
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Roles</h1>
-      <p className="mb-4 text-muted">A role is a set of permissions. Everyone holds one role, chosen on the Team page. Changing what a role can do applies at once.</p>
-      <p role="status" className="mb-2 text-sm"><span ref={head} tabIndex={-1}>{note}</span></p>
+      <PageHeader title="Roles" description="A role is a set of permissions. Everyone holds one role, chosen on the Team page. Changing what a role can do applies at once."
+        actions={editing !== 'new' && <button type="button" className="btn btn-primary" onClick={() => { setEditing('new'); setConfirm('') }}>New role</button>} />
       <ActionError err={del.err} onRetry={() => last.current?.()} label="Try again" />
-      <Async s={s} empty={!d} emptyText="No roles.">
+      <Async s={s} rows={3} empty={!d} emptyText="No roles.">
         {d && <>
           <ul className="grid gap-2">
             {d.roles.map(r => (
@@ -114,10 +113,7 @@ export function RolesView({ owner }: { owner: boolean }) {
               </li>
             ))}
           </ul>
-          <div className="mt-4">
-            {editing === 'new' ? <Editor role={null} data={d} onDone={done} />
-              : <button type="button" className="btn btn-primary" onClick={() => { setEditing('new'); setConfirm('') }}>New role</button>}
-          </div>
+          {editing === 'new' && <div className="mt-4"><Editor role={null} data={d} onDone={done} /></div>}
           <section className="mt-8 border-t border-soft pt-6" aria-labelledby="oo">
             <h2 id="oo" className="text-base font-semibold">Always owner-only</h2>
             <p className="mb-2 text-sm text-muted">These cannot be given to any role. Only people who hold the Owner role can do them.</p>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
 import { api, imageUrl } from './api'
-import { rm, useFetch, useAction, ActionError, Async } from './ui'
+import { rm, useFetch, useAction, ActionError, Async, Hint, PageHeader, TableRegion } from './ui'
 
 // "Ask suppliers": photograph an item, circle it, ask suppliers on WhatsApp how much. Contract: docs/api-contract.md (RFQ).
 interface Supplier { id: string; name: string; contact: string | null }
@@ -114,13 +114,13 @@ function AskForm({ onSent }: { onSent: () => void }) {
     <section aria-labelledby="ask-form">
       <h2 id="ask-form" className="mb-2 text-lg font-semibold">Ask for a price</h2>
       <form className="grid max-w-2xl gap-4" onSubmit={e => { e.preventDefault(); submit() }}>
-        <label className="flex flex-col gap-1 text-sm font-semibold">1. Photo of the item (take one or choose from the gallery)
-          <input ref={file} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => choose(e.target.files?.[0])} />
+        <label className="flex flex-col gap-1 text-sm font-semibold">Photo of the item (take one or choose from the gallery)
+          <input id="ask-photo" ref={file} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => choose(e.target.files?.[0])} />
         </label>
 
         {img && (
           <div className="grid gap-2">
-            <p id="ring-help" className="text-sm">2. Circle the item: drag on the photo from the centre outwards, or use the buttons below. A circle is optional.</p>
+            <p id="ring-help" className="text-sm">Circle the item: drag on the photo from the centre outwards, or use the buttons below. A circle is optional.</p>
             <canvas ref={canvas} role="img" aria-label={circle ? 'Photo of the item with a red circle drawn on it' : 'Photo of the item, no circle drawn'} aria-describedby="ring-help"
               className="h-auto max-w-full touch-none cursor-crosshair rounded-ui border border-line" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
             <div role="group" aria-label="Circle controls" className="flex flex-wrap gap-2">
@@ -137,13 +137,13 @@ function AskForm({ onSent }: { onSent: () => void }) {
           </div>
         )}
 
-        <label className="flex flex-col gap-1 text-sm font-semibold">3. What is it? (required, up to 200 characters)
+        <label className="flex flex-col gap-1 text-sm font-semibold">What is it? (required, up to 200 characters)
           <input ref={descBox} className="input font-normal" maxLength={200} placeholder="ballet flat, cream, strap" value={desc} onChange={e => setDesc(e.target.value)} />
         </label>
 
         <fieldset className="min-w-0">
-          <legend className="mb-1 text-sm font-semibold">4. Which suppliers to ask? (choose at least one)</legend>
-          <Async s={sup} empty={!sup.data?.length} emptyText="No suppliers yet. Add one under Contacts first.">
+          <legend className="mb-1 text-sm font-semibold">Which suppliers to ask? (choose at least one)</legend>
+          <Async s={sup} rows={3} empty={!sup.data?.length} emptyText="No suppliers yet." emptyHint="Add the suppliers you want to ask under Contacts first." emptyAction={{ label: 'Add a supplier', href: '#/contacts/new' }}>
             <ul className="grid gap-1">
               {sup.data?.map(s => (
                 <li key={s.id}>
@@ -157,7 +157,7 @@ function AskForm({ onSent }: { onSent: () => void }) {
           </Async>
         </fieldset>
 
-        <label className="flex flex-col gap-1 text-sm font-semibold">5. Ask (optional, you can edit it, up to 300 characters)
+        <label className="flex flex-col gap-1 text-sm font-semibold">Message to the suppliers (optional, you can edit it, up to 300 characters)
           <textarea className="input min-h-20 py-2 font-normal" maxLength={300} value={note} onChange={e => setNote(e.target.value)} />
         </label>
 
@@ -212,7 +212,8 @@ function AcceptCell({ rfq, r, onDone }: { rfq: string; r: Reply; onDone: () => v
       {open && (
         <form id={id} className="mt-2 grid gap-2" onSubmit={e => { e.preventDefault(); submit() }}>
           <label className="flex flex-col gap-1 text-sm font-semibold">Item key for {r.supplier_name}
-            <input className="input w-48 font-normal" value={key} onChange={e => setKey(e.target.value)} autoFocus />
+            <input className="input w-48 font-normal" aria-describedby={`${id}-help`} value={key} onChange={e => setKey(e.target.value)} autoFocus />
+            <Hint id={`${id}-help`}>A short code for this item in your cost book, like acrylic_3mm_sheet.</Hint>
           </label>
           {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
           <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Saving...' : `Confirm accept for ${r.supplier_name}`}</button></div>
@@ -227,10 +228,10 @@ function Comparison({ q, onDone }: { q: Rfq; onDone: () => void }) {
   const prices = q.replies.filter(r => r.unit_price !== null).map(r => Number(r.unit_price))
   const best = prices.length > 1 ? Math.min(...prices) : undefined
   return (
-    <div className="mt-2 max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label={`Replies for ${q.description}`} tabIndex={0}>
+    <div className="mt-2"><TableRegion label={`Replies for ${q.description}`}>
       <table className="w-full min-w-max">
         <caption className="sr-only">Supplier replies for {q.description}</caption>
-        <thead><tr><th scope="col">Supplier</th><th scope="col">Price</th><th scope="col">MOQ</th><th scope="col">Price breaks</th><th scope="col">Their reply</th><th scope="col">Action</th></tr></thead>
+        <thead><tr><th scope="col">Supplier</th><th scope="col">Price</th><th scope="col"><abbr title="Minimum order quantity">MOQ</abbr></th><th scope="col">Price breaks</th><th scope="col">Their reply</th><th scope="col">Action</th></tr></thead>
         <tbody>
           {q.replies.map(r => {
             const cheapest = best !== undefined && r.unit_price !== null && Number(r.unit_price) === best
@@ -247,7 +248,8 @@ function Comparison({ q, onDone }: { q: Rfq; onDone: () => void }) {
           })}
         </tbody>
       </table>
-    </div>
+    </TableRegion>
+    <p className="mt-1 text-xs text-muted">MOQ is the least the supplier will sell. Price breaks are cheaper unit prices at higher quantities.</p></div>
   )
 }
 
@@ -255,10 +257,11 @@ function Replies({ owner, s }: { owner: boolean; s: ReturnType<typeof useFetch<R
   return (
     <section className="mt-10 border-t border-soft pt-6" aria-labelledby="ask-replies">
       <h2 id="ask-replies" className="mb-2 text-lg font-semibold">Replies</h2>
-      <Async s={s} empty={!s.data?.length} emptyText="No price requests yet.">
+      <Async s={s} rows={2} shape="cards" empty={!s.data?.length} emptyText="No price requests yet." emptyHint="Photograph an item above and ask your suppliers how much it costs. Their replies are compared here."
+        emptyAction={{ label: 'Ask suppliers for a price', onClick: () => { const f = document.getElementById('ask-photo'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>
         <ul className="grid gap-4">
           {s.data?.map(q => (
-            <li key={q.id} className="card">
+            <li key={q.id} className="card min-w-0">
               <div className="flex flex-wrap items-start gap-4">
                 <Photo url={q.image_url} alt={`Photo of ${q.description}`} />
                 <div className="min-w-0 flex-1 basis-56">
@@ -285,8 +288,7 @@ export function AskView({ owner }: { owner: boolean }) {
   const s = useFetch<Rfq[]>('/rfq')
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Ask suppliers</h1>
-      <p className="mb-4 text-muted">Photograph an item, circle it, and ask suppliers on WhatsApp how much it costs. {owner ? 'Their replies are compared below.' : 'The owner sees the prices; you see who has replied.'}</p>
+      <PageHeader title="Ask suppliers" description={`Photograph an item, circle it, and ask suppliers on WhatsApp how much it costs. ${owner ? 'Their replies are compared below.' : 'The owner sees the prices; you see who has replied.'}`} />
       <AskForm onSent={s.reload} />
       <Replies owner={owner} s={s} />
     </>

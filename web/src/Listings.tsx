@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, imageUrl, ApiError } from './api'
 import type { Me } from './api'
-import { useFetch, msg, Async } from './ui'
+import { useFetch, msg, Async, Hint, PageHeader } from './ui'
 
 // "Catalog photos": one photo with many labelled products -> one card per product to check, edit, confirm or ask suppliers about.
 // Contract: docs/api-contract.md (listings), setup: docs/deploy.md 10b.
@@ -43,7 +43,7 @@ function Pic({ url, alt, className }: { url: string; alt: string; className?: st
     return () => { live = false; if (made.startsWith('blob:')) URL.revokeObjectURL(made) }
   }, [url])
   if (bad) return <span className="text-sm text-muted">Photo not available.</span>
-  return src ? <img src={src} alt={alt} className={className} /> : <span role="status" className="text-sm text-muted">Loading photo...</span>
+  return src ? <img src={src} alt={alt} className={className} /> : <span role="status" aria-busy="true" className="skeleton block h-24 w-40 max-w-full"><span className="sr-only">Loading photo...</span></span>
 }
 
 // ---------- Upload ----------
@@ -80,7 +80,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
       <h2 id="cat-up" className="mb-2 text-lg font-semibold">Read a catalog photo</h2>
       <form className="grid gap-3" onSubmit={e => { e.preventDefault(); send() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Photo with several labelled products (take one or choose from the gallery)
-          <input ref={input} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => { setFile(e.target.files?.[0]); setFormErr('') }} />
+          <input id="cat-file" ref={input} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => { setFile(e.target.files?.[0]); setFormErr('') }} />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">Supplier (optional)
           <select className="input font-normal" value={sup} onChange={e => setSup(e.target.value)}>
@@ -196,7 +196,8 @@ function ItemCard({ lid, n, it, showPrice, suppliers, onChanged }: { lid: string
             <input className="input font-normal" value={f.sizes} onChange={e => setF({ ...f, sizes: e.target.value })} />
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">Item key
-            <input className="input font-normal" value={f.item_key} onChange={e => setF({ ...f, item_key: e.target.value })} />
+            <input className="input font-normal" aria-describedby={`${id}-key-help`} value={f.item_key} onChange={e => setF({ ...f, item_key: e.target.value })} />
+            <Hint id={`${id}-key-help`}>A short code for this product in your cost book: lower-case letters, digits and underscores.</Hint>
           </label>
           {showPrice && (
             <label className="flex flex-col gap-1 text-sm font-semibold">Price
@@ -269,7 +270,7 @@ function DetailView({ id, showPrice, suppliers, onList }: { id: string; showPric
     <section aria-labelledby="cat-d" className="mt-8 border-t border-soft pt-6">
       <h2 id="cat-d" className="mb-1 text-lg font-semibold">Photo from {d ? when(d.created_at) : '...'}</h2>
       <p className="mb-3"><a className="link inline-flex min-h-11 items-center" href="#/catalog">Close this photo</a></p>
-      <Async s={s} empty={d && !d.items.length} emptyText="No products were found in this photo.">
+      <Async s={s} rows={4} shape="cards" empty={d && !d.items.length} emptyText="No products were found in this photo." emptyHint="Try a sharper photo with the labels facing the camera.">
         {d && (
           <>
             <p className="mb-2 text-sm text-muted">{d.party_name ? `Supplier: ${d.party_name}. ` : ''}{d.note ? `Note: ${d.note}. ` : ''}Numbered outlines mark each product; select one to jump to its card.</p>
@@ -301,12 +302,12 @@ export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: s
   const sup = useFetch<Supplier[]>('/contacts?role=supplier')
   return (
     <>
-      <h1 tabIndex={-1} className="text-2xl font-semibold">Catalog photos</h1>
-      <p className="mb-4 text-muted">Photograph a page or shelf of labelled products. LARIS reads each product so you can check it, then confirm it or ask suppliers for a price.</p>
+      <PageHeader title="Catalog photos" description="Photograph a page or shelf of labelled products. LARIS reads each product so you can check it, then confirm it or ask suppliers for a price." />
       <UploadCard owner={owner} suppliers={sup.data ?? []} onDone={lid => { list.reload(); location.hash = `#/catalog/${lid}` }} />
       <section aria-labelledby="cat-list" className="mt-8">
         <h2 id="cat-list" className="mb-2 text-lg font-semibold">Recent photos</h2>
-        <Async s={list} empty={!list.data?.length} emptyText="No catalog photos yet.">
+        <Async s={list} rows={3} empty={!list.data?.length} emptyText="No catalog photos yet." emptyHint="Photograph a page or shelf of labelled products and LARIS lists each one for you to check."
+          emptyAction={{ label: 'Read your first catalog photo', onClick: () => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>
           <ul className="grid max-w-2xl gap-2">
             {list.data?.map(l => (
               <li key={l.id}>

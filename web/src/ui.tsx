@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError } from './api'
 import type { Me } from './api'
+import { Icon } from './icons'
 
 // ---------- helpers ----------
 export const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -9,12 +10,14 @@ export const label = (s: string) => s.replace(/_/g, ' ')
 export const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 export const REVIEWABLE = ['received', 'parsed'] // 'in' statuses where the API still allows line edits (src/api/routes.py)
 // Stable focus target after an action or a route change: the page h1, else the main landmark.
-export const focusTop = () => (document.querySelector<HTMLElement>('main h1') ?? document.getElementById('main'))?.focus()
+export const focusTop = (preventScroll = false) => (document.querySelector<HTMLElement>('main h1') ?? document.getElementById('main'))?.focus({ preventScroll })
 
-export function useFetch<T>(path: string) {
-  const [s, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true })
+// path === null means "do not fetch" (a call that only some roles can make).
+export function useFetch<T>(path: string | null) {
+  const [s, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: path !== null })
   const [n, setN] = useState(0)
   useEffect(() => {
+    if (path === null) return set({ loading: false })
     let live = true
     set(p => ({ ...p, loading: true, error: undefined }))
     api<T>('GET', path).then(data => live && set({ data, loading: false }), e => live && set({ loading: false, error: msg(e) }))
@@ -49,26 +52,110 @@ export function ActionError({ err, onRetry, label }: { err?: { text: string; ret
   )
 }
 
-export function Async({ s, empty, emptyText, children }: { s: { loading: boolean; error?: string; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string; children: ReactNode }) {
+// Loading, error and empty states in one place. `rows`/`shape` size the skeleton; `emptyHint`/`emptyAction` turn an empty list into a next step.
+export function Async({ s, empty, emptyText, emptyHint, emptyAction, rows, shape, children }: {
+  s: { loading: boolean; error?: string; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string
+  emptyHint?: string; emptyAction?: EmptyAction; rows?: number; shape?: 'list' | 'cards' | 'text'; children: ReactNode
+}) {
   if (s.error) return (
     <div role="alert" className="card border-warn bg-warn-bg text-warn">
       <p>{s.error}</p>
       <button className="btn mt-3" onClick={s.reload}>Retry loading</button>
     </div>
   )
-  if (s.loading && !s.data) return <p role="status" className="text-muted">Loading...</p>
-  if (empty) return <p className="card text-muted">{emptyText}</p>
+  if (s.loading && !s.data) return <Skeleton rows={rows} shape={shape} />
+  if (empty) return <EmptyState title={emptyText ?? 'Nothing here yet.'} hint={emptyHint} action={emptyAction} />
   return <>{children}</>
 }
 
-export function ThemeToggle({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => void }) {
+// Placeholder bars while data loads. role=status + aria-busy so it is announced once; the pulse stops under prefers-reduced-motion.
+export function Skeleton({ rows = 3, shape = 'list' }: { rows?: number; shape?: 'list' | 'cards' | 'text' }) {
+  const h = shape === 'cards' ? 'h-24' : shape === 'text' ? 'h-4' : 'h-16'
+  return (
+    <div role="status" aria-busy="true" className={`grid ${shape === 'cards' ? 'sm:grid-cols-2' : ''} gap-3`}>
+      <span className="sr-only">Loading...</span>
+      {Array.from({ length: rows }, (_, i) => <div key={i} aria-hidden="true" className={`skeleton ${h}`} style={shape === 'text' ? { width: `${95 - ((i * 17) % 40)}%` } : undefined} />)}
+    </div>
+  )
+}
+
+export interface EmptyAction { label: string; href?: string; onClick?: () => void }
+// An empty list with a clear next step. One primary action at most.
+export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: EmptyAction }) {
+  return (
+    <div className="card flex flex-col items-center gap-2 px-4 py-8 text-center">
+      <span aria-hidden="true" className="grid size-12 place-items-center rounded-full bg-tint text-accent"><Icon name="inbox" className="size-6" /></span>
+      <p className="font-semibold">{title}</p>
+      {hint && <p className="max-w-md text-sm text-muted">{hint}</p>}
+      {action && (action.href
+        ? <a className="btn btn-primary mt-1" href={action.href}>{action.label}</a>
+        : <button type="button" className="btn btn-primary mt-1" onClick={action.onClick}>{action.label}</button>)}
+    </div>
+  )
+}
+
+// The organisation name for document.title ("Tracker · SAMPLE Signing Works"). Provided by App once /api/me is known.
+export const OrgCtx = createContext('LARIS')
+
+// Standard top of every page: optional Back link (detail pages), the one h1 (focus target on navigation), description,
+// meta line, and a slot for the page's primary action. Also keeps <title> in step. Pass no title while loading: a skeleton shows and no h1 exists yet.
+export function PageHeader({ title, description, meta, actions, back }: {
+  title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }
+}) {
+  const org = useContext(OrgCtx)
+  useEffect(() => { document.title = `${title ?? 'Loading'} · ${org}` }, [title, org])
+  return (
+    <div className="mb-5">
+      {back && <nav aria-label="Breadcrumb" className="mb-1"><a className="link inline-flex min-h-11 items-center gap-1 no-underline hover:underline" href={back.href}><Icon name="back" className="size-4" />{back.label}</a></nav>}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-72">
+          {title !== undefined ? <h1 tabIndex={-1} className="break-words text-2xl font-semibold tracking-tight">{title}</h1> : <div aria-hidden="true" className="skeleton h-8 w-56 max-w-full" />}
+          {meta && <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{meta}</div>}
+          {description && <p className="mt-1 max-w-2xl text-muted">{description}</p>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      </div>
+    </div>
+  )
+}
+
+// A wide table in its own horizontal scroll region (keyboard focusable), with a visible hint while columns are cut off.
+export function TableRegion({ label, children }: { label: string; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const check = () => setMore(el.scrollWidth > el.clientWidth + 1 && el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    check()
+    el.addEventListener('scroll', check, { passive: true })
+    const ro = new ResizeObserver(check); ro.observe(el); if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => { el.removeEventListener('scroll', check); ro.disconnect() }
+  }, [])
+  return (
+    <div className="min-w-0 max-w-full">
+      <div ref={box} className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label={label} tabIndex={0}>{children}</div>
+      {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">Scroll sideways to see more columns</p>}
+    </div>
+  )
+}
+
+// One short help line under a jargon field. Wire it with aria-describedby={id} on the input.
+export function Hint({ id, children }: { id: string; children: ReactNode }) {
+  return <span id={id} className="text-xs font-normal text-muted">{children}</span>
+}
+
+// compact = icon-only button for the app bar (same accessible name and aria-pressed). Default is the text button used on the sign-in screen.
+export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark: (d: boolean) => void; compact?: boolean }) {
   const flip = () => {
     const t = dark ? 'light' : 'dark'
     document.documentElement.dataset.theme = t
     try { localStorage.setItem('theme', t) } catch { /* storage blocked: choice lasts for this visit only */ }
     setDark(!dark)
   }
-  return <button className="btn" aria-pressed={dark} onClick={flip}>Dark theme</button>
+  return compact
+    ? <button type="button" className="btn size-11 px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label="Dark theme" title="Dark theme" onClick={flip}><Icon name="moon" /></button>
+    : <button className="btn" aria-pressed={dark} onClick={flip}>Dark theme</button>
 }
 
 // LARIS logo: laris-logo.png (light) or laris-logo-dark.png (dark); falls back to the text wordmark when no file is there.

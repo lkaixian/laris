@@ -16,6 +16,16 @@ The Run script explicitly installs with `--user --break-system-packages` into
 the workspace `.pythonlibs` directory: workflows do not inherit the shell's pip
 configuration. This leaves the immutable Nix interpreter untouched.
 
+## Publishing build
+
+`[packager.features].enabledForHosting = false` skips Replit's automatic package
+installation. Dependencies are still installed by the explicit deployment build
+command in `.replit`, followed by `npm ci` and the frontend build in `web/`.
+Keep this setting: the Nix standalone `pip` wrapper disables user site-packages
+and fails before the custom build runs. The build uses `python -m pip` instead.
+Python comes from the Python 3.12 module; do not add another Python interpreter
+to `replit.nix`.
+
 ## Database and demo
 
 The app uses the workspace PostgreSQL database through `DATABASE_URL`; do not put

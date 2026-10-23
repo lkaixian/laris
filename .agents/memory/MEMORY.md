@@ -1,0 +1,1 @@
+- [Publishing Python installs](publishing-python-installs.md) — Nix standalone pip disables user sites; use the explicit build instead of automatic hosting installs.

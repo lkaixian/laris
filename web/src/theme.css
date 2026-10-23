@@ -46,7 +46,9 @@
 
 @layer components {
   .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:opacity-50; }
-  .btn-primary { @apply border-accent bg-accent text-on-accent hover:bg-accent-hover hover:border-accent-hover; }
+  /* --brand, --brand-hover, --on-brand are set from the organisation colour (applyBrand in ui.tsx); unset keeps the accent. */
+  .btn-primary { border-color: var(--brand, var(--accent)); background-color: var(--brand, var(--accent)); color: var(--on-brand, var(--on-accent)); }
+  .btn-primary:hover { border-color: var(--brand-hover, var(--accent-hover)); background-color: var(--brand-hover, var(--accent-hover)); }
   .btn-danger { @apply border-warn text-warn hover:bg-warn-bg; }
   .input { @apply min-h-11 rounded-ui border border-line bg-surface px-3 text-sm text-ink; }
   .card { @apply rounded-ui border border-soft bg-surface p-4; }
@@ -54,7 +56,7 @@
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
   .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }
   .navlink { @apply inline-flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-semibold text-muted transition-colors hover:text-ink; }
-  .navlink[aria-current="page"] { @apply border-accent text-ink; }
+  .navlink[aria-current="page"] { @apply text-ink; border-color: var(--brand, var(--accent)); }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
   th { @apply px-3 py-2 text-left text-xs font-semibold text-muted; }
   td { @apply px-3 py-2 align-top text-sm; }

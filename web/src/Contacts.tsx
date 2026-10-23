@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, download, MOCK } from './api'
+import { api, can, download, MOCK } from './api'
 import type { DocSummary } from './api'
 import { Async, Status, msg, rm, useFetch } from './ui'
 
@@ -75,7 +75,7 @@ export function ContactsView({ owner, initialQuery = '' }: { owner: boolean; ini
         <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-2">
           {KINDS.map(([k, t]) => <button key={k} type="button" className="btn" aria-pressed={kind === k} onClick={() => setKind(k)}>{t}</button>)}
         </div>
-        {owner && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
+        {can('export_data') && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
         <button type="button" className="btn btn-primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>Add contact</button>
       </div>
       {adding && (

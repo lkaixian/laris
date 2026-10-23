@@ -32,7 +32,8 @@ export function useAction() {
     setBusy(true); setErr(undefined)
     try { await fn() } catch (e) {
       const ai = e instanceof ApiError && e.code === 'ilmu_unavailable'
-      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
+      const denied = e instanceof ApiError && e.code === 'permission_required'
+      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : denied ? 'Your role does not allow this. Ask the owner to change your role.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
     } finally { setBusy(false) }
   }
   return { busy, err, run }
@@ -76,6 +77,23 @@ export function Brand({ dark }: { dark: boolean }) {
   return !failed
     ? <img src={`/brand/laris-logo${dark ? '-dark' : ''}.png`} alt="LARIS" width={131} height={28} className="h-7 w-auto" onError={() => setFailed(true)} />
     : <strong className="text-xl font-semibold tracking-[0.2em]">LARIS</strong>
+}
+
+// Brand colour for primary buttons and the active nav tab (--brand in theme.css). Only a strict #rrggbb ever reaches CSS; null restores the stock look.
+export function applyBrand(org?: Me['org']) {
+  const st = document.documentElement.style
+  const c = org?.brand_color
+  if (c && /^#[0-9a-f]{6}$/i.test(c)) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16))
+    const lin = (v: number) => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    const light = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) > 0.179  // pick text colour that reads on the brand colour
+    st.setProperty('--brand', c); st.setProperty('--brand-hover', `color-mix(in srgb, ${c} 80%, black)`); st.setProperty('--on-brand', light ? '#06140f' : '#ffffff')
+  } else for (const k of ['--brand', '--brand-hover', '--on-brand']) st.removeProperty(k)
+  // Favicon from the logo (data URLs only); the stock icon comes back when there is none.
+  const link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]') ?? document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }))
+  link.dataset.orig ??= link.getAttribute('href') ?? ''
+  const logo = org?.logo_url
+  if (logo?.startsWith('data:image/')) link.href = logo; else if (link.dataset.orig) link.href = link.dataset.orig; else link.removeAttribute('href')
 }
 
 export function OrgMark({ org }: { org: Me['org'] }) {

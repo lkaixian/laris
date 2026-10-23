@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, logout } from './api'
+import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, logout, can, canOpen, ApiError } from './api'
 import Login from './Login'
 import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
+import { RolesView } from './Roles'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
 import { HomeView } from './Home'
 import { AskView } from './Ask'
-import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status } from './ui'
+import { CatalogView, canUpload } from './Listings'
+import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, ThemeToggle, Brand, OrgMark, Status, applyBrand } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
 
@@ -151,7 +153,7 @@ function TrackerView({ owner }: { owner: boolean }) {
       <p role="status" className="sr-only">{s.data ? `Showing ${shown} ${shown === 1 ? 'document' : 'documents'}` : ''}</p>
       <Async s={s}>
         <div className="grid gap-8 md:grid-cols-2">
-          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), <><UploadQuote onDone={s.reload} />{!MOCK && <ManualQuote onDone={s.reload} />}</>)}
+          {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), can('upload_documents') ? <><UploadQuote onDone={s.reload} />{!MOCK && <ManualQuote onDone={s.reload} />}</> : null)}
           {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry />)}
         </div>
       </Async>
@@ -207,6 +209,7 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
 }
 
 function DetailView({ id, owner }: { id: string; owner: boolean }) {
+  const costs = can('view_costs')  // cost, margin and provenance follow the permission; deciding on a quote stays owner-class
   const s = useFetch<DocDetail>(`/documents/${id}`)
   const f = useFetch<Field[]>('/fields')
   const [reason, setReason] = useState('')
@@ -246,13 +249,13 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
               <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
               <Status v={d.doc.status} />
-              {owner && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
+              {costs && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
               <span className="text-muted">Total {rm(d.doc.total)}</span>
             </p>
             {d.doc.direction === 'out' && !MOCK && (
               <p className="mt-2 flex flex-wrap gap-2">
                 <button type="button" className="btn" onClick={() => save(`/documents/${id}/pdf`, `${d.doc.doc_no}.pdf`)}>Download quote PDF</button>
-                {owner && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
+                {can('export_data') && costs && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
                   <button type="button" className="btn" onClick={() => save(`/export/bom.xlsx?quote_id=${id}`, `bom-${d.doc.doc_no}.xlsx`)}>Download BOM (xlsx)</button>
                   <button type="button" className="btn" onClick={() => save(`/export/po.csv?quote_id=${id}`, `po-${d.doc.doc_no}.csv`)}>Download purchase list (csv)</button>
                 </>}
@@ -274,7 +277,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
                     {edit && <th scope="col">Action</th>}
                   </tr></thead>
-                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={owner || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { setNote(`Line ${n} saved.`); s.reload() }} />)}</tbody>
+                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { setNote(`Line ${n} saved.`); s.reload() }} />)}</tbody>
                 </table>
               </div>
             )}
@@ -301,7 +304,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
               {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
             </section>
 
-            {owner && d.provenance && (
+            {costs && d.provenance && (
               <section aria-labelledby="prov">
                 <h2 id="prov" className="text-lg font-semibold">Cost provenance <span className="text-sm font-normal text-muted">(owner only)</span></h2>
                 {d.provenance.length === 0 ? <p className="card mt-2 text-muted">No supplier cost is linked to this document.</p> : (
@@ -332,7 +335,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                 )}
               </section>
             )}
-            {!owner && <p className="text-sm text-muted">Cost and margin are visible to the owner role only.</p>}
+            {!costs && <p className="text-sm text-muted">Cost and margin are not available to your role.</p>}
             </aside>
             </div>
           </>
@@ -475,29 +478,75 @@ function SettingsView({ owner }: { owner: boolean }) {
   const [f, setF] = useState<Settings>()
   const [err, setErr] = useState('')
   const [note, setNote] = useState('')
+  const [logoErr, setLogoErr] = useState('')
   useEffect(() => { if (s.data) setF(s.data) }, [s.data])
-  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1><p className="card mt-3 text-muted">Owner only. Switch the simulated role to owner to change settings.</p></>
+  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1><p className="card mt-3 text-muted">You do not have access. Only the owner changes settings.</p></>
   const text = (k: 'ssm_no' | 'address' | 'bank_details' | 'sst_no', name: string) => (
     <label className="flex flex-col gap-1 text-sm font-semibold">{name}
       <input className="input font-normal" value={f?.[k] ?? ''} onChange={e => f && setF({ ...f, [k]: e.target.value })} /></label>
   )
+  const colour = (f?.brand_color ?? '').trim()
+  const colourOk = colour === '' || /^#[0-9a-f]{6}$/i.test(colour)
+  // Logo: png, jpeg or webp up to 200 KB, read in the browser into a data URL. The server checks the real bytes again.
+  const pickLogo = (file?: File) => {
+    setLogoErr('')
+    if (!file || !f) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return setLogoErr('Use a PNG, JPEG or WebP image. SVG is not accepted.')
+    if (file.size > 200 * 1024) return setLogoErr('That image is over 200 KB. Use a smaller one.')
+    const r = new FileReader()
+    r.onload = () => setF(p => p && { ...p, logo_data_url: String(r.result) })
+    r.onerror = () => setLogoErr('Could not read that file. Try another image.')
+    r.readAsDataURL(file)
+  }
   const save = async () => {
     if (!f) return
     setErr(''); setNote('')
+    if (!colourOk) return setErr('The brand colour must be a hex colour like #0f5c47.')
     try {
       const out = await api<Settings>('POST', '/settings', {
+        display_name: f.display_name?.trim() || null, brand_color: colour ? colour.toLowerCase() : null, logo_data_url: f.logo_data_url || null,
         min_margin_pct: f.min_margin_pct, ssm_no: f.ssm_no ?? '', address: f.address ?? '', bank_details: f.bank_details ?? '',
         sst_registered: f.sst_registered, sst_no: f.sst_no ?? '' })
       setF(out); setNote('Settings saved.')
-    } catch (e) { setErr(msg(e)) }
+      window.dispatchEvent(new Event('laris:branding'))
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 413 ? 'The logo is too large. Use an image under 200 KB.'
+        : e instanceof ApiError && e.status === 415 ? 'The logo must be a PNG, JPEG or WebP image.'
+        : e instanceof ApiError && e.status === 422 && /colou?r/i.test(e.code + e.message) ? 'The brand colour is not valid. Use a hex colour like #0f5c47.' : msg(e))
+    }
   }
   return (
     <>
       <h1 tabIndex={-1} className="text-2xl font-semibold">Settings</h1>
-      <p className="mb-4 text-muted">The margin floor flags thin quotes for review. The business details are printed on the quote PDF.</p>
+      <p className="mb-4 text-muted">The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save.</p>
       <Async s={s} empty={false}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
+            <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
+              <legend className="px-1 text-sm font-semibold">Branding (everyone sees this)</legend>
+              <label className="flex flex-col gap-1 text-sm font-semibold">Organisation display name
+                <input className="input font-normal" maxLength={120} value={f.display_name ?? ''} onChange={e => setF({ ...f, display_name: e.target.value })} /></label>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1 text-sm font-semibold">Brand colour (hex)
+                  <input className="input w-32 font-normal" placeholder="#0f5c47" maxLength={7} autoCapitalize="none" spellCheck={false} aria-invalid={!colourOk || undefined} aria-describedby="bc-help"
+                    value={f.brand_color ?? ''} onChange={e => setF({ ...f, brand_color: e.target.value })} /></label>
+                <label className="flex flex-col gap-1 text-sm font-semibold">Pick a colour
+                  <input type="color" className="input w-16 p-1" value={colourOk && colour ? colour.toLowerCase() : '#0f5c47'} onChange={e => setF({ ...f, brand_color: e.target.value })} /></label>
+                <span aria-hidden="true" className="size-11 rounded-ui border border-line" style={{ backgroundColor: colourOk && colour ? colour : 'var(--accent)' }} />
+                <button type="button" className="btn" onClick={() => setF({ ...f, brand_color: null })}>Reset colour</button>
+              </div>
+              <p id="bc-help" className="text-sm text-muted">{colour ? (colourOk ? `Colour ${colour.toLowerCase()} is used for main buttons and the active tab.` : 'Not a valid colour yet. Use # and six hex digits.') : 'No colour set: the standard LARIS green is used.'}</p>
+              <div className="grid gap-2">
+                <label className="flex flex-col gap-1 text-sm font-semibold">Logo (PNG, JPEG or WebP, up to 200 KB)
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="input py-2 font-normal" aria-describedby={logoErr ? 'logo-err' : undefined}
+                    onChange={e => { pickLogo(e.target.files?.[0]); e.target.value = '' }} /></label>
+                {logoErr && <p id="logo-err" role="alert" className="text-sm text-warn">{logoErr}</p>}
+                {f.logo_data_url
+                  ? <div className="flex flex-wrap items-center gap-3"><img src={f.logo_data_url} alt="Logo preview" className="h-12 max-w-40 rounded-ui border border-soft bg-surface object-contain p-1" />
+                      <button type="button" className="btn" onClick={() => setF({ ...f, logo_data_url: null })}>Remove logo</button></div>
+                  : <p className="text-sm text-muted">No logo: initials are shown instead.</p>}
+              </div>
+            </fieldset>
             <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
               <input className="input font-normal" inputMode="decimal" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} /></label>
             {text('ssm_no', 'SSM registration number')}
@@ -516,7 +565,7 @@ function SettingsView({ owner }: { owner: boolean }) {
   )
 }
 
-function Followups({ owner }: { owner: boolean }) {
+function Followups() {
   const s = useFetch<Followup[]>('/followups')
   const [err, setErr] = useState('')
   const [note, setNote] = useState('')
@@ -538,7 +587,7 @@ function Followups({ owner }: { owner: boolean }) {
               <p className="font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">for {f.customer}</span></p>
               <p className="mt-1 text-sm text-muted">{f.reason}</p>
               <p className="mt-2 text-sm">{f.suggested_text ?? 'No chat contact on file: call the customer, then skip this.'}</p>
-              {owner && <div className="mt-3 flex flex-wrap gap-2">
+              {can('manage_followups') && <div className="mt-3 flex flex-wrap gap-2">
                 {f.suggested_text && <button type="button" className="btn btn-primary" onClick={() => act(f, 'send')}>Send follow-up for {f.doc_no}</button>}
                 <button type="button" className="btn" onClick={() => act(f, 'skip')}>Skip {f.doc_no}</button>
               </div>}
@@ -587,15 +636,14 @@ function Proposals() {
   )
 }
 
-function AlertsView({ owner }: { owner: boolean }) {
+function AlertsView() {
   const s = useFetch<Alert[]>('/alerts/stale-costs')
-  if (!owner) return <><h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1><p className="card mt-3 text-muted">Owner only. Staff do not see supplier cost or margin. Switch the simulated role to owner to view alerts.</p></>
   const n = s.data?.length ?? 0
   const lost = (s.data ?? []).reduce((a, x) => a + Number(x.margin_delta), 0)
   return (
     <>
       <h1 tabIndex={-1} className="text-2xl font-semibold">Stale-cost alerts</h1>
-      <Report />
+      {can('view_reports') && <Report />}
       <p className="mb-6 text-muted">Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically.</p>
       <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
       <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost.">
@@ -612,7 +660,7 @@ function AlertsView({ owner }: { owner: boolean }) {
           ))}
         </ul>
       </Async>
-      <Followups owner={owner} />
+      <Followups />
       <Proposals />
     </>
   )
@@ -659,7 +707,7 @@ function ActivityView() {
 }
 
 // ---------- Shell ----------
-const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', ask: 'Ask suppliers', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', account: 'Account' }
+const TITLES: Record<string, string> = { home: 'Home', alerts: 'Stale-cost alerts', tracker: 'Quote tracker', activity: 'Activity log', contacts: 'Contacts', ask: 'Ask suppliers', catalog: 'Catalog photos', search: 'Search', assistant: 'Assistant', jobs: 'Jobs', settings: 'Settings', team: 'Team', roles: 'Roles', account: 'Account' }
 
 export default function App() {
   const [hash, setHash] = useState(location.hash)
@@ -698,13 +746,19 @@ export default function App() {
   const signedIn = !!getToken()
   const [, page, arg] = hash.split('/')
   const route = page || 'home'
-  useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · LARIS` }, [route])
+  useEffect(() => { if (route !== 'doc') document.title = `${TITLES[route] ?? 'Page not found'} · ${me?.org.name ?? 'LARIS'}` }, [route, me?.org.name])
+  useEffect(() => applyBrand(me?.org), [me?.org])
+  // Branding saved on the Settings page: re-read /me without blanking the page.
+  useEffect(() => {
+    const h = () => resolveMe(role).then(setMe, () => undefined)
+    addEventListener('laris:branding', h); return () => removeEventListener('laris:branding', h)
+  }, [role])
   const firstNav = useRef(true)
   useEffect(() => { if (firstNav.current) { firstNav.current = false; return } focusTop() }, [hash])
   if (gate === 'checking') return <p role="status" className="p-6 text-muted">Loading...</p>
   if (gate === 'login') return <Login dark={dark} setDark={setDark} onDone={() => { setGate('ready'); setTries(t => t + 1) }} />
   const runSearch = () => { const t = searchText.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
-  const nav = [['home', 'Home'], ...(owner ? [['alerts', 'Stale costs']] : []), ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ...(owner ? [['team', 'Team'], ['settings', 'Settings']] : []), ...(MOCK ? [['account', 'Account']] : [])]
+  const nav = [['home', 'Home'], ['alerts', 'Stale costs'], ['tracker', 'Tracker'], ['contacts', 'Contacts'], ['ask', 'Ask suppliers'], ...(canUpload(me) ? [['catalog', 'Catalog photos']] : []), ['jobs', 'Jobs'], ['assistant', 'Assistant'], ['activity', 'Activity'], ['team', 'Team'], ['roles', 'Roles'], ['settings', 'Settings'], ...(MOCK ? [['account', 'Account']] : [])].filter(([k]) => canOpen(k, owner))
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
@@ -717,7 +771,7 @@ export default function App() {
           <ThemeToggle dark={dark} setDark={setDark} />
           {signedIn ? (
             <span className="flex flex-wrap items-center gap-2 text-sm">
-              <a className="link inline-flex min-h-11 items-center" href="#/account">{me ? `${me.name} (${me.role})` : 'Account'}</a>
+              <a className="link inline-flex min-h-11 items-center" href="#/account">{me ? `${me.name} (${me.role_name ?? me.role})` : 'Account'}</a>
               <button type="button" className="btn" onClick={() => logout()}>Sign out</button>
             </span>
           ) : <label className="flex items-center gap-2 text-sm font-semibold">
@@ -746,22 +800,27 @@ export default function App() {
             <p>Could not identify the signed-in user: {meErr}</p>
             <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
           </div>
-        ) : !me ? <p role="status" className="text-muted">Loading...</p> : <>
-          {route === 'home' && <HomeView owner={owner} name={me.name} />}
-          {route === 'alerts' && <AlertsView owner={owner} />}
-          {route === 'tracker' && <TrackerView owner={owner} />}
-          {route === 'contacts' && <ContactsView owner={owner} />}
-          {route === 'ask' && <AskView owner={owner} />}
+        ) : !me ? <p role="status" className="text-muted">Loading...</p> : !canOpen(route, owner) ? <>
+          <h1 tabIndex={-1} className="text-2xl font-semibold">{TITLES[route]}</h1>
+          <p role="alert" className="card mt-3 text-muted">You do not have access to this page. Ask the owner to change your role if you need it.</p>
+        </> : <>
+          {route === 'home' && <HomeView owner={can('view_costs')} name={me.name} />}
+          {route === 'alerts' && <AlertsView />}
+          {route === 'tracker' && <TrackerView owner={can('view_costs')} />}
+          {route === 'contacts' && <ContactsView owner={can('view_costs')} />}
+          {route === 'ask' && <AskView owner={can('view_replies_prices')} />}
+          {route === 'catalog' && <CatalogView me={me} owner={owner} id={arg} />}
           {route === 'assistant' && <AssistantView />}
           {route === 'search' && <SearchView q={decodeURIComponent(arg ?? '')} />}
-          {route === 'contact' && arg && <ContactDetail id={arg} owner={owner} />}
+          {route === 'contact' && arg && <ContactDetail id={arg} owner={can('view_costs')} />}
           {route === 'jobs' && <JobsView />}
           {route === 'settings' && <SettingsView owner={owner} />}
           {route === 'team' && <TeamView owner={owner} meId={me.id} />}
-          {route === 'account' && <AccountView name={me.name} role={me.role} />}
+          {route === 'roles' && <RolesView owner={owner} />}
+          {route === 'account' && <AccountView name={me.name} role={me.role_name ?? me.role} />}
           {route === 'activity' && <ActivityView />}
           {route === 'doc' && arg && <DetailView id={arg} owner={owner} />}
-          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'ask', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
+          {!['home', 'alerts', 'tracker', 'contacts', 'contact', 'ask', 'catalog', 'search', 'assistant', 'jobs', 'activity', 'settings', 'team', 'roles', 'account', 'doc'].includes(route) && <p className="card">Page not found. <a className="link" href="#/tracker">Open the tracker</a></p>}
         </>}
       </main>
     </>

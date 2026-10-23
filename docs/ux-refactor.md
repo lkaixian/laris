@@ -80,3 +80,12 @@ Add a new pre-login screen: add a route check before the licence gate in `AppShe
 - Doc lines and Ask replies tables scroll sideways at 390px (with hint) instead of turning into cards.
 - The Jobs board counters on Home link to the whole board, not a single column.
 - Onboarding and licence screens (step 97) were only walked against `dev:mock`: no real backend round trip, no real email, no real signed licence key. The access-token fallback on Sign in depends on `/api/auth/config` (login_required false); there is no separate flag for APP_TOKEN.
+
+## Business picker, invites, accept invite (step 100)
+
+- **Business picker** (`Login.tsx`): `POST /api/login` may answer 409 `choose_business` with `businesses:[{id,name}]` (no session). The sign-in card switches to "Choose a business" (radio list, selected radio focused, Continue re-sends the same credentials plus `business_id`, Back returns to the form). Credentials stay in component memory only. Any later error (wrong password, 429) returns to the form with the normal message. Last choice per email is kept in `localStorage` key `laris.biz` (try/catch) and preselected. `ApiError.businesses` carries the list.
+- **Invites on Team** (`Team.tsx`, owner only, the page is already owner only): "Invite by email" card (`POST /api/invites`), "Pending invitations" list (`GET /api/invites`, shows pending and expired only, status as text badge, Resend, Revoke with inline confirm, expired: Resend only), EmptyState when none. The old form is now "Add with a password".
+- **Accept invite** (`Invite.tsx`, route `#/invite?token=...`, public, rendered before the sign-in gate): token read once from the hash, URL replaced with `#/invite` via `history.replaceState`, token kept in a module variable (never storage/toast). Preview, then name, username, password + checklist, confirm. Success sets the notice and prefill and goes to `#/login`.
+- `Field` and `Card` are now exported from `Signup.tsx`. Copy: Forgot says a reset applies to every account using the email; Register hints the same email can be used for a second business.
+- **Mock**: sign in as `multi@demo.test` (any password) for the picker (Acme Printing, Bright Catering). `#/invite?token=good` previews Acme Printing / Staff / new.hire@demo.test; `token=bad` is invalid; username `taken` gives 409. Team invites: pending, expired and accepted samples; `full@demo.test` gives seat_limit, `member@demo.test` already_member.
+- Not verified: against the real backend (contracts mocked from the brief), real email links, screen reader behaviour.

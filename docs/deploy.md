@@ -45,6 +45,9 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 
 Notes: one email may have an account in several businesses (`db/multi.sql` replaces the old global unique index on the email with one per tenant; applied on every start, safe to repeat). Sign-in with such an email asks which business (409 `choose_business`) when the password fits several; a password reset by emailed code changes the password of ALL accounts with that email. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
 
+## Invite people by email
+The owner invites a person under Users; they get a link `<APP_PUBLIC_URL>/#/invite?token=...` (valid 7 days, one use; the token sits in the URL fragment, so servers and logs never see it, and only its SHA-256 is stored). Set `APP_PUBLIC_URL` (for example `https://your-app.replit.app`, no trailing slash needed) so the link never depends on the request's Host header; unset, the request's base URL is used. Email needs the Mailtrap settings above (email off = the invite is created but nobody receives the link; the log says so). Accepting needs a free licence seat. Limits (20 invites per hour per business, 3 resends per hour per invite, 30 previews and 20 accepts per 15 minutes per client address) are in memory like the other throttles.
+
 ## Software licence (optional; off until a public key is set)
 
 The app checks an Ed25519-signed key per organisation. It holds only the PUBLIC key, so nothing on the server can mint keys. Design and limits: `docs/licensing.md`. **This is a deterrent, not DRM**: whoever controls the server and the code can remove the check.

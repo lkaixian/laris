@@ -100,3 +100,10 @@ Not part of the 7 minute cut. Use it when the audience asks how a new business g
 4. You land on sign-in with "Your account is ready. Sign in to continue." and the email filled in. Sign in.
 5. On a licensed deployment with no key yet, the owner sees "Activate your licence": paste the `LARIS1.` key and Activate. "Don't have a licence?" opens the plan cards and request form; "Continue in read-only mode" lets people look around while writes stay blocked.
 6. Admin, Licence shows plan, seats used, expiry, and whether the date was checked by internet time. Mock mode: add `?licence=missing` to the URL.
+
+## Invite a colleague
+
+1. Sign in as the owner, open Team, and find "Invite by email".
+2. Type the colleague's email, pick a role, press Send invitation. A toast confirms and the invitation appears under "Pending invitations" (Resend or Revoke there).
+3. The colleague opens the emailed link (`#/invite?token=...`), sees "You are invited to join <business> as <role>", chooses a name, username and password, then signs in.
+4. If one email belongs to two businesses, sign-in asks "Choose a business" first.

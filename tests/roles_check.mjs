@@ -1,7 +1,7 @@
 // Run: node tests/roles_check.mjs  (db/roles.sql: the app role cannot weaken audit or guards)
 import {PGlite} from '@electric-sql/pglite';import fs from 'fs';
 const db=new PGlite(),rd=f=>fs.readFileSync(new URL('../db/'+f,import.meta.url),'utf8');
-for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','rbac.sql','signup.sql','multi.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
+for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','rbac.sql','signup.sql','multi.sql','invites.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
 let bad=0;const ok=(c,n)=>{console.log(c?'ok  ':'FAIL',n);if(!c)bad++};
 const refuses=async(n,s)=>{try{await db.exec(s);ok(false,n)}catch(e){ok(true,n+' -> '+e.message.slice(0,70))}};
 // a second tenant with one document and one cost, so isolation has something to hide
@@ -14,6 +14,7 @@ await db.exec(`insert into rfq_items(tenant_id,description,note,image,image_mime
 const br=(await db.query(`select id from roles where tenant_id='${b}' and key='staff'`)).rows[0].id;
 for(const t of [o,b]){const u=(await db.query(`insert into users(tenant_id,name,role,email) values ('${t}','u','owner','u-'||'${t}'||'@x.com') returning id`)).rows[0].id;await db.exec(`insert into email_codes(purpose,user_id,tenant_id,code_hash,expires_at) values ('reset','${u}','${t}','h',now())`)}
 await db.exec(`insert into license_requests(tenant_id,email,plan,seats) values ('${o}','a@x.com','pro',5),('${b}','b@x.com','pro',5)`);
+for(const t of [o,b])await db.exec(`insert into invites(tenant_id,email,role_id,token_sha256) select '${t}','i@x.com',id,'h-'||'${t}' from roles where tenant_id='${t}' and key='staff'`);
 await db.exec("set role laris_app");
 await db.exec("select set_config('laris.tenant','*',false)");
 ok(await n("select count(*)::int c from documents")>0,'system scope (*) can read and write normal tables');
@@ -27,6 +28,10 @@ await refuses('a tenant cannot write an email code into another tenant',`insert 
 ok(await n("select count(*)::int c from document_lines")>0 && await n("select count(*)::int c from v_quote_margin")>=0,'child tables and views still work for the tenant');
 ok(await n("select count(*)::int c from license_requests")===1 && await n(`select count(*)::int c from license_requests where tenant_id='${b}'`)===0,'a tenant sees only its own licence requests');
 await refuses('a tenant cannot write a licence request into another tenant',`insert into license_requests(tenant_id,email,plan,seats) values ('${b}','x@x.com','pro',1)`);
+ok(await n("select count(*)::int c from invites")===1 && await n(`select count(*)::int c from invites where tenant_id='${b}'`)===0,'a tenant sees only its own invites');
+await refuses('a tenant cannot write an invite into another tenant',`insert into invites(tenant_id,email,role_id,token_sha256) values ('${b}','z@x.com','${br}','zz')`);
+await refuses('an invite cannot carry another tenant role',`insert into invites(tenant_id,email,role_id,token_sha256) values ('${o}','z@x.com','${br}','zz')`);
+await refuses('one pending invite per email',`insert into invites(tenant_id,email,role_id,token_sha256) select tenant_id,'i@x.com',role_id,'again' from invites`);
 await db.exec("insert into license_clock(watermark) values (now())");
 await db.exec("update license_clock set watermark = now() - interval '1 day'");
 ok(await n("select (watermark >= now() - interval '1 minute')::int c from license_clock")===1,'the licence clock watermark cannot move back');
@@ -41,6 +46,7 @@ ok(await n("select count(*)::int c from rfq_items")===0,'the other tenant cannot
 ok(await n(`select count(*)::int c from license_requests where tenant_id='${o}'`)===0 && await n("select count(*)::int c from license_requests")===1,'the other tenant cannot see the first tenant licence requests');
 ok(await n(`select count(*)::int c from email_codes where tenant_id='${o}'`)===0 && await n("select count(*)::int c from email_codes")===1,'the other tenant cannot see the first tenant email codes');
 ok(await n(`select count(*)::int c from roles where tenant_id='${o}'`)===0,'the other tenant cannot see the first tenant roles');
+ok(await n(`select count(*)::int c from invites where tenant_id='${o}'`)===0 && await n("select count(*)::int c from invites")===1,'the other tenant cannot see the first tenant invites');
 ok(await n("select count(*)::int c from documents")===0,'the other tenant sees none of the first tenant documents');
 ok(await n("select count(*)::int c from document_lines")===0,'...nor their lines (child table follows the document)');
 ok(await n("select count(*)::int c from v_quote_margin")===0,'...nor the margin view (security_invoker)');

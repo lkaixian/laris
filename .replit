@@ -9,7 +9,7 @@ packages = ["freetype", "glibcLocales", "lcms2", "libimagequant", "libjpeg", "li
 
 [deployment]
 deploymentTarget = "vm"
-build = ["bash", "-c", 'PIP_USER=0 python -m pip install --prefix="$PWD/.pythonlibs" -q -r requirements.txt && cd web && npm ci && npm run build']
+build = ["bash", "-c", 'PIP_USER=0 pip install --prefix="$PWD/.pythonlibs" -q -r requirements.txt && cd web && npm ci && npm run build']
 run = ["bash", "run.sh"]
 
 [[ports]]

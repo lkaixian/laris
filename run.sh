@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 # Install into a writable workspace prefix instead of the immutable Nix store.
 export PYTHONUSERBASE="${PYTHONUSERBASE:-$PWD/.pythonlibs}"
-PIP_USER=0 python -m pip install --prefix="$PYTHONUSERBASE" -q -r requirements.txt
+PIP_USER=0 pip install --prefix="$PYTHONUSERBASE" -q -r requirements.txt
 
 # FastAPI serves the built React app from web/dist.
 npm ci --prefix web --no-audit --no-fund

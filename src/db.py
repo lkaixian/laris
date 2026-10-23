@@ -41,6 +41,7 @@ def apply_schema(seed: bool | None = None) -> None:
         c.execute((DB_DIR / "rfq.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "listings.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "rbac.sql").read_text(encoding="utf-8"))
+        c.execute((DB_DIR / "license.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "signup.sql").read_text(encoding="utf-8"))
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \
                 not c.execute("select 1 from tenants limit 1").fetchone():

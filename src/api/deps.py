@@ -19,6 +19,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .. import db, mailer, ocr, perms
+from .. import license as lic
 from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -142,7 +143,10 @@ def _open(request: Request, write: bool):
                      (role, str(u["id"]), str(u["tenant_id"])))  # from here the database only shows this tenant's rows
         # demo header "staff" on an owner's id acts with the staff defaults, never the owner's everything
         granted = perms.ALL if role == "owner" else perms.grant(u["permissions"]) if u["role"] == "staff" else perms.DEFAULT_STAFF
-        yield Ctx(conn, role, u["id"], u["tenant_id"], u["name"], granted)
+        ctx = Ctx(conn, role, u["id"], u["tenant_id"], u["name"], granted)
+        if write:
+            lic.gate(request.url.path, ctx)  # 402 while an enforced installation has no usable licence (reads stay open)
+        yield ctx
 
 
 def read_ctx(request: Request):

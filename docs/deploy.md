@@ -45,6 +45,19 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 
 Notes: an email address belongs to one account across all tenants. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
 
+## Software licence (optional; off until a public key is set)
+
+The app checks an Ed25519-signed key per organisation. It holds only the PUBLIC key, so nothing on the server can mint keys. Design and limits: `docs/licensing.md`. **This is a deterrent, not DRM**: whoever controls the server and the code can remove the check.
+
+Issuer, once, on the issuer's own machine (not the server):
+
+1. `python scripts/issue_license.py keygen` writes the private key to `~/.laris/license_private.pem` (refuses to overwrite; back it up, never commit or share it) and prints the public key.
+2. On the server set the Secret `LICENSE_PUBLIC_KEY=<that base64>` (or put the same text in `src/license_public.key`). From the next start licensing is enforced.
+3. Per customer: `python scripts/issue_license.py issue --email owner@shop.com --plan standard --days 365 --seats 10 --org "Shop" [--send]`. The key is printed once; `--send` emails it (needs `MAILTRAP_API_TOKEN` on the issuer machine, else it says email is off). The customer's owner activates it under Licence while signed in with that verified email.
+4. Requests: `DATABASE_URL=... python scripts/issue_license.py requests` lists pending ones; `issue --request <id>` fills email, plan and seats and marks it issued.
+
+Server settings: `LICENSE_ISSUER_EMAIL` (where "request a licence" mails go) and `LICENSE_OFFLINE_GRACE_DAYS` (default 7: days the server may be unable to reach NTP before the status becomes `clock_unverified`; outbound UDP port 123 must be allowed). Set the public key on an existing deployment only after issuing its customers' keys, otherwise their writes stop (402) until they activate one.
+
 ## Credentials: tokens, lockout, sessions
 
 - **API tokens expire.** `python scripts/create_token.py issue <user> [--days N]` prints the expiry (default 90 days); an expired token gets the same 401 as an unknown one. Tokens that existed before this change were given 90 days from the first start after the upgrade. `revoke` removes the token and every session of that user.

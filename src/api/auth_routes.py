@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from .. import auth, db
+from .. import license as lic
 from ..errors import ApiError
 from .deps import Ctx, audit, read_ctx, reply, require_owner, write_ctx
 from .roles import find_role
@@ -135,6 +136,7 @@ class NewUser(BaseModel, extra="forbid"):
 @r.post("/users")
 def create_user(body: NewUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
+    lic.check_seat(ctx)
     if why := auth.weak_password(body.password, body.username):
         raise ApiError(422, "weak_password", why)
     role = pick_role(ctx, body.role_id, body.role)
@@ -169,6 +171,8 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
+    if sets.get("active") and not u["active"]:
+        lic.check_seat(ctx)  # reactivating takes a seat too
     if sets.keys() & {"role", "role_id"}:
         sets["role_id"] = pick_role(ctx, sets.pop("role_id", None), sets.pop("role", None))["id"]  # users.role follows it, by trigger
         new_class = find_role(ctx.conn, ctx.tenant_id, sets["role_id"])["class"]

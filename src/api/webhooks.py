@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 from collections import defaultdict, deque
 
@@ -19,7 +20,9 @@ from ..channels import telegram, whatsapp
 from ..errors import ApiError
 from ..tabular import sniff
 from ..templates import load_template
-from .deps import JR
+from ..vision import VisionError
+from . import listings
+from .deps import JR, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -27,6 +30,7 @@ LIMIT, WINDOW = 10, 600  # enquiries per sender per 10 minutes
 # ponytail: in-memory, per process (run.sh forces 1 worker), keys never pruned; move to Redis/DB if we scale out
 _HITS = defaultdict(deque)
 MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
+CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 SORRY = "Sorry, we could not process that message. Our team will follow up."
 
 
@@ -111,6 +115,15 @@ def _handle(conn, s, m):
         if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
+        if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
+            throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
+            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            try:
+                res = listings.create_listing(conn, tid, actor, data, mime, party_id=p["id"], note=m.text.strip()[:300], channel=m.channel,
+                                              http=getattr(s, "vision", None), ocr=s.ocr)
+            except VisionError as e:
+                raise ApiError(502, "vision_unavailable", str(e))
+            return f"Received your catalog photo: {res['item_count']} product(s) are queued for review."
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
             if m.media_kind == "document":  # sheets/Word/CSV arrive as documents; Telegram gives no mime

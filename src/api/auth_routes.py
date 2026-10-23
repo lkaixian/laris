@@ -8,9 +8,22 @@ from pydantic import BaseModel, Field
 from .. import auth, db
 from ..errors import ApiError
 from .deps import Ctx, audit, read_ctx, reply, require_owner, write_ctx
+from .roles import find_role
 
 r = APIRouter(prefix="/api")
 USERNAME = r"^[A-Za-z0-9._-]{3,40}$"
+USER = """select u.id, u.name, u.username, u.role, u.role_id, r.key as role_key, r.name as role_name, u.active"""
+FROM = " from users u left join roles r on r.id = u.role_id"  # users.role is the class (owner|staff); role_key / role_name the role itself
+
+
+def pick_role(ctx: Ctx, role_id, key):
+    """The role row of this tenant named by role_id or by key (an old client sends owner / staff as `role`)."""
+    if (role_id is None) == (key is None):
+        raise ApiError(422, "role_needed", "send exactly one of role_id or role")
+    row = find_role(ctx.conn, ctx.tenant_id, role_id, key)
+    if not row:
+        raise ApiError(422, "unknown_role", "no such role")
+    return row
 
 
 def _bearer_hash(request: Request) -> str:
@@ -106,15 +119,16 @@ def revoke_session(sid: UUID, ctx: Ctx = Depends(write_ctx)):
 def users(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
     return reply(ctx, ctx.conn.execute(
-        """select u.id, u.name, u.username, u.role, u.active, u.password_hash is not null as has_password,
-                  (select count(*) from sessions s where s.user_id = u.id and s.expires_at > now()) as sessions
-           from users u where u.tenant_id=%s order by u.active desc, u.name""", (ctx.tenant_id,)).fetchall())
+        USER + """, u.password_hash is not null as has_password,
+                  (select count(*) from sessions s where s.user_id = u.id and s.expires_at > now()) as sessions"""
+        + FROM + " where u.tenant_id=%s order by u.active desc, u.name", (ctx.tenant_id,)).fetchall())
 
 
 class NewUser(BaseModel, extra="forbid"):
     name: str = Field(min_length=1, max_length=80)
     username: str = Field(pattern=USERNAME)
-    role: str = Field(pattern="^(owner|staff)$")
+    role: str | None = Field(None, pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")  # a role key
+    role_id: UUID | None = None
     password: str = Field(min_length=auth.MIN_PASSWORD, max_length=200)
 
 
@@ -123,19 +137,21 @@ def create_user(body: NewUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
     if why := auth.weak_password(body.password, body.username):
         raise ApiError(422, "weak_password", why)
+    role = pick_role(ctx, body.role_id, body.role)
     try:
-        u = ctx.conn.execute(
-            "insert into users(tenant_id, name, username, role, password_hash) values (%s,%s,%s,%s,%s) returning id, name, username, role, active",
-            (ctx.tenant_id, body.name, body.username, body.role, auth.hash_password(body.password))).fetchone()
+        uid = ctx.conn.execute(  # the class (users.role) follows the role row, by trigger
+            "insert into users(tenant_id, name, username, role, role_id, password_hash) values (%s,%s,%s,%s,%s,%s) returning id",
+            (ctx.tenant_id, body.name, body.username, role["class"], role["id"], auth.hash_password(body.password))).fetchone()["id"]
     except psycopg.errors.UniqueViolation:
         raise ApiError(409, "username_taken", "That username is already taken.")
-    audit(ctx, "users", u["id"], f"user created ({body.role})")
-    return reply(ctx, u, 201)
+    audit(ctx, "users", uid, f"user created ({role['key']})")
+    return reply(ctx, ctx.conn.execute(USER + FROM + " where u.id=%s", (uid,)).fetchone(), 201)
 
 
 class EditUser(BaseModel, extra="forbid"):
     name: str | None = Field(None, min_length=1, max_length=80)
-    role: str | None = Field(None, pattern="^(owner|staff)$")
+    role: str | None = Field(None, pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")  # a role key
+    role_id: UUID | None = None
     active: bool | None = None
     password: str | None = Field(None, min_length=auth.MIN_PASSWORD, max_length=200)
 
@@ -153,7 +169,10 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
-    loses_owner = u["role"] == "owner" and u["active"] and (sets.get("role") == "staff" or sets.get("active") is False)
+    if sets.keys() & {"role", "role_id"}:
+        sets["role_id"] = pick_role(ctx, sets.pop("role_id", None), sets.pop("role", None))["id"]  # users.role follows it, by trigger
+        new_class = find_role(ctx.conn, ctx.tenant_id, sets["role_id"])["class"]
+    loses_owner = u["role"] == "owner" and u["active"] and (("role_id" in sets and new_class != "owner") or sets.get("active") is False)
     if loses_owner and not owners - {uid}:
         raise ApiError(409, "last_owner", "There must be at least one active owner.")
     if "password" in sets:
@@ -161,7 +180,7 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
             raise ApiError(422, "weak_password", why)
         sets["password_hash"] = auth.hash_password(sets.pop("password"))
     c.execute("update users set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(id)s", {**sets, "id": uid})
-    if sets.keys() & {"password_hash", "active", "role"}:
+    if sets.keys() & {"password_hash", "active", "role_id"}:
         auth.revoke_credentials(c, uid)  # API token and every session: force a fresh sign-in
     audit(ctx, "users", uid, "user changed: " + ",".join(sorted(k for k in sets if k != "password_hash")) + (", password" if "password_hash" in sets else ""))
-    return reply(ctx, c.execute("select id, name, username, role, active from users where id=%s", (uid,)).fetchone())
+    return reply(ctx, c.execute(USER + FROM + " where u.id=%s", (uid,)).fetchone())

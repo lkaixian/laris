@@ -50,6 +50,10 @@ Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-r
 
 `GET /health` answers if the process is up; `GET /ready` also checks the database (503 if it is not reachable): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.
 
+## Roles and branding migration
+
+`db/rbac.sql` runs on every start (idempotent, after `rls.sql`, before the seed): it adds `tenants.display_name`, `brand_color`, `logo_data_url`, the tenant-scoped `roles` table (forced RLS, same policy as the rest) and `users.role_id`, creates the `owner` and `staff` system roles for every tenant, and moves each existing user onto the system role matching their old `users.role`. Nothing to run by hand; existing staff keep exactly today's permissions (the staff role stores no list, so it means the built-in defaults in `src/perms.py` until an owner edits it). `users.role` stays the owner|staff class the database guards read. With `DATABASE_URL_OWNER` set, startup re-applies `db/roles.sql`, which gives `laris_app` its grants on the new table. See `docs/roles.md`.
+
 ## Least-privilege database role (recommended before real customers)
 
 `db/roles.sql` creates `laris_app`: it can read and write the tables but owns nothing, so it cannot disable the audit or transition triggers, alter tables, or edit or delete audit rows (checked in CI by `tests/roles_check.mjs` on PGlite). Set a password for it, then give the running app that role's URL as `DATABASE_URL` and keep the owner's URL as `DATABASE_URL_OWNER`: only startup (`apply_schema`) uses the owner URL, and it re-applies the grants. UNVERIFIED on Replit's Postgres: confirm the Replit user is allowed to `CREATE ROLE`; if not, use a separate Postgres (Neon, Supabase) for production. `db/rls.sql` (applied on start) then limits that role to its own tenant's rows: a request sets `laris.tenant`, system work (login lookup, webhooks, scheduler) sets `*`. Tables are also set to `FORCE ROW LEVEL SECURITY`, so even the table owner is held to the tenant rules, as long as that database user is a plain user. A superuser (or a role with `BYPASSRLS`) skips row level security no matter what. **Replit's database user may be a superuser (UNVERIFIED):** if so, tenant isolation is OFF with a single `DATABASE_URL`. At startup the app checks this and logs `tenant isolation OFF: connected as a role that bypasses row level security`; it also warns when the connected user owns the audit log (an owner can switch off the audit triggers). Set `REQUIRE_RLS=1` to make the app refuse to start in that case. The fix is a `laris_app` role (`DATABASE_URL`) with the owner URL kept in `DATABASE_URL_OWNER`, or a separate Postgres (Neon, Supabase) where you create that role. Checked in CI by `tests/roles_check.mjs` and `tests/test_rls_force.py`.
@@ -88,7 +92,9 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `WHATSAPP_APP_SECRET` | checks `X-Hub-Signature-256` on inbound webhooks | yes if WhatsApp is shown |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
-| `RUNPOD_API_KEY` | RunPod auth | yes (sponsor proof) |
+| `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
+| `RUNPOD_VISION_URL` | catalog photo model: `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` (section 10b) | only for catalog photos |
+| `RUNPOD_VISION_MODEL` | model name served by that endpoint (default `Qwen/Qwen2.5-VL-7B-Instruct`) | no |
 | `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit |
 | `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
@@ -155,6 +161,18 @@ python scripts/setup_channels.py telegram-poll              # local only: long-p
 3. Warm it about 10 minutes before the demo. Cold start can take minutes. Scale-to-zero is the default for serverless.
 4. Run one real job so the runtime appears in the logs. `src/ilmu.py` calls `/runsync` with `{"input": {"audio_base64": ..., "mime": ...}}`. **UNVERIFIED:** the input shape of the deployed worker.
 5. Keep the console page with the Endpoint ID, GPU type, and job runtime for the proof.
+
+## 10b. Vision on RunPod (catalog photos)
+
+Reads ONE photo with many labelled products (`POST /api/listings`, or a chat photo captioned `/catalog`). Without the variables below the API answers `503 vision not configured: set <names>` and nothing else changes.
+
+1. RunPod console > Serverless > New Endpoint > vLLM. Model `Qwen/Qwen2.5-VL-7B-Instruct` (or another Qwen2.5-VL), GPU 24 GB class.
+2. Max workers 1 and a low idle timeout (for example 5 s to 60 s) so cost stays near zero between uses. Active workers 0.
+3. Set `RUNPOD_VISION_URL` to `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1`, `RUNPOD_API_KEY` to a RunPod API key (same name as the STT fallback), and optionally `RUNPOD_VISION_MODEL` (default `Qwen/Qwen2.5-VL-7B-Instruct`; it must equal the model the worker serves).
+4. Expect the first call after idle to take minutes (cold start: model load). `src/vision.py` waits up to 150 s per attempt and retries once on a 5xx or timeout, so the first upload after a long idle may return `502 vision_unavailable`; retry once the worker is warm.
+5. Staff chat path: a photo captioned `/catalog` (or `catalog`) from a staff handle or a known supplier makes a listing; any other photo is still a supplier document.
+
+**UNVERIFIED:** nothing here ran against a real endpoint. The OpenAI-compatible route, the image data URL, and the quality of the model's JSON, bounding boxes and reading of Chinese size labels. Tesseract is English-only, so Chinese text is never confirmed by OCR; SKUs and prices the model reports are kept only when the digits also appear in the OCR text. Every product is created `needs_review` and a person confirms it.
 
 ## 11. Smoke tests
 

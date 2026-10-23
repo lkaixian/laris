@@ -77,7 +77,8 @@ def run(ctx: Ctx, intent: str, query: str | None, days: int | None) -> tuple[str
     if intent == "do_action":
         return ("I can look things up but I cannot change, approve, price or send anything. Open the quote and do it there, "
                 "so a person stays in control.", [link("Open the tracker", "#/tracker")])
-    if intent in ("stale_costs", "margin_report", "cost_of") and not ctx.owner:
+    need = {"stale_costs": "view_costs", "cost_of": "view_costs", "margin_report": "view_reports"}  # margin_report shows margins: also view_costs
+    if intent in need and not (need[intent] in ctx.perms and ctx.costs):
         return ("That needs cost and margin figures, which only the owner can see.", [])
     if intent == "attention":
         n_review = c.execute("""select count(distinct d.id) n from documents d join document_lines l on l.document_id=d.id
@@ -85,7 +86,7 @@ def run(ctx: Ctx, intent: str, query: str | None, days: int | None) -> tuple[str
         n_jobs = c.execute("select count(*) n from jobs where tenant_id=%s and status<>'done'", (ctx.tenant_id,)).fetchone()["n"]
         parts, items = [f"{n_review} {'document needs' if n_review == 1 else 'documents need'} review", f"{n_jobs} open {'job' if n_jobs == 1 else 'jobs'}"], \
             [link("Tracker", "#/tracker"), link("Jobs", "#/jobs")]
-        if ctx.owner:
+        if ctx.costs:
             st = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta),0) lost from v_stale_alerts where tenant_id=%s", (ctx.tenant_id,)).fetchone()
             fu = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
                               where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (ctx.tenant_id,)).fetchone()["n"]
@@ -174,4 +175,4 @@ def assistant(body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
 
 @r.get("/assistant/suggestions")
 def suggestions(ctx: Ctx = Depends(read_ctx)):
-    return reply(ctx, SUGGESTIONS if ctx.owner else [s for s in SUGGESTIONS if "reply" not in s and "7 days" not in s])
+    return reply(ctx, SUGGESTIONS if ctx.costs else [s for s in SUGGESTIONS if "reply" not in s and "7 days" not in s])

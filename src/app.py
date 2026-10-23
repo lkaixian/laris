@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import db, scheduler
-from .api import assistant, auth_routes, contacts, rfq, routes, webhooks
+from .api import assistant, auth_routes, contacts, listings, rfq, roles, routes, webhooks
 from .api.deps import JR, Services
 from .errors import ApiError
 
@@ -39,6 +39,8 @@ app.include_router(auth_routes.r)
 app.include_router(routes.r)
 app.include_router(contacts.r)
 app.include_router(rfq.r)
+app.include_router(listings.r)
+app.include_router(roles.r)
 app.include_router(assistant.r)
 app.include_router(webhooks.r)
 

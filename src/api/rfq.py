@@ -15,7 +15,7 @@ from .. import pipeline
 from ..channels import telegram
 from ..channels.telegram import NOT_STARTED
 from ..errors import ApiError
-from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, throttle, write_ctx
+from .deps import Ctx, audit, read_ctx, reply, require_owner, require_perm, svc, throttle, write_ctx
 from .routes import MAGIC, Transition, read_capped, transition
 
 log = logging.getLogger("laris")
@@ -39,6 +39,7 @@ def _why(e: Exception, ch: str = "WhatsApp") -> str:
 def ask(request: Request, image: UploadFile = File(...), description: str = Form(..., max_length=200),
         note: str = Form(DEFAULT_NOTE, max_length=300), circle: str | None = Form(None),
         supplier_ids: list[UUID] = Form(...), ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "ask_suppliers")
     throttle(f"rfq:{ctx.user_id}", 10, 600, "Too many supplier requests in 10 minutes. Wait a while.")  # each one messages suppliers
     data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
     mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
@@ -112,7 +113,7 @@ def rfq_list(ctx: Ctx = Depends(read_ctx)):
                           from rfq_replies r join rfq_sends s on s.id=r.send_id join parties p on p.id=s.supplier_id
                           where r.tenant_id=%s and s.rfq_item_id = any(%s) order by r.created_at, r.id""",
                        (ctx.tenant_id, list(by))).fetchall():
-        o = ctx.owner  # supplier prices and their words: owner only; staff learn only who has answered
+        o = "view_replies_prices" in ctx.perms  # supplier prices and their words; without it you learn only who has answered
         by[x["rfq_item_id"]].append({
             "reply_id": x["reply_id"], "send_id": x["send_id"], "supplier_id": x["supplier_id"], "supplier_name": x["supplier_name"],
             "text": (x["message_text"] or "") if o else "", "unit_price": x["unit_price"] if o else None,

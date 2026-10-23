@@ -18,7 +18,7 @@ def url() -> str:
 def tx(role="staff", actor="", tenant="*"):
     """Commit on clean exit, roll back on exception. prepare_threshold=None keeps PGlite/pgbouncer happy.
     tenant '*' is for work that crosses tenants on purpose; request code narrows it once the user is known (db/rls.sql)."""
-    with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None) as conn:
+    with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None, connect_timeout=15) as conn:
         conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
                      (role, str(actor or ""), str(tenant)))
         yield conn
@@ -29,7 +29,7 @@ def apply_schema(seed: bool | None = None) -> None:
     from .templates import load_template  # local: keeps db.py importable without yaml
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
-    with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None) as c:
+    with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None, connect_timeout=15) as c:
         c.execute("select set_config('laris.tenant', '*', false)")  # FORCE RLS applies to the owner: seeding crosses tenants on purpose
         if not c.execute("select to_regclass('public.tenants')").fetchone()[0]:
             for f in ("schema.sql", "transitions.sql", "functions.sql"):

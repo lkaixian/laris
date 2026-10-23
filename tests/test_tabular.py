@@ -123,7 +123,11 @@ def test_ingest_bad_files(env):
     assert post(e, "q.csv", b"\n\n").json()["error"]["code"] == "no_text"
     bad = docx("<w:p/>", b'<!DOCTYPE d [<!ENTITY x "y">]>')
     assert post(e, "q.docx", bad).status_code == 422
-    corrupt = SHEET[:200] + b"garbage" + SHEET[207:]  # a real zip header, a broken body
+    broken = io.BytesIO()  # an xlsx-shaped zip whose workbook is not XML: fails the same way on every zlib
+    with zipfile.ZipFile(broken, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/workbook.xml", "not xml at all")
+    corrupt = broken.getvalue()
     assert post(e, "q.xlsx", corrupt).status_code == 422
     nodoc = io.BytesIO()
     with zipfile.ZipFile(nodoc, "w") as z:

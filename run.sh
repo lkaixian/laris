@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 : "${DATABASE_URL:?DATABASE_URL not set: add Replit PostgreSQL (Database tool) first}"
 
-pip install -q -r requirements.txt
+PIP_USER=0 python -m pip install -q -r requirements.txt
 
 # Bootstrap schema once. db/*.sql are not idempotent (CREATE TYPE, CREATE TABLE), so only run on an empty DB.
 # SEED=1 adds the synthetic demo seed on that first bootstrap. Remove SEED after the demo.

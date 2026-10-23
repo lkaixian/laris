@@ -105,7 +105,7 @@ Note: `run.sh` applies the schema only when the `documents` table is missing. If
 
 1. Click Deploy. Choose **Reserved VM**. Do not choose Autoscale. Autoscale sleeps when idle, and that would break Telegram and WhatsApp webhooks and APScheduler.
 2. **UNVERIFIED:** the deployment type label and the `deploymentTarget = "vm"` value in `.replit`. If the UI shows a different target name, set it to Reserved VM in the UI and keep the build and run commands from `.replit`.
-3. Build command (from `.replit`): `pip install -q -r requirements.txt && cd web && npm ci && npm run build`.
+3. Build command (from `.replit`): `PIP_USER=0 python -m pip install -q -r requirements.txt && cd web && npm ci && npm run build`.
 4. Run command (from `.replit`): `bash run.sh`.
 5. Wait for "Deployment is live". Then check `/health` on the deployment URL.
 6. Reserved VM bills while it is on. Check the price in the Replit console. The ADR figures are from a Feb 2025 table and may be stale (see `knowledge/06-tech-stack/adr-replit-hosting.md`).

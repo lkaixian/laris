@@ -36,6 +36,7 @@ def apply_schema(seed: bool | None = None) -> None:
                 c.execute((DB_DIR / f).read_text(encoding="utf-8"))
         c.execute((DB_DIR / "tiers.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "views.sql").read_text(encoding="utf-8"))
+        c.execute((DB_DIR / "auth.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "rls.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "rfq.sql").read_text(encoding="utf-8"))
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \

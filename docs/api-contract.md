@@ -31,8 +31,11 @@ Staff responses are scrubbed on every endpoint below as before. "Owner" means ow
 
 | Endpoint | Who | What |
 |---|---|---|
-| `GET /api/auth/config`, `POST /api/login`, `POST /api/logout` | public / any | Accounts. Login returns a session token (stored server side only as SHA-256, expires after `SESSION_HOURS`, default 12). Wrong user and wrong password give the same error. 5 failed tries per username and address per 15 minutes, then 429 |
-| `POST /api/me/password` | any | Change own password (10+ characters); other devices are signed out |
+| `GET /api/auth/config`, `POST /api/login`, `POST /api/logout` | public / any | Accounts. Login returns a session token (stored server side only as SHA-256, expires after `SESSION_HOURS`, default 12). Wrong user and wrong password give the same error. 5 failed tries lock a username for 1 minute, doubling to 15 minutes; 30 failed tries per client address per 15 minutes across usernames; both give 429 (`too_many_attempts`) |
+| `POST /api/me/password` | any | Change own password (10+ characters, not a very common password, not the username: 422 `weak_password`); other devices and the API token are signed out. Wrong `current` is throttled per user (429) |
+| `GET /api/me/sessions` | any | Own live sessions: `id`, `created_at`, `last_seen_at` (updated at most once a minute, may be null), `user_agent`, `current` |
+| `POST /api/me/sessions/revoke-others` | any | Sign out every other device; returns `{"revoked": n}` |
+| `DELETE /api/me/sessions/{id}` | any | Sign out one of your own sessions; 404 for anyone else's (also across tenants) |
 | `GET/POST /api/users`, `POST /api/users/{id}` | owner | Add people, set password, change role, deactivate. The last active owner cannot be removed |
 | `GET/POST /api/contacts`, `GET/POST /api/contacts/{id}` | any | Contact book (customer, supplier, contractor). `GET` takes `q` and `role`. Owner also gets `value` and, for a supplier, `current_costs` |
 | `GET /api/search?q=` | any | Contacts, documents (number, party, line text); owner also cost items |

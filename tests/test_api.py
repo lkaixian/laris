@@ -776,12 +776,12 @@ def test_login_sessions_and_user_management(env):
 def test_login_is_rate_limited_and_sessions_expire(env):
     from src import auth
     e = env
-    auth._FAILS.clear()
+    auth._ACCT.clear(); auth._IPS.clear()
     e.sql("update users set username='boss2', password_hash=%s where id=%s", (auth.hash_password("right password 1"), e.owner))
     for _ in range(auth.LIMIT):
         assert e.c.post("/api/login", json={"username": "boss2", "password": "wrong"}).status_code == 401
     assert e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).status_code == 429
-    auth._FAILS.clear()
+    auth._ACCT.clear(); auth._IPS.clear()
     tok = e.c.post("/api/login", json={"username": "boss2", "password": "right password 1"}).json()["token"]
     e.sql("update sessions set expires_at = now() - interval '1 minute'")
     assert e.c.get("/api/me", headers={"Authorization": "Bearer " + tok}).status_code == 401

@@ -29,6 +29,14 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 
 Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no sign-in) is allowed only while no account has a password, `REQUIRE_USER_TOKEN` is not `1`, and either `DEMO_MODE=1` is set or this is a plain local run (no `APP_TOKEN`, not a Replit deployment). Otherwise every `/api` call without a valid session or token gets 401. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). The moment one account has a password, demo mode is off for good, even if `DEMO_MODE=1`, and the login screen is shown; the owner adds everyone else on the Team page. `REQUIRE_USER_TOKEN=1` also forces it off before any account exists. `APP_TOKEN` only works in demo mode, and then only for users of the first tenant. Sessions last `SESSION_HOURS` (default 12).
 
+## Credentials: tokens, lockout, sessions
+
+- **API tokens expire.** `python scripts/create_token.py issue <user> [--days N]` prints the expiry (default 90 days); an expired token gets the same 401 as an unknown one. Tokens that existed before this change were given 90 days from the first start after the upgrade. `revoke` removes the token and every session of that user.
+- A password change, and an owner changing a user's role, active flag or password, also removes that user's API token and sessions (a self-service password change keeps only the current session). `create_token.py account` refuses a deactivated user unless you pass `--reactivate`.
+- **Sign-in lockout (in memory, one process):** 5 failed sign-ins for a username lock it for 1 minute, then 2, 4, 8 and at most 15 minutes for each further 5 failures; a success, or 15 minutes with no failures, resets it. A lapsed lock needs 5 new failures to lock again. Separately, one client address may make 30 failed sign-ins per 15 minutes across all usernames, then gets 429. The current-password check in `POST /api/me/password` is throttled per user the same way. A restart clears the counters. Set `TRUST_PROXY=1` on Replit so the address is the real client, not the proxy.
+- Passwords are scrypt N=2^16 (64 MiB per sign-in; size the instance accordingly). Older hashes keep working and are upgraded on the next successful sign-in. Very common passwords and a password equal to the username are refused.
+- Each user keeps at most 10 sessions (the oldest is dropped at sign-in); expired sessions are purged at sign-in. `db/auth.sql` (new columns) is applied on every start.
+
 ## Health check and backups
 
 `GET /health` answers if the process is up; `GET /ready` also checks the database (503 if it is not reachable): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.
@@ -72,6 +80,7 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth | yes (sponsor proof) |
+| `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit |
 | `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
 

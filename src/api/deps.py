@@ -88,10 +88,13 @@ def _open(request: Request, write: bool):
     with db.tx("staff", "") as conn:
         u = conn.execute("""select u.id, u.tenant_id, u.name, u.role from users u
                             left join sessions s on s.user_id = u.id and s.token_sha256 = %(h)s and s.expires_at > now()
-                            where u.active and (s.token_sha256 is not null or u.token_sha256 = %(h)s)""",
+                            where u.active and (s.token_sha256 is not null
+                                  or (u.token_sha256 = %(h)s and (u.token_expires_at is null or u.token_expires_at > now())))""",
                          {"h": token_hash(tok)}).fetchone() if tok and not shared_ok else None
         if u:
             role = u["role"]
+            conn.execute("update sessions set last_seen_at = now() where token_sha256 = %s and (last_seen_at is null or last_seen_at < now() - interval '1 minute')",
+                         (token_hash(tok),))  # at most one write a minute per session
         else:
             if (shared and not shared_ok) or (tok and not shared_ok) or not header_mode_allowed(conn):  # a token that matches nothing is never ignored
                 raise ApiError(401, "bad_token", "missing or invalid bearer token")

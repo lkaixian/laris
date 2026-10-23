@@ -64,9 +64,12 @@ def validate_extraction(data, catalog=None, today=None) -> dict:
             if v == "bad":
                 failed.append(f"{name}_not_numeric")
         qty, up, amt = (None if v == "bad" else v for v in (qty, up, amt))
-        if qty is None:
+        mq = _num(raw.get("min_qty"))
+        if mq == "bad" or mq is not None and mq <= 0:
+            failed.append("min_qty_invalid")
+        if qty is None and not (mq not in (None, "bad") and mq > 0):  # a price-tier line may state only its minimum quantity
             failed.append("null_qty")
-        elif qty <= 0:
+        if qty is not None and qty <= 0:
             failed.append("qty_not_positive")
         if up is None:
             failed.append("null_unit_price")

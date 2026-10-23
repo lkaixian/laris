@@ -75,6 +75,8 @@ def line_json(ctx: Ctx, l: dict, doc: dict, hide: set) -> dict:
             "discount_pct": l["discount_pct"] if show_price else None, "tax_rate": l["tax_rate"],
             "section": l["section"], "is_header": l["is_header"], "needs_review": l["needs_review"],
             "ocr_confidence": l["ocr_confidence"],
+            "min_qty": l["min_qty"] if ctx.owner else None, "supplier_sku": l["supplier_sku"] if ctx.owner else None,
+            "review_reason": l["review_reason"] if ctx.owner else None,
             "attrs": {k: v for k, v in l["attrs"].items() if k not in hide},
             "attrs_unmapped": {k: v for k, v in l["attrs_unmapped"].items() if k not in hide} if ctx.owner else {}}
 

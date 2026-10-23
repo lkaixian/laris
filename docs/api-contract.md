@@ -5,7 +5,7 @@ Money is a string with 2-4 decimals (e.g. "123.4000"). Dates ISO-8601. Statuses 
 
 ## Types
 Doc summary: {id, direction:"in"|"out", kind, doc_no, party:{id,name}, status, issued_on, valid_until, total, currency, updated_at, flags:{cost_is_stale:bool, needs_review:bool}}
-Line: {id, line_no, item_key|null, description, qty|null, uom, unit_price|null, discount_pct|null, tax_rate|null, section|null, is_header, needs_review, ocr_confidence|null, attrs:{}, attrs_unmapped:{}}
+Line: {id, line_no, item_key|null, description, qty|null, uom, unit_price|null, discount_pct|null, tax_rate|null, section|null, is_header, needs_review, ocr_confidence|null, attrs:{}, attrs_unmapped:{}, min_qty|null, supplier_sku|null, review_reason|null}   (the last three are owner only: null for staff; min_qty is the supplier price-tier break, >1 = a minimum order quantity)
 Provenance (owner only): {line_id, cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost, cost_snapshot, current_unit_cost, cost_is_stale, line_margin}
 
 ## Endpoints

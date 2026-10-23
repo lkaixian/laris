@@ -24,7 +24,7 @@ def tx(role="staff", actor="", tenant="*"):
 
 
 def apply_schema(seed: bool | None = None) -> None:
-    """Idempotent: schema/transitions/functions only on an empty DB, views always (CREATE OR REPLACE)."""
+    """Idempotent: schema/transitions/functions only on an empty DB, tiers/views/rls always (CREATE OR REPLACE)."""
     from .templates import load_template  # local: keeps db.py importable without yaml
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
@@ -32,6 +32,7 @@ def apply_schema(seed: bool | None = None) -> None:
         if not c.execute("select to_regclass('public.tenants')").fetchone()[0]:
             for f in ("schema.sql", "transitions.sql", "functions.sql"):
                 c.execute((DB_DIR / f).read_text(encoding="utf-8"))
+        c.execute((DB_DIR / "tiers.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "views.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "rls.sql").read_text(encoding="utf-8"))
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \

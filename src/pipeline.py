@@ -27,14 +27,17 @@ SUPPLIER_SCHEMA = {
         "lines": {"type": "array", "items": {"type": "object", "properties": {
             "line_no": {"type": "integer"}, "description": {"type": "string"}, "qty": {"type": ["number", "null"]},
             "uom": {"type": ["string", "null"]}, "unit_price": {"type": ["number", "null"]},
-            "amount": {"type": ["number", "null"]}}, "required": ["description"]}},
+            "amount": {"type": ["number", "null"]},
+            "min_qty": {"type": ["number", "null"], "description": "minimum order quantity / price-tier break, if stated"},
+            "sku": {"type": ["string", "null"], "description": "supplier's own item code"}}, "required": ["description"]}},
         "totals": {"type": "object", "properties": {"subtotal": {"type": ["number", "null"]},
                    "sst": {"type": ["number", "null"]}, "grand_total": {"type": ["number", "null"]}}},
     },
     "required": ["lines"],
 }
 LINE_KNOWN = {"line_no", "description", "qty", "uom", "unit_price", "amount", "ocr_confidence", "item_key_suggestion",
-              "item_key_score", "confidence", "needs_review", "failed", "discount_pct", "tax_rate", "section"}
+              "item_key_score", "confidence", "needs_review", "failed", "discount_pct", "tax_rate", "section",
+              "min_qty", "sku"}
 
 
 def _ilmu(fn, *a, **kw):
@@ -218,11 +221,11 @@ def _flag_price_jumps(conn, tenant_id, v):
     """A supplier price far from the current cost book is either news or an injected/misread number: a human confirms.
     Marks the line needs_review and adds a doc flag naming the item and the change."""
     for l in v["lines"]:
-        up, key = _dec(l.get("unit_price")), l.get("item_key_suggestion")
+        up, key, mq = _dec(l.get("unit_price")), l.get("item_key_suggestion"), _dec(l.get("min_qty")) or 1
         if not (up and key):
             continue
-        cur = conn.execute("""select unit_cost from cost_items where tenant_id=%s and item_key=%s and superseded_by is null
-                              order by effective_date desc limit 1""", (tenant_id, key)).fetchone()
+        cur = conn.execute("""select unit_cost from cost_items where tenant_id=%s and item_key=%s and min_qty=%s and superseded_by is null
+                              order by effective_date desc limit 1""", (tenant_id, key, mq)).fetchone()
         if cur and cur["unit_cost"] > 0:
             pct = (up - cur["unit_cost"]) / cur["unit_cost"] * 100
             if abs(pct) > JUMP_PCT:
@@ -281,17 +284,23 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     for n, l in enumerate(v["lines"], 1):
         qty, up = _dec(l.get("qty")), _dec(l.get("unit_price"))
         qty = qty if qty and qty > 0 else None
+        mq = _dec(l.get("min_qty"))
+        mq = mq if mq and mq > 0 else None
+        if qty is None and mq:  # a tier line states only its minimum: the minimum is the quantity the price is for
+            qty = mq
+        mq = mq or Decimal(1)
         disc, ocrc = _dec(l.get("discount_pct")), _dec(l.get("ocr_confidence"))
         attrs, unmapped = route_attrs(conn, tenant_id, "in", {k: x for k, x in l.items() if k not in LINE_KNOWN})
         lid = conn.execute(
             """insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price,ocr_confidence,
-                   needs_review,discount_pct,tax_rate,section,attrs,attrs_unmapped)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
+                   needs_review,discount_pct,tax_rate,section,attrs,attrs_unmapped,min_qty,supplier_sku)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
             (doc_id, n, str(l.get("description") or "")[:500], l.get("item_key_suggestion"), qty,
              str(l.get("uom") or "")[:20], up, ocrc if ocrc is not None and ocrc <= 1 else None,
              bool(l["needs_review"]) or qty is None or up is None,
              disc if disc is not None and disc <= 100 else None, _dec(l.get("tax_rate")),
-             str(l["section"])[:100] if l.get("section") else None, Jsonb(attrs), Jsonb(unmapped))).fetchone()["id"]
+             str(l["section"])[:100] if l.get("section") else None, Jsonb(attrs), Jsonb(unmapped), mq,
+             str(l["sku"])[:100] if l.get("sku") else None)).fetchone()["id"]
         propose(conn, tenant_id, unmapped, lid)
     if not manual:
         _log_ai(conn, tenant_id, "parse_receipt_lines", doc_id,
@@ -317,10 +326,15 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
     items = out.get("items")
     if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
         raise ApiError(422, "no_items", "could not find any items in the enquiry")
-    costs = {r["item_key"]: (r["unit_cost"], r["id"]) for r in conn.execute(
-        """select distinct on (item_key) item_key, unit_cost, id from cost_items
-           where tenant_id=%s and superseded_by is null and (valid_until is null or valid_until >= current_date)
-           order by item_key, effective_date desc, created_at desc""", (tenant_id,))}
+    costs = {}  # item_key -> price tiers [(min_qty, unit_cost, id)] of the newest cost's supplier and uom
+    for r in conn.execute(
+            """select item_key, uom, supplier_id, min_qty, unit_cost, id from cost_items
+               where tenant_id=%s and superseded_by is null and (valid_until is null or valid_until >= current_date)
+               order by item_key, effective_date desc, created_at desc""", (tenant_id,)):
+        first = costs.setdefault(r["item_key"], (r["supplier_id"], r["uom"], {}))
+        if first[:2] == (r["supplier_id"], r["uom"]):
+            first[2].setdefault(r["min_qty"], (r["min_qty"], r["unit_cost"], r["id"]))
+    costs = {k: list(v[2].values()) for k, v in costs.items()}
     try:
         quote = pricing.price_quote(clean_items(items), costs, tpl, dict(t))
     except pricing.PriceInjection as e:
@@ -330,6 +344,7 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
     except (KeyError, ValueError, TypeError, ArithmeticError) as e:
         raise ApiError(422, "bad_items", f"could not price the enquiry: {e}")
     flagged = {v["line_no"] for v in pricing.margin_guard(quote, t["min_margin_pct"]) if v["line_no"]}
+    flagged |= {l["line_no"] for l in quote["lines"] if l["below_moq"]}
 
     enq = conn.execute("insert into enquiries(tenant_id,party_id,channel,status) values (%s,%s,%s,'quoted') returning id",
                        (tenant_id, party_id, channel)).fetchone()["id"]
@@ -343,10 +358,13 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
         attrs, unmapped = route_attrs(conn, tenant_id, "out", l["attrs"])
         lid = conn.execute(
             """insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price,price_source,
-                   needs_review,attrs,attrs_unmapped,other_cost_per_unit) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
+                   needs_review,attrs,attrs_unmapped,other_cost_per_unit,review_reason)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
             (doc_id, l["line_no"], tpl["recipes"][l["item_key"]].get("description", l["item_key"]), l["item_key"],
              l["qty"], l["uom"], l["unit_price"], l["price_source"], l["line_no"] in flagged, Jsonb(attrs), Jsonb(unmapped),
-             sum((q * u for _, q, u, cid in l["basis"] if cid is None), Decimal(0)) / l["qty"])  # labour + machine per unit
+             sum((q * u for _, q, u, cid in l["basis"] if cid is None), Decimal(0)) / l["qty"],  # labour + machine per unit
+             "; ".join(f"below supplier MOQ for {k}: need {need:f}, minimum {mq:f}; priced at the lowest tier"
+                       for k, need, mq in l["below_moq"]) or None)
         ).fetchone()["id"]
         propose(conn, tenant_id, unmapped, lid)
         for _, q, uc, cid in l["basis"]:

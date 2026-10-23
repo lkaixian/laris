@@ -28,8 +28,21 @@ def _reject_price_keys(item: dict) -> None:
         raise PriceInjection(f"price keys not allowed in input: {sorted(bad)}")
 
 
+def pick_tier(entry, qty):
+    """entry: (unit_cost, id) or a list of tiers [(min_qty, unit_cost, id)]. -> (unit_cost, id, min_qty or None).
+    The tier with the largest min_qty <= qty; below the lowest tier (an MOQ, min_qty > 1) the lowest tier is used and
+    its min_qty is returned so the caller can flag the line."""
+    if isinstance(entry, tuple):
+        return entry[0], entry[1], None
+    tiers = sorted(entry, key=lambda t: t[0])
+    ok = [t for t in tiers if t[0] <= qty]
+    if ok:
+        return ok[-1][1], ok[-1][2], None
+    return tiers[0][1], tiers[0][2], tiers[0][0] if tiers[0][0] > 1 else None
+
+
 def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> dict:
-    """items: [{item_key (recipe key), qty, attrs?}]. cost_lookup: {item_key: (unit_cost, cost_item_id)}.
+    """items: [{item_key (recipe key), qty, attrs?}]. cost_lookup: {item_key: (unit_cost, cost_item_id) or [(min_qty, unit_cost, cost_item_id)] price tiers}.
     owner_overrides: {index: unit_price}, trusted caller (owner-authenticated) only."""
     overrides = owner_overrides or {}
     lines = []
@@ -41,7 +54,7 @@ def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> d
         qty = D(it["qty"])
         if qty <= 0:
             raise ValueError("qty must be > 0")
-        basis, cost = [], None
+        basis, cost, below = [], None, []
         if "fixed_rate" in recipe:
             unit_price, source = _q(D(template["rate_card"][recipe["fixed_rate"]])), "fixed_rate_card"
         else:
@@ -49,8 +62,11 @@ def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> d
             for b in recipe["bom"]:
                 if b["item_key"] not in cost_lookup:
                     raise MissingCost(b["item_key"])
-                uc, cid = cost_lookup[b["item_key"]]
-                basis.append((b["item_key"], D(b["qty"]) * qty, D(uc), cid))
+                need = D(b["qty"]) * qty  # the amount of that material this order buys picks the tier
+                uc, cid, moq = pick_tier(cost_lookup[b["item_key"]], need)
+                if moq is not None:
+                    below.append((b["item_key"], need, D(moq)))
+                basis.append((b["item_key"], need, D(uc), cid))
                 unit_cost += D(b["qty"]) * D(uc)
             for rate, hrs in recipe.get("hours", {}).items():
                 rc = D(template["rate_card"][rate])
@@ -63,7 +79,8 @@ def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> d
             unit_price, source = _q(D(overrides[i])), "owner_override"
         lines.append({"line_no": i + 1, "item_key": it["item_key"], "qty": qty, "uom": recipe["uom"],
                       "attrs": it.get("attrs") or {}, "unit_price": unit_price, "price_source": source,
-                      "line_total": _q(unit_price * qty), "line_cost": cost, "basis": basis})
+                      "line_total": _q(unit_price * qty), "line_cost": cost, "basis": basis,
+                      "below_moq": below})
     return {"lines": lines, **_totals(lines)}
 
 

@@ -1,7 +1,7 @@
 # Replit config. Dev Run and Reserved VM deployment both use run.sh (single uvicorn worker).
 # Unverified on Replit: deploymentTarget value, [nix] channel, port mapping. Check in the Deployments pane.
 run = "bash run.sh"
-modules = ["python-base-3.13"]
+modules = ["python-base-3.13", "nodejs-24"]
 
 [nix]
 channel = "stable-24_05"

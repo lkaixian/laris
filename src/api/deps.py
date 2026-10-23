@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import re
+import time
+from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -16,7 +18,7 @@ from psycopg.types.json import Jsonb
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .. import db, ocr
+from .. import db, ocr, perms
 from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -43,7 +45,8 @@ class JR(JSONResponse):
 # Keys a staff response must never carry, at any depth (belt and braces: builders also omit them).
 STAFF_HIDE = {"cost", "unit_cost", "old_cost", "current_cost", "current_unit_cost", "cost_snapshot", "cost_item_id",
               "cost_date", "cost_is_stale", "margin", "margin_delta", "margin_pct", "line_margin", "line_cost",
-              "supplier", "provenance", "source_doc_id", "source_doc_no", "source_line_id", "stale", "extraction"}
+              "supplier", "provenance", "source_doc_id", "source_doc_no", "source_line_id", "stale", "extraction",
+              "stale_margin_lost"}
 
 
 def scrub(x):
@@ -61,20 +64,30 @@ class Ctx:
     user_id: UUID | None
     tenant_id: UUID
     name: str
+    perms: frozenset = frozenset()  # what this user's role grants (src/perms.py); owner = all
 
     @property
-    def owner(self) -> bool:
+    def owner(self) -> bool:  # the class, which the DB guard keys on
         return self.role == "owner"
+
+    @property
+    def costs(self) -> bool:
+        return "view_costs" in self.perms
 
 
 def reply(ctx: Ctx, data, status: int = 200) -> JR:
-    """EVERY API response goes through here: staff get scrub()."""
-    return JR(data if ctx.owner else scrub(data), status_code=status)
+    """EVERY API response goes through here: anyone without view_costs gets scrub()."""
+    return JR(data if ctx.costs else scrub(data), status_code=status)
 
 
 def require_owner(ctx: Ctx):
     if not ctx.owner:
         raise ApiError(403, "owner_only", "owner role required")
+
+
+def require_perm(ctx: Ctx, key: str):
+    if key not in ctx.perms:
+        raise ApiError(403, "permission_required", f"your role lacks the '{key}' permission")
 
 
 def _open(request: Request, write: bool):
@@ -89,7 +102,7 @@ def _open(request: Request, write: bool):
     shared = os.environ.get("APP_TOKEN")
     shared_ok = bool(shared) and tok is not None and hmac.compare_digest(tok.encode(), shared.encode())
     with db.tx("staff", "") as conn:
-        u = conn.execute("""select u.id, u.tenant_id, u.name, u.role from users u
+        u = conn.execute("""select u.id, u.tenant_id, u.name, u.role, r.permissions from users u left join roles r on r.id = u.role_id
                             left join sessions s on s.user_id = u.id and s.token_sha256 = %(h)s and s.expires_at > now()
                             where u.active and (s.token_sha256 is not null
                                   or (u.token_sha256 = %(h)s and (u.token_expires_at is null or u.token_expires_at > now())))""",
@@ -113,11 +126,11 @@ def _open(request: Request, write: bool):
                     uid = str(UUID(uid))
                 except ValueError:
                     raise ApiError(401, "bad_user", "X-User is not a uuid")
-                u = conn.execute("select id, tenant_id, name, role from users where id=%s and active", (uid,)).fetchone()
+                u = conn.execute("select u.id, u.tenant_id, u.name, u.role, r.permissions from users u left join roles r on r.id = u.role_id where u.id=%s and u.active", (uid,)).fetchone()
                 if u and home and u["tenant_id"] != home:
                     u = None
             elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
-                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active and (%s::uuid is null or tenant_id=%s) order by name, id limit 1",
+                u = conn.execute("select u.id, u.tenant_id, u.name, u.role, r.permissions from users u left join roles r on r.id = u.role_id where u.role=%s and u.active and (%s::uuid is null or u.tenant_id=%s) order by u.name, u.id limit 1",
                                  (role, home, home)).fetchone()
             else:
                 raise ApiError(401, "no_user", "X-User header required")
@@ -127,7 +140,9 @@ def _open(request: Request, write: bool):
                 raise ApiError(403, "not_owner", "this user is not an owner")
         conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
                      (role, str(u["id"]), str(u["tenant_id"])))  # from here the database only shows this tenant's rows
-        yield Ctx(conn, role, u["id"], u["tenant_id"], u["name"])
+        # demo header "staff" on an owner's id acts with the staff defaults, never the owner's everything
+        granted = perms.ALL if role == "owner" else perms.grant(u["permissions"]) if u["role"] == "staff" else perms.DEFAULT_STAFF
+        yield Ctx(conn, role, u["id"], u["tenant_id"], u["name"], granted)
 
 
 def read_ctx(request: Request):
@@ -154,6 +169,20 @@ def guarded():
     except (psycopg.errors.IntegrityError, psycopg.errors.DataError) as e:
         log.warning("constraint violation: %s", e.diag.message_primary)
         raise ApiError(409, "conflict", GENERIC)  # constraint / column names stay in the server log, not the response
+
+
+# ponytail: in-memory per process (single worker); a restart clears it. Tests clear HITS.
+HITS = defaultdict(deque)
+
+
+def throttle(key: str, limit: int, window: int, msg: str, hits=HITS):
+    """Sliding window: at most `limit` calls per `key` in `window` seconds, else 429 (the existing error shape)."""
+    now, q = time.monotonic(), hits[key]
+    while q and now - q[0] > window:
+        q.popleft()
+    if len(q) >= limit:
+        raise ApiError(429, "slow_down", msg)
+    q.append(now)
 
 
 def audit(ctx: Ctx, entity: str, entity_id, event: str, before=None, after=None):

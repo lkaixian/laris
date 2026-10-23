@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import db
-from src.api import webhooks
+from src.api import deps, webhooks
 from src.api.deps import Services
 from src.app import app
 
@@ -114,5 +114,6 @@ def env(pg_url, monkeypatch):
     svc = FakeSvc(ai)
     app.state.svc = svc
     webhooks._HITS.clear()
+    deps.HITS.clear()  # per-user write limits
     yield Env(TestClient(app), ai, svc)
     app.state.svc = Services()

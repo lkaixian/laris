@@ -5,6 +5,7 @@
 import { ApiError, NEXT } from './api'
 import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Alert, Provenance } from './api'
 
+import { mockListings } from './mockListings'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
 const cust = { id: 'p3', name: 'SAMPLE Customer Cafe (synthetic)' }
@@ -124,13 +125,72 @@ const rfqs = [
     ] },
 ]
 
+// Mock sessions (Account page): this device plus two others, so sign out one and sign out all others both have something to do.
+const minsAgo = (n: number) => new Date(Date.now() - n * 6e4).toISOString()
+const sessions = [
+  { id: 'se1', created_at: minsAgo(90), last_seen_at: minsAgo(0), user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', current: true },
+  { id: 'se2', created_at: minsAgo(60 * 30), last_seen_at: minsAgo(45), user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', current: false },
+  { id: 'se3', created_at: minsAgo(60 * 24 * 6), last_seen_at: null, user_agent: null, current: false },
+]
+
+// Mock roles, users and branding (in memory): the Roles, Team and Settings pages work without a server.
+const CATALOG = [
+  { key: 'view_costs', label: 'See costs and prices', description: 'Supplier prices, cost items, margins and stale-cost alerts.', group: 'Costs and prices', default: false },
+  { key: 'view_reports', label: 'See the margin report', description: 'The weekly margin report.', group: 'Costs and prices', default: false },
+  { key: 'edit_supplier_contacts', label: 'Edit supplier contacts', description: 'Change a supplier name or number.', group: 'Contacts', default: false },
+  { key: 'manage_contacts', label: 'Manage contacts', description: 'Create and edit contacts.', group: 'Contacts', default: true },
+  { key: 'upload_documents', label: 'Upload documents', description: 'Add a supplier file or text, or key a document in.', group: 'Documents', default: true },
+  { key: 'ask_suppliers', label: 'Ask suppliers', description: 'Send a photographed item to suppliers.', group: 'Suppliers', default: true },
+  { key: 'view_replies_prices', label: 'See supplier reply prices', description: 'The words and prices in suppliers replies.', group: 'Suppliers', default: false },
+  { key: 'manage_followups', label: 'Send or skip follow-ups', description: 'Act on quotes waiting for a reply.', group: 'Quotes', default: false },
+  { key: 'export_data', label: 'Export data', description: 'Download the contact book as CSV.', group: 'Data', default: false },
+  { key: 'view_audit', label: 'See the activity log', description: 'The activity feed.', group: 'Activity', default: true },
+]
+const NON_ASSIGNABLE = [{ key: 'manage_team', label: 'Manage the team' }, { key: 'manage_roles', label: 'Manage roles' }, { key: 'manage_settings', label: 'Manage settings and branding' },
+  { key: 'decide_quotes', label: 'Approve, accept, reject or send quotes' }, { key: 'promote_costs', label: 'Add supplier prices to the cost book' }]
+const roles = [
+  { id: 'r-owner', key: 'owner', name: 'Owner', class: 'owner', is_system: true, permissions: CATALOG.map(p => p.key) },
+  { id: 'r-staff', key: 'staff', name: 'Staff', class: 'staff', is_system: true, permissions: CATALOG.filter(p => p.default).map(p => p.key) },
+]
+const members = [
+  { id: 'sample-owner', name: 'SAMPLE Owner', username: 'owner', role: 'owner', role_id: 'r-owner', role_key: 'owner', role_name: 'Owner', active: true, has_password: true, sessions: 1 },
+  { id: 'sample-staff', name: 'SAMPLE Staff', username: 'staff', role: 'staff', role_id: 'r-staff', role_key: 'staff', role_name: 'Staff', active: true, has_password: true, sessions: 0 },
+]
+const checkRole = (name: string, perms: unknown) => {
+  if (!name) throw new ApiError(422, 'name_required', 'Name the role.')
+  for (const k of (Array.isArray(perms) ? perms : []) as string[]) {
+    if (NON_ASSIGNABLE.some(x => x.key === k)) throw new ApiError(422, 'not_assignable', `${k} cannot be given to a role.`)
+    if (!CATALOG.some(x => x.key === k)) throw new ApiError(422, 'unknown_permission', `Unknown permission ${k}.`)
+  }
+}
+const roleOf = (key: string) => roles.find(r => r.key === key)
+const branding = { display_name: null as string | null, brand_color: null as string | null, logo_data_url: null as string | null }
+const setting = { min_margin_pct: '25.00', ssm_no: null as string | null, address: null as string | null, bank_details: null as string | null, sst_registered: false, sst_no: null as string | null }
+
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
   const who = owner ? 'SAMPLE Owner' : 'SAMPLE Staff'
   const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
-  if (p === '/me') return { id: owner ? 'sample-owner' : 'sample-staff', role, name: who, org: { name: 'SAMPLE Signage Works (synthetic)', logo_url: null } }
+  if (p === '/me') {
+    const r = roleOf(role)!
+    return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: r.permissions, name: who,
+      org: { name: branding.display_name || 'SAMPLE Signage Works (synthetic)', brand_color: branding.brand_color, logo_url: branding.logo_data_url } }
+  }
+  if (p === '/me/password' && method === 'POST') return { ok: true }
+  if (p === '/me/sessions' && method === 'GET') return sessions
+  if (p === '/me/sessions/revoke-others' && method === 'POST') {
+    const n = sessions.filter(x => !x.current).length
+    for (let i = sessions.length - 1; i >= 0; i--) if (!sessions[i].current) sessions.splice(i, 1)
+    return { revoked: n }
+  }
+  if ((m = p.match(/^\/me\/sessions\/([^/]+)$/)) && method === 'DELETE') {
+    const i = sessions.findIndex(x => x.id === m![1] && !x.current)
+    if (i < 0) throw new ApiError(404, 'not_found', 'Session not found.')
+    sessions.splice(i, 1)
+    return { ok: true }
+  }
   if (p === '/tracker') {
     const all = Object.values(docs).map(withProv).map(d => d.doc).map(s => owner ? s : { ...s, flags: { ...s.flags, cost_is_stale: false } })
     return { received: all.filter(d => d.direction === 'in'), sent: all.filter(d => d.direction === 'out') }
@@ -205,7 +265,17 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/cost-items') { need(); return [] }
   if (p === '/fields') return fields.filter(f => owner || !f.owner_only)
   if (p === '/reports/margin') { need(); return { days: 7, quotes: 0, revenue: '0', cost: '0', margin: '0', margin_pct: null, won: 0, lost: 0, stale_quotes: 0, stale_margin_lost: '0', lowest_margin: [] } }
-  if (p === '/settings') { need(); return { min_margin_pct: '25.00', ssm_no: null, address: null, bank_details: null, sst_registered: false, sst_no: null } }
+  if (p === '/settings') {
+    need()
+    if (method === 'POST') {
+      const { display_name, brand_color, logo_data_url, ...rest } = body
+      if (brand_color != null && !/^#[0-9a-f]{6}$/i.test(brand_color)) throw new ApiError(422, 'bad_colour', 'brand_color must be #rrggbb')
+      if (logo_data_url != null && !/^data:image\/(png|jpeg|webp);base64,/.test(logo_data_url)) throw new ApiError(415, 'unsupported_media', 'logo must be png, jpeg or webp')
+      if (logo_data_url != null && logo_data_url.length > 280000) throw new ApiError(413, 'too_large', 'logo is over 200 KB')
+      Object.assign(setting, rest); Object.assign(branding, { display_name: display_name || null, brand_color: brand_color ?? null, logo_data_url: logo_data_url ?? null })
+    }
+    return { ...setting, ...branding }
+  }
   if (p === '/dashboard') {
     const all = Object.values(docs).map(d => d.doc), stale = all.filter(d => d.flags.cost_is_stale)
     return { customer_replies: [], contacts: { customers: 1, suppliers: 2, contractors: 0 }, needs_review: all.filter(d => d.flags.needs_review).length,
@@ -236,7 +306,55 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { ...c, sst_no: null, recent_documents: Object.values(docs).map(d => d.doc).filter(d => d.party.name === c.name) }
   }
   if (p.startsWith('/contacts')) throw new ApiError(409, 'mock', 'Mock mode does not save contacts.')
-  if (p === '/users') { need(); return [] }
+  if (p === '/users' && method === 'GET') { need(); return members }
+  if (p === '/users' && method === 'POST') {
+    need()
+    const r = roleOf(body.role)
+    if (!r) throw new ApiError(422, 'unknown_role', 'No such role.')
+    members.push({ id: 'u' + (members.length + 1), name: body.name, username: body.username, role: r.class, role_id: r.id, role_key: r.key, role_name: r.name, active: true, has_password: true, sessions: 0 })
+    return members[members.length - 1]
+  }
+  if ((m = p.match(/^\/users\/([^/]+)$/)) && method === 'POST') {
+    need()
+    const u = members.find(x => x.id === m![1])
+    if (!u) throw new ApiError(404, 'not_found', 'User not found.')
+    if (body.role) {
+      const r = roleOf(body.role)
+      if (!r) throw new ApiError(422, 'unknown_role', 'No such role.')
+      if (u.role === 'owner' && r.class !== 'owner' && members.filter(x => x.role === 'owner' && x.active).length < 2) throw new ApiError(409, 'last_owner', 'The last active owner cannot be changed.')
+      Object.assign(u, { role: r.class, role_id: r.id, role_key: r.key, role_name: r.name, sessions: 0 })
+    }
+    if (typeof body.active === 'boolean') u.active = body.active
+    return u
+  }
+  if (p === '/roles' && method === 'GET') { need(); return { roles: roles.map(r => ({ ...r, users: members.filter(x => x.role_id === r.id).length })), catalog: CATALOG, non_assignable: NON_ASSIGNABLE } }
+  if (p === '/roles' && method === 'POST') {
+    need()
+    const name = String(body.name ?? '').trim()
+    checkRole(name, body.permissions)
+    if (roles.some(r => r.name.toLowerCase() === name.toLowerCase())) throw new ApiError(409, 'name_taken', 'A role with that name already exists.')
+    const r = { id: 'r-' + Date.now(), key: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, class: 'staff', is_system: false, permissions: body.permissions as string[] }
+    roles.push(r)
+    return { ...r, users: 0 }
+  }
+  if ((m = p.match(/^\/roles\/([^/]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+    need()
+    const i = roles.findIndex(x => x.id === m![1])
+    if (i < 0) throw new ApiError(404, 'not_found', 'Role not found.')
+    const r = roles[i]
+    if (method === 'DELETE') {
+      if (r.is_system) throw new ApiError(409, 'system_role', 'Built-in roles cannot be deleted.')
+      if (members.some(x => x.role_id === r.id)) throw new ApiError(409, 'role_in_use', 'People still hold this role.')
+      roles.splice(i, 1)
+      return { ok: true }
+    }
+    if (r.class === 'owner' || (r.is_system && body.name !== undefined && body.name !== r.name)) throw new ApiError(409, 'system_role', 'Built-in role.')
+    if (body.permissions !== undefined) checkRole('x', body.permissions)
+    if (body.name !== undefined && roles.some(x => x !== r && x.name.toLowerCase() === String(body.name).trim().toLowerCase())) throw new ApiError(409, 'name_taken', 'A role with that name already exists.')
+    if (body.name !== undefined) r.name = String(body.name).trim()
+    if (body.permissions !== undefined) r.permissions = body.permissions
+    return { ...r, users: members.filter(x => x.role_id === r.id).length }
+  }
   if (p === '/jobs') return []  // mock quotes never reach job_created
   if (p === '/followups') return []  // mock data has no quote old enough to chase
   if (p === '/field-proposals') { need(); return proposals.filter(x => x.status === 'pending') }
@@ -274,6 +392,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     log(who, r.reply_id, `price accepted for ${body.item_key}`)
     return { ok: true }
   }
+  if (p.startsWith('/listings')) { const r = mockListings(method, p, owner, body); if (r !== undefined) return r }
   if (p === '/audit') {
     const after = Number(new URLSearchParams(q).get('after') ?? 0)
     return audit.filter(e => e.id > after)

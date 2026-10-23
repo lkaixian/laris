@@ -32,8 +32,8 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 ## Credentials: tokens, lockout, sessions
 
 - **API tokens expire.** `python scripts/create_token.py issue <user> [--days N]` prints the expiry (default 90 days); an expired token gets the same 401 as an unknown one. Tokens that existed before this change were given 90 days from the first start after the upgrade. `revoke` removes the token and every session of that user.
-- A password change, and an owner changing a user's role, active flag or password, also removes that user's API token and sessions (a self-service password change keeps only the current session). `create_token.py account` refuses a deactivated user unless you pass `--reactivate`.
-- **Sign-in lockout (in memory, one process):** 5 failed sign-ins for a username lock it for 1 minute, then 2, 4, 8 and at most 15 minutes for each further 5 failures; a success, or 15 minutes with no failures, resets it. A lapsed lock needs 5 new failures to lock again. Separately, one client address may make 30 failed sign-ins per 15 minutes across all usernames, then gets 429. The current-password check in `POST /api/me/password` is throttled per user the same way. A restart clears the counters. Set `TRUST_PROXY=1` on Replit so the address is the real client, not the proxy.
+- A password change, and an owner changing a user's role, active flag or password, also removes that user's API token and sessions (a self-service password change keeps only the current session). `create_token.py account` refuses a deactivated user unless you pass `--reactivate`. With more than one tenant it also needs `--tenant <tenant id>` and refuses a user who belongs to a different tenant.
+- **Sign-in lockout (in memory, one process):** 5 failed sign-ins for a username lock it for 1 minute, then 2, 4, 8 and at most 15 minutes for each further 5 failures; a success, or 15 minutes with no failures, resets it. A lapsed lock needs 5 new failures to lock again. Separately, one client address may make 30 failed sign-ins per 15 minutes across all usernames, then gets 429. The current-password check in `POST /api/me/password` is throttled per user the same way. A restart clears the counters. Write limits per user and 10 minutes, same in-memory counters: 10 supplier price requests (`POST /api/rfq`) and 30 `POST /api/enquiries/simulate` plus `POST /api/documents/ingest` together; over that is 429 `slow_down`. Set `TRUST_PROXY=1` on Replit so the address is the real client, not the proxy.
 - Passwords are scrypt N=2^16 (64 MiB per sign-in; size the instance accordingly). Older hashes keep working and are upgraded on the next successful sign-in. Very common passwords and a password equal to the username are refused.
 - Each user keeps at most 10 sessions (the oldest is dropped at sign-in); expired sessions are purged at sign-in. `db/auth.sql` (new columns) is applied on every start.
 
@@ -49,6 +49,10 @@ Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-r
 ## Health check and backups
 
 `GET /health` answers if the process is up; `GET /ready` also checks the database (503 if it is not reachable): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.
+
+## Roles and branding migration
+
+`db/rbac.sql` runs on every start (idempotent, after `rls.sql`, before the seed): it adds `tenants.display_name`, `brand_color`, `logo_data_url`, the tenant-scoped `roles` table (forced RLS, same policy as the rest) and `users.role_id`, creates the `owner` and `staff` system roles for every tenant, and moves each existing user onto the system role matching their old `users.role`. Nothing to run by hand; existing staff keep exactly today's permissions (the staff role stores no list, so it means the built-in defaults in `src/perms.py` until an owner edits it). `users.role` stays the owner|staff class the database guards read. With `DATABASE_URL_OWNER` set, startup re-applies `db/roles.sql`, which gives `laris_app` its grants on the new table. See `docs/roles.md`.
 
 ## Least-privilege database role (recommended before real customers)
 
@@ -88,7 +92,9 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `WHATSAPP_APP_SECRET` | checks `X-Hub-Signature-256` on inbound webhooks | yes if WhatsApp is shown |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
-| `RUNPOD_API_KEY` | RunPod auth | yes (sponsor proof) |
+| `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
+| `RUNPOD_VISION_URL` | catalog photo model: `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` (section 10b) | only for catalog photos |
+| `RUNPOD_VISION_MODEL` | model name served by that endpoint (default `Qwen/Qwen2.5-VL-7B-Instruct`) | no |
 | `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit |
 | `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
@@ -146,7 +152,7 @@ python scripts/setup_channels.py telegram-poll              # local only: long-p
 
 **Ask suppliers over Telegram (demo without WhatsApp).** Put `tg:<chat id>` (or `telegram:<chat id>`; a group id is negative, e.g. `tg:-1001234567`) in the supplier party's contact. That supplier gets the photo from the bot and their replies are read like WhatsApp ones (reply to the photo, or the newest open ask). The supplier must open the bot and press Start first, or the send fails with "supplier must open the bot and press Start first". To find a chat id: message the bot from that Telegram account, run `python scripts/setup_channels.py telegram-poll` and read the number after `chat` on each line it prints (webhook mode: the same id is in the update). Any other contact is sent on WhatsApp as before.
 
-`/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`. Several shops on one deployment: set `tenants.wa_phone_number_id` for each (the id shown in Meta's WhatsApp setup); inbound messages route by the number they arrived on and messages to an unmapped number are ignored once any is mapped. Replies and sent quotes go out from that tenant's own number (a tenant with no number uses `WHATSAPP_PHONE_NUMBER_ID`). All numbers share the one `WHATSAPP_TOKEN`, so they must sit under the same Meta business; separate tokens per tenant are not built. After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL prefer per-user tokens: `python scripts/create_token.py issue "<user name>"` prints a token once (only its SHA-256 is stored); the UI asks for it once per tab and role and tenant then come from the user row, not from headers. Set `REQUIRE_USER_TOKEN=1` to switch the header-only demo mode off. `APP_TOKEN` (one shared secret, headers still pick the user) remains for demos.
+`/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN` (the verify call returns 403 while it is unset), subscribe to `messages`. A person's `users.channel_handle` is their phone number for WhatsApp and `tg:<chat id>` for Telegram; a Telegram chat id never matches a phone number. A unique index on `messages (channel, external_id)` makes a replayed message a no-op; if old data already holds duplicates startup logs a NOTICE and skips the index until you delete them. Several shops on one deployment: set `tenants.wa_phone_number_id` for each (the id shown in Meta's WhatsApp setup); inbound messages route by the number they arrived on and messages to an unmapped number are ignored once any is mapped. Replies and sent quotes go out from that tenant's own number (a tenant with no number uses `WHATSAPP_PHONE_NUMBER_ID`). All numbers share the one `WHATSAPP_TOKEN`, so they must sit under the same Meta business; separate tokens per tenant are not built. After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL prefer per-user tokens: `python scripts/create_token.py issue "<user name>"` prints a token once (only its SHA-256 is stored); the UI asks for it once per tab and role and tenant then come from the user row, not from headers. Set `REQUIRE_USER_TOKEN=1` to switch the header-only demo mode off. `APP_TOKEN` (one shared secret, headers still pick the user) remains for demos.
 
 ## 10. RunPod endpoint (sponsor proof)
 
@@ -155,6 +161,18 @@ python scripts/setup_channels.py telegram-poll              # local only: long-p
 3. Warm it about 10 minutes before the demo. Cold start can take minutes. Scale-to-zero is the default for serverless.
 4. Run one real job so the runtime appears in the logs. `src/ilmu.py` calls `/runsync` with `{"input": {"audio_base64": ..., "mime": ...}}`. **UNVERIFIED:** the input shape of the deployed worker.
 5. Keep the console page with the Endpoint ID, GPU type, and job runtime for the proof.
+
+## 10b. Vision on RunPod (catalog photos)
+
+Reads ONE photo with many labelled products (`POST /api/listings`, or a chat photo captioned `/catalog`). Without the variables below the API answers `503 vision not configured: set <names>` and nothing else changes.
+
+1. RunPod console > Serverless > New Endpoint > vLLM. Model `Qwen/Qwen2.5-VL-7B-Instruct` (or another Qwen2.5-VL), GPU 24 GB class.
+2. Max workers 1 and a low idle timeout (for example 5 s to 60 s) so cost stays near zero between uses. Active workers 0.
+3. Set `RUNPOD_VISION_URL` to `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1`, `RUNPOD_API_KEY` to a RunPod API key (same name as the STT fallback), and optionally `RUNPOD_VISION_MODEL` (default `Qwen/Qwen2.5-VL-7B-Instruct`; it must equal the model the worker serves).
+4. Expect the first call after idle to take minutes (cold start: model load). `src/vision.py` waits up to 150 s per attempt and retries once on a 5xx or timeout, so the first upload after a long idle may return `502 vision_unavailable`; retry once the worker is warm.
+5. Staff chat path: a photo captioned `/catalog` (or `catalog`) from a staff handle or a known supplier makes a listing; any other photo is still a supplier document.
+
+**UNVERIFIED:** nothing here ran against a real endpoint. The OpenAI-compatible route, the image data URL, and the quality of the model's JSON, bounding boxes and reading of Chinese size labels. Tesseract is English-only, so Chinese text is never confirmed by OCR; SKUs and prices the model reports are kept only when the digits also appear in the OCR text. Every product is created `needs_review` and a person confirms it.
 
 ## 11. Smoke tests
 

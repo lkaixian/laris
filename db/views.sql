@@ -39,7 +39,15 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wa_phone_number_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_wa_phone_uq ON tenants (wa_phone_number_id) WHERE wa_phone_number_id IS NOT NULL;
 
 -- Provider retries / replays: one message per (channel, provider id).
-CREATE UNIQUE INDEX IF NOT EXISTS messages_channel_external_uq ON messages (channel, external_id) WHERE external_id IS NOT NULL;
+-- Skipped with a NOTICE when old data already holds duplicates (a plain CREATE would abort the whole startup script); dedupe them, restart.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM messages WHERE external_id IS NOT NULL GROUP BY channel, external_id HAVING count(*) > 1) THEN
+    RAISE NOTICE 'messages_channel_external_uq not created: duplicate (channel, external_id) rows exist; remove them and restart';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS messages_channel_external_uq ON messages (channel, external_id) WHERE external_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Quote numbers are unique per tenant (the app also serialises numbering with an advisory lock).
 CREATE UNIQUE INDEX IF NOT EXISTS documents_out_no_uq ON documents (tenant_id, doc_no) WHERE direction = 'out';

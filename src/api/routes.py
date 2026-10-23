@@ -1,4 +1,5 @@
 """/api/* per docs/api-contract.md. Plain def endpoints (psycopg is sync; FastAPI runs them in a threadpool)."""
+import base64
 import csv
 from datetime import date
 import io
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field
 from .. import pipeline, quote_pdf
 from ..errors import ApiError
 from ..tabular import MAGIC, sniff  # noqa: F401  (rfq.py imports MAGIC from here)
-from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, write_ctx
+from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, require_perm, svc, throttle, write_ctx
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
@@ -53,12 +54,12 @@ def read_capped(up: UploadFile, cap: int, msg: str) -> bytes:
 
 def summary(ctx: Ctx, d: dict) -> dict:
     flags = {"needs_review": d["needs_review"]}
-    if ctx.owner:
+    if ctx.costs:
         flags["cost_is_stale"] = d["cost_is_stale"]
     return {"id": d["id"], "direction": d["direction"], "kind": d["kind"], "doc_no": d["doc_no"],
             "party": {"id": d["party_id"], "name": d["party_name"]}, "status": d["status"],
             "issued_on": d["issued_on"], "valid_until": d["valid_until"],
-            "total": None if (d["direction"] == "in" and not ctx.owner) else d["total"],  # supplier prices: owner only
+            "total": None if (d["direction"] == "in" and not ctx.costs) else d["total"],  # supplier prices: view_costs only
             "currency": d["currency"], "updated_at": d["updated_at"], "flags": flags}
 
 
@@ -71,31 +72,35 @@ def get_doc(ctx: Ctx, doc_id: UUID, lock=False) -> dict:
 
 
 def hidden_attr_keys(ctx: Ctx) -> set:
-    if ctx.owner:
+    if ctx.costs:
         return set()
     return {x["key"] for x in ctx.conn.execute("select key from tenant_fields where tenant_id=%s and owner_only",
                                                (ctx.tenant_id,))}
 
 
 def line_json(ctx: Ctx, l: dict, doc: dict, hide: set) -> dict:
-    show_price = ctx.owner or doc["direction"] == "out" or doc["status"] in REVIEWABLE
+    show_price = ctx.costs or doc["direction"] == "out" or doc["status"] in REVIEWABLE
     return {"id": l["id"], "line_no": l["line_no"], "item_key": l["item_key"], "description": l["description"],
             "qty": l["qty"], "uom": l["uom"], "unit_price": l["unit_price"] if show_price else None,
             "discount_pct": l["discount_pct"] if show_price else None, "tax_rate": l["tax_rate"],
             "section": l["section"], "is_header": l["is_header"], "needs_review": l["needs_review"],
             "ocr_confidence": l["ocr_confidence"],
-            "min_qty": l["min_qty"] if ctx.owner else None, "supplier_sku": l["supplier_sku"] if ctx.owner else None,
-            "review_reason": l["review_reason"] if ctx.owner else None,
+            "min_qty": l["min_qty"] if ctx.costs else None, "supplier_sku": l["supplier_sku"] if ctx.costs else None,
+            "review_reason": l["review_reason"] if ctx.costs else None,
             "attrs": {k: v for k, v in l["attrs"].items() if k not in hide},
-            "attrs_unmapped": {k: v for k, v in l["attrs_unmapped"].items() if k not in hide} if ctx.owner else {}}
+            "attrs_unmapped": {k: v for k, v in l["attrs_unmapped"].items() if k not in hide} if ctx.costs else {}}
 
 
 @r.get("/me")
 def me(ctx: Ctx = Depends(read_ctx)):
-    t = ctx.conn.execute("select name from tenants where id=%s", (ctx.tenant_id,)).fetchone()
-    # tenants has no logo column yet: ORG_LOGO_URL env, else null (UI shows initials)
-    return reply(ctx, {"role": ctx.role, "name": ctx.name, "id": ctx.user_id,
-                       "org": {"name": t["name"], "logo_url": os.environ.get("ORG_LOGO_URL") or None}})
+    t = ctx.conn.execute("select coalesce(display_name, name) as name, brand_color, logo_data_url from tenants where id=%s", (ctx.tenant_id,)).fetchone()
+    ro = ctx.conn.execute("select r.key, r.name from users u left join roles r on r.id = u.role_id where u.id=%s", (ctx.user_id,)).fetchone()
+    # role = the class (owner|staff) for older UI code; role_key / role_name / permissions drive the new UI. logo_url is a data URL
+    # (usable as <img src>), else the ORG_LOGO_URL env, else null (UI shows initials)
+    return reply(ctx, {"role": ctx.role, "role_key": ro["key"] or ctx.role, "role_name": ro["name"] or ctx.role.title(),
+                       "permissions": sorted(ctx.perms), "name": ctx.name, "id": ctx.user_id,
+                       "org": {"name": t["name"], "brand_color": t["brand_color"],
+                               "logo_url": t["logo_data_url"] or os.environ.get("ORG_LOGO_URL") or None}})
 
 
 @r.get("/tracker")
@@ -112,7 +117,7 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
         """select payment_terms, lead_time_days, deposit_pct, terms_text, customer_ref, tax_inclusive, tax_total,
                   sent_at, read_at, decided_at, decision_reason, approved_at, parent_id from documents where id=%s""",
         (doc_id,)).fetchone()
-    if not ctx.owner:
+    if not ctx.costs:
         full.pop("tax_total")
     hide = hidden_attr_keys(ctx)
     lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
@@ -120,8 +125,8 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
            "lines": [line_json(ctx, l, d, hide) for l in lines],
            "messages": ctx.conn.execute(  # supplier chat text carries their prices: owner only
                "select direction, channel, body, created_at as at from messages where document_id=%s order by created_at, id",
-               (doc_id,)).fetchall() if ctx.owner or d["direction"] == "out" else []}
-    if ctx.owner and d["direction"] == "out":
+               (doc_id,)).fetchall() if ctx.costs or d["direction"] == "out" else []}
+    if ctx.costs and d["direction"] == "out":
         out["provenance"] = ctx.conn.execute(
             """select line_id, cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost,
                       cost_snapshot, current_unit_cost, cost_is_stale, line_margin
@@ -138,7 +143,7 @@ def document_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
     doc = ctx.conn.execute("select doc_no, currency, issued_on, created_at, valid_until, payment_terms, terms_text from documents where id=%s",
                            (doc_id,)).fetchone()
     lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    org = ctx.conn.execute("select name, ssm_no, address, bank_details, sst_registered, sst_no from tenants where id=%s",
+    org = ctx.conn.execute("select coalesce(display_name, name) as name, ssm_no, address, bank_details, sst_registered, sst_no from tenants where id=%s",
                            (ctx.tenant_id,)).fetchone()
     pdf = quote_pdf.render(org, doc, d["party_name"], lines)
     return Response(pdf, media_type="application/pdf",
@@ -207,14 +212,15 @@ def edit_line(doc_id: UUID, line_id: UUID, body: LineEdit, ctx: Ctx = Depends(wr
         new = ctx.conn.execute(
             "update document_lines set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(id)s returning *",
             {**sets, "id": line_id}).fetchone()
-    audit(ctx, "document_lines", line_id, "review edit: " + ",".join(sorted(sets)),
+    price = f" (price {old['unit_price']} -> {new['unit_price']})" if "unit_price" in sets else ""  # supplier price: the feed shows it to the owner only
+    audit(ctx, "document_lines", line_id, "review edit: " + ",".join(sorted(sets)) + price,
           {k: old[k] for k in sets}, {k: new[k] for k in sets})
     return reply(ctx, line_json(ctx, new, d, hidden_attr_keys(ctx)))
 
 
 @r.get("/alerts/stale-costs")
 def stale_costs(ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    require_perm(ctx, "view_costs")
     return reply(ctx, ctx.conn.execute(
         """select quote_id, quote_no, customer, item_key, old_cost, current_cost, margin_delta, status
            from v_stale_alerts where tenant_id=%s order by margin_delta, quote_no""", (ctx.tenant_id,)).fetchall())
@@ -223,7 +229,7 @@ def stale_costs(ctx: Ctx = Depends(read_ctx)):
 @r.get("/reports/margin")
 def margin_report(days: int = Query(7, ge=1, le=366), ctx: Ctx = Depends(read_ctx)):
     """Owner summary of quotes created in the last N days: money quoted, cost, margin, outcomes, margin lost to stale costs."""
-    require_owner(ctx)
+    require_perm(ctx, "view_reports")
     c = ctx.conn
     t = c.execute(
         """select count(distinct m.quote_id) quotes, coalesce(sum(m.line_total), 0) revenue, coalesce(sum(m.line_cost), 0) cost
@@ -251,7 +257,7 @@ def margin_report(days: int = Query(7, ge=1, le=366), ctx: Ctx = Depends(read_ct
 
 @r.get("/cost-items")
 def cost_items(ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    require_perm(ctx, "view_costs")
     return reply(ctx, ctx.conn.execute(
         """select ci.id, ci.item_key, ci.uom, ci.unit_cost, p.name as supplier, d.doc_no as source_doc_no, ci.effective_date
            from cost_items ci join parties p on p.id=ci.supplier_id
@@ -260,13 +266,32 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
         (ctx.tenant_id,)).fetchall())
 
 
-SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no")
+SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no", "display_name", "brand_color", "logo_data_url")
+SEL = ", ".join("coalesce(display_name, name) as display_name" if k == "display_name" else k for k in SETTINGS)  # name = the fallback
+MAX_LOGO = 200_000  # decoded bytes
+
+
+def logo_ok(v: str) -> str:
+    """A data URL for a real PNG, JPEG or WebP of at most MAX_LOGO bytes, rebuilt from what the bytes are (not what the client says)."""
+    if len(v) > MAX_LOGO * 4 // 3 + 100:
+        raise ApiError(413, "too_large", "logo over 200 KB")
+    m = re.fullmatch(r"data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})", v)
+    try:
+        data = base64.b64decode(m.group(1), validate=True) if m else b""
+    except ValueError:
+        data = b""
+    mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
+    if mime not in ("image/png", "image/jpeg", "image/webp") or (mime == "image/webp" and data[8:12] != b"WEBP"):  # also refuses svg, which can carry script
+        raise ApiError(415, "unsupported_media", "logo must be a PNG, JPEG or WebP image")
+    if len(data) > MAX_LOGO:
+        raise ApiError(413, "too_large", "logo over 200 KB")
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
 
 
 @r.get("/settings")
 def settings(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
-    return reply(ctx, ctx.conn.execute(f"select {', '.join(SETTINGS)} from tenants where id=%s", (ctx.tenant_id,)).fetchone())
+    return reply(ctx, ctx.conn.execute(f"select {SEL} from tenants where id=%s", (ctx.tenant_id,)).fetchone())
 
 
 class SettingsEdit(BaseModel, extra="forbid"):
@@ -276,21 +301,29 @@ class SettingsEdit(BaseModel, extra="forbid"):
     bank_details: str | None = Field(None, max_length=400)
     sst_registered: bool | None = None
     sst_no: str | None = Field(None, max_length=40)
+    display_name: str | None = Field(None, min_length=1, max_length=120)  # shown name; the legal/key name is not editable
+    brand_color: str | None = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
+    logo_data_url: str | None = None
 
 
 @r.post("/settings")
 def edit_settings(body: SettingsEdit, ctx: Ctx = Depends(write_ctx)):
-    """Margin floor and the issuer details printed on the quote PDF. Owner only; the change is audited."""
+    """Margin floor, the issuer details printed on the quote PDF, and branding (name, colour, logo). Owner only; the change is audited."""
     require_owner(ctx)
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
-    old = ctx.conn.execute(f"select {', '.join(SETTINGS)} from tenants where id=%s for update", (ctx.tenant_id,)).fetchone()
+    if sets.get("brand_color"):
+        sets["brand_color"] = sets["brand_color"].lower()
+    if sets.get("logo_data_url"):
+        sets["logo_data_url"] = logo_ok(sets["logo_data_url"])
+    old = ctx.conn.execute(f"select {SEL} from tenants where id=%s for update", (ctx.tenant_id,)).fetchone()
     if (sets.get("sst_registered") or (old["sst_registered"] and "sst_registered" not in sets)) and not (sets.get("sst_no") or old["sst_no"]):
         raise ApiError(422, "sst_no_needed", "an SST-registered business must give its SST number")
-    new = ctx.conn.execute("update tenants set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(t)s returning " + ", ".join(SETTINGS),
+    new = ctx.conn.execute("update tenants set " + ", ".join(f"{k}=%({k})s" for k in sets) + " where id=%(t)s returning " + SEL,
                            {**sets, "t": ctx.tenant_id}).fetchone()
-    audit(ctx, "tenants", ctx.tenant_id, "settings changed: " + ",".join(sorted(sets)), {k: old[k] for k in sets}, {k: new[k] for k in sets})
+    mask = lambda d: {k: "[image]" if k == "logo_data_url" and v else v for k, v in d.items()}  # the audit log is append-only: no image bytes in it
+    audit(ctx, "tenants", ctx.tenant_id, "settings changed: " + ",".join(sorted(sets)), mask({k: old[k] for k in sets}), mask({k: new[k] for k in sets}))
     return reply(ctx, new)
 
 
@@ -337,7 +370,7 @@ class FollowupAct(BaseModel, extra="forbid"):
 
 @r.post("/followups/{fid}")
 def followup_act(fid: UUID, body: FollowupAct, request: Request, ctx: Ctx = Depends(write_ctx)):
-    require_owner(ctx)  # nothing goes to a customer without the owner
+    require_perm(ctx, "manage_followups")
     c = ctx.conn
     f = c.execute("""select f.id, f.document_id from followups f join documents d on d.id=f.document_id
                      where f.id=%s and d.tenant_id=%s and f.state='pending' for update of f""", (fid, ctx.tenant_id)).fetchone()
@@ -361,7 +394,7 @@ def followup_act(fid: UUID, body: FollowupAct, request: Request, ctx: Ctx = Depe
 def fields(ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, ctx.conn.execute(
         """select key, label, type, unit, options, show_in_grid, sort_order from tenant_fields
-           where tenant_id=%s and (%s or not owner_only) order by sort_order, key""", (ctx.tenant_id, ctx.owner)).fetchall())
+           where tenant_id=%s and (%s or not owner_only) order by sort_order, key""", (ctx.tenant_id, ctx.costs)).fetchall())
 
 
 @r.get("/field-proposals")
@@ -407,11 +440,13 @@ def decide_proposal(pid: UUID, body: Decision, ctx: Ctx = Depends(write_ctx)):
 
 @r.get("/audit")
 def audit_feed(after: int = Query(0, ge=0), ctx: Ctx = Depends(read_ctx)):
+    require_perm(ctx, "view_audit")
     return reply(ctx, ctx.conn.execute(
-        """select a.id, a.at, coalesce(u.name, a.actor) as actor, a.entity, a.entity_id, a.event
+        """select a.id, a.at, coalesce(u.name, a.actor) as actor, a.entity, a.entity_id,
+                  case when %(o)s or a.entity <> 'document_lines' then a.event else split_part(a.event, ' (price', 1) end as event
            from audit_log a left join users u on u.id::text = a.actor
-           where a.tenant_id=%s and a.id > %s and (%s or a.entity <> 'cost_items') order by a.id limit 500""",
-        (ctx.tenant_id, after, ctx.owner)).fetchall())
+           where a.tenant_id=%(t)s and a.id > %(after)s and (%(o)s or a.entity <> 'cost_items') order by a.id limit 500""",
+        {"t": ctx.tenant_id, "after": after, "o": ctx.costs}).fetchall())
 
 
 class Enquiry(BaseModel, extra="forbid"):
@@ -422,6 +457,7 @@ class Enquiry(BaseModel, extra="forbid"):
 
 @r.post("/enquiries/simulate")
 def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
+    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # each one costs a model call
     cust = pipeline.party(ctx.conn, ctx.tenant_id, "customer", body.customer or "Walk-in customer (simulated)")
     res = pipeline.handle_enquiry(ctx.conn, ctx.tenant_id, cust, body.channel, body.text, actor=ctx.user_id,
                                   ilmu_client=svc(request).ilmu)
@@ -433,6 +469,8 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
     """Extra (not in the contract): upload a supplier PDF/photo/XLSX/DOCX/CSV or paste its text."""
+    require_perm(ctx, "upload_documents")
+    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # shared with simulate: both cost a model call
     data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")
@@ -485,6 +523,7 @@ class ManualDoc(BaseModel, extra="forbid"):
 @r.post("/documents/manual")
 def ingest_manual(body: ManualDoc, ctx: Ctx = Depends(write_ctx)):
     """Fallback when OCR or the model cannot read a document: key it in. Goes through the same review as an extracted one."""
+    require_perm(ctx, "upload_documents")
     raw = {"supplier_name": body.supplier, "doc_no": body.doc_no,
            "issued_on": body.issued_on.isoformat() if body.issued_on else None,
            "lines": [{"description": l.description, "qty": str(l.qty), "uom": l.uom, "unit_price": str(l.unit_price),
@@ -521,7 +560,8 @@ def _bom_rows(ctx: Ctx, quote_id: UUID):
 
 @r.get("/export/bom.xlsx")
 def export_bom(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    require_perm(ctx, "export_data")
+    require_perm(ctx, "view_costs")  # the file carries supplier cost
     no, rows = _bom_rows(ctx, quote_id)
     wb = Workbook()
     ws = wb.active
@@ -541,7 +581,8 @@ def export_bom(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
 
 @r.get("/export/po.csv")
 def export_po(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    require_perm(ctx, "export_data")
+    require_perm(ctx, "view_costs")
     no, rows = _bom_rows(ctx, quote_id)
     agg: dict = {}
     for x in rows:  # one PO line per supplier + material + price

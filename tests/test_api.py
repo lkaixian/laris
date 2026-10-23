@@ -76,7 +76,7 @@ def test_staff_never_sees_cost_or_margin(env):
 def test_me_auth_and_errors(env):
     e = env
     me = e.c.get("/api/me", headers=e.O).json()
-    assert me["role"] == "owner" and me["org"] == {"name": "SAMPLE Signage Works (synthetic)", "logo_url": None}
+    assert me["role"] == "owner" and me["org"] == {"name": "SAMPLE Signage Works (synthetic)", "brand_color": None, "logo_url": None}
     assert e.c.get("/api/me").json()["role"] == "staff"  # default role
     r = e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "x"})
     assert r.status_code == 401 and r.json()["error"]["code"] == "no_user"

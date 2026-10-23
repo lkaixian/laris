@@ -6,9 +6,11 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 from collections import defaultdict, deque
 
+import psycopg
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
@@ -18,7 +20,9 @@ from ..channels import telegram, whatsapp
 from ..errors import ApiError
 from ..tabular import sniff
 from ..templates import load_template
-from .deps import JR
+from ..vision import VisionError
+from . import listings
+from .deps import JR, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -26,6 +30,7 @@ LIMIT, WINDOW = 10, 600  # enquiries per sender per 10 minutes
 # ponytail: in-memory, per process (run.sh forces 1 worker), keys never pruned; move to Redis/DB if we scale out
 _HITS = defaultdict(deque)
 MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
+CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 SORRY = "Sorry, we could not process that message. Our team will follow up."
 
 
@@ -77,18 +82,23 @@ def _handle(conn, s, m):
         log.warning("inbound to unmapped number %s ignored", _h(m.to))
         return None
     scope = own["id"] if own else None
-    u = conn.execute(r"""select id, tenant_id from users where regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %s
-                         and (%s::uuid is null or tenant_id = %s) limit 1""", (digits, scope, scope)).fetchone()
+    # a handle is a phone number for WhatsApp and `tg:<chat id>` for Telegram: neither channel's id can match the other's
+    u = conn.execute(r"""select id, tenant_id from users
+                         where ((%(ch)s = 'whatsapp' and coalesce(channel_handle,'') !~* '^\s*(tg|telegram):'
+                                 and regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %(d)s)
+                                or (%(ch)s = 'telegram' and lower(btrim(coalesce(channel_handle,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)))
+                           and (%(scope)s::uuid is null or tenant_id = %(scope)s) limit 1""",
+                     {"ch": m.channel, "d": digits, "s": m.sender, "scope": scope}).fetchone()
     if u:  # our own staff/owner forwarding a supplier document
         tid, actor, p = u["tenant_id"], u["id"], {"id": None, "role": "supplier"}
     else:
         actor = None
         # a `tg:<chat id>` contact belongs to that exact Telegram chat only (never read as a phone number)
         p = conn.execute(r"""select id, tenant_id, role from parties
-                             where ((coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s)
+                             where ((%s = 'whatsapp' and coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s)
                                     or (%s = 'telegram' and lower(btrim(coalesce(contact,''))) in ('tg:' || %s, 'telegram:' || %s)))
                                and (%s::uuid is null or tenant_id = %s)
-                             order by (role = 'supplier') desc limit 1""", (digits, m.channel, m.sender, m.sender, scope, scope)).fetchone()
+                             order by (role = 'supplier') desc limit 1""", (m.channel, digits, m.channel, m.sender, m.sender, scope, scope)).fetchone()
         if p and p["role"] == "supplier":
             tid = p["tenant_id"]
         else:
@@ -105,6 +115,15 @@ def _handle(conn, s, m):
         if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
+        if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
+            throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
+            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            try:
+                res = listings.create_listing(conn, tid, actor, data, mime, party_id=p["id"], note=m.text.strip()[:300], channel=m.channel,
+                                              http=getattr(s, "vision", None), ocr=s.ocr)
+            except VisionError as e:
+                raise ApiError(502, "vision_unavailable", str(e))
+            return f"Received your catalog photo: {res['item_count']} product(s) are queued for review."
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
             if m.media_kind == "document":  # sheets/Word/CSV arrive as documents; Telegram gives no mime
@@ -152,6 +171,9 @@ def _process(s, msgs, statuses=()):
             except ApiError as e:
                 log.warning("inbound %s rejected: %s", _h(m.external_id), e.message)
                 text = SORRY
+            except psycopg.errors.UniqueViolation:  # a replay that raced past the duplicate check: the first copy won
+                log.info("inbound %s is a duplicate", _h(m.external_id))
+                text = None
             except Exception:
                 log.exception("inbound %s failed", _h(m.external_id))
                 text = None
@@ -166,7 +188,8 @@ def _process(s, msgs, statuses=()):
 
 @r.get("/whatsapp")
 def wa_verify(request: Request):
-    c = whatsapp.verify_challenge(dict(request.query_params), os.environ.get("WHATSAPP_VERIFY_TOKEN") or "\0unset")
+    token = os.environ.get("WHATSAPP_VERIFY_TOKEN")
+    c = whatsapp.verify_challenge(dict(request.query_params), token) if token else None  # unset: refuse, never compare to a default
     if c is None:
         raise ApiError(403, "bad_verify_token", "verification failed")
     return PlainTextResponse(c)

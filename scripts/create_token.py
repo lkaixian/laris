@@ -2,7 +2,8 @@
   python scripts/create_token.py list
   python scripts/create_token.py issue <user name or id> [--days N]     # token expires after N days (default 90)
   python scripts/create_token.py revoke <user name or id>               # kills the token and every session
-  python scripts/create_token.py account <user name or id> <username> [--reactivate]   # first sign-in account (asks for the password)
+  python scripts/create_token.py account <user name or id> <username> [--reactivate] [--tenant <id>]   # first sign-in account (asks for the password)
+With several tenants, `account` needs --tenant and refuses a user from another one.
 Needs DATABASE_URL. Then call the API with `Authorization: Bearer <token>`; role and tenant come from the user row."""
 import getpass
 import os
@@ -16,7 +17,7 @@ from src.auth import token_hash  # noqa: E402
 
 
 def find(c, who):
-    rows = c.execute("select id, name, role, active from users where id::text = %s or name = %s", (who, who)).fetchall()
+    rows = c.execute("select id, name, role, active, tenant_id from users where id::text = %s or name = %s", (who, who)).fetchall()
     if len(rows) != 1:
         sys.exit(f"{len(rows)} users match {who!r}; use the id")
     return rows[0]
@@ -25,6 +26,11 @@ def find(c, who):
 def main(a):
     a, days, reactivate = list(a), 90, "--reactivate" in a
     a = [x for x in a if x != "--reactivate"]
+    tenant = None
+    if "--tenant" in a:
+        i = a.index("--tenant")
+        tenant = a[i + 1] if i + 1 < len(a) else sys.exit("--tenant needs a tenant id")
+        del a[i:i + 2]
     if "--days" in a:
         i = a.index("--days")
         try:
@@ -46,6 +52,8 @@ def main(a):
             print(f"{u['role']} {u['name']}: {tok}\nShown once. Expires {exp:%Y-%m-%d %H:%M} UTC. Send it as `Authorization: Bearer <token>`.")
         elif len(a) == 3 and a[0] == "account":
             u = find(c, a[1])
+            if c.execute("select count(*) n from tenants").fetchone()["n"] > 1 and (tenant or "") != str(u["tenant_id"]):
+                sys.exit("several tenants exist: pass --tenant <id> naming this user's tenant; nothing changed.")
             if not u["active"] and not reactivate:
                 sys.exit(f"{u['name']} is deactivated; nothing changed. Run again with --reactivate to turn the account back on.")
             pw = getpass.getpass("Password (10+ characters): ")

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..errors import ApiError
-from .deps import Ctx, audit, guarded, read_ctx, reply, write_ctx
+from .deps import Ctx, audit, guarded, read_ctx, reply, require_perm, write_ctx
 from .routes import SUMMARY, summary
 
 r = APIRouter(prefix="/api")
@@ -26,7 +26,7 @@ def like(q: str) -> str:
 def list_contacts(ctx: Ctx, q: str = "", role: str | None = None, limit: int = 200):
     value = """(select coalesce(sum(round(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100), 2)), 0)
                 from documents d join document_lines l on l.document_id = d.id and not l.is_header
-                where d.party_id = p.id and d.status not in ('cancelled', 'superseded', 'rejected'))""" if ctx.owner else "null"
+                where d.party_id = p.id and d.status not in ('cancelled', 'superseded', 'rejected'))""" if ctx.costs else "null"
     return ctx.conn.execute(
         f"""select p.id, p.role, p.name, p.contact, p.email, p.attention, p.ssm_no, p.address, p.notes,
                    (select count(*) from documents d where d.party_id = p.id) as documents,
@@ -52,7 +52,7 @@ def contact(pid: UUID, ctx: Ctx = Depends(read_ctx)):
     docs = ctx.conn.execute(SUMMARY + " where d.party_id=%s and d.tenant_id=%s order by d.created_at desc limit 50",
                             (pid, ctx.tenant_id)).fetchall()
     out = {**row, "sst_no": p["sst_no"], "recent_documents": [summary(ctx, d) for d in docs]}
-    if ctx.owner and row["role"] == "supplier":  # what this supplier currently charges us
+    if ctx.costs and row["role"] == "supplier":  # what this supplier currently charges us
         out["current_costs"] = ctx.conn.execute(
             """select item_key, uom, unit_cost, effective_date from cost_items
                where tenant_id=%s and supplier_id=%s and superseded_by is null order by item_key""", (ctx.tenant_id, pid)).fetchall()
@@ -84,6 +84,7 @@ class ContactEdit(BaseModel, extra="forbid"):
 
 @r.post("/contacts")
 def create_contact(body: ContactIn, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "manage_contacts")
     d = body.model_dump()
     try:
         pid = ctx.conn.execute(
@@ -98,17 +99,23 @@ def create_contact(body: ContactIn, ctx: Ctx = Depends(write_ctx)):
 
 @r.post("/contacts/{pid}")
 def edit_contact(pid: UUID, body: ContactEdit, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "manage_contacts")
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     if "name" in sets and sets["name"] is None:
         raise ApiError(422, "bad_name", "a contact needs a name")
-    with guarded():
-        row = ctx.conn.execute("update parties set " + ", ".join(f"{k}=%({k})s" for k in sets)
-                               + " where id=%(id)s and tenant_id=%(t)s returning id", {**sets, "id": pid, "t": ctx.tenant_id}).fetchone()
-    if not row:
+    old = ctx.conn.execute("select role, name, contact from parties where id=%s and tenant_id=%s for update", (pid, ctx.tenant_id)).fetchone()
+    if not old:
         raise ApiError(404, "not_found", "contact not found")
-    audit(ctx, "parties", pid, "contact changed: " + ",".join(sorted(sets)))
+    if old["role"] == "supplier" and "edit_supplier_contacts" not in ctx.perms and sets.keys() & {"name", "contact"}:  # where a supplier's chat is routed
+        raise ApiError(403, "owner_only", "your role may not change a supplier's name or number")  # code kept for existing clients
+    with guarded():
+        ctx.conn.execute("update parties set " + ", ".join(f"{k}=%({k})s" for k in sets)
+                         + " where id=%(id)s and tenant_id=%(t)s", {**sets, "id": pid, "t": ctx.tenant_id})
+    moved = "contact" in sets and sets["contact"] != old["contact"]
+    audit(ctx, "parties", pid, "contact changed: " + ",".join(sorted(sets)), {"contact": old["contact"]} if moved else None,
+          {"contact": sets["contact"]} if moved else None)
     return reply(ctx, {"id": pid})
 
 
@@ -121,7 +128,7 @@ def search(q: str = Query(..., min_length=2, max_length=100), ctx: Ctx = Depends
                         select 1 from document_lines l where l.document_id = d.id and (l.description ilike %(q)s or l.item_key ilike %(q)s)))
                       order by d.created_at desc limit 10""", {"t": ctx.tenant_id, "q": pat}).fetchall()
     out = {"query": q, "contacts": list_contacts(ctx, q, limit=8), "documents": [summary(ctx, d) for d in docs]}
-    if ctx.owner:
+    if ctx.costs:
         out["cost_items"] = ctx.conn.execute(
             """select ci.id, ci.item_key, ci.uom, ci.unit_cost, p.name as supplier, p.id as supplier_id, ci.effective_date
                from cost_items ci join parties p on p.id = ci.supplier_id
@@ -153,9 +160,10 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
            from messages m join documents d on d.id = m.document_id join parties p on p.id = d.party_id
            where d.tenant_id=%s and d.direction='out' and d.status in ('sent','read') and m.direction='in'
              and m.created_at >= now() - interval '7 days' order by m.created_at desc limit 5""", (t,)).fetchall()]
-    if ctx.owner:
+    if ctx.costs:
         st = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s", (t,)).fetchone()
         out["stale_quotes"], out["stale_margin_lost"] = st["n"], st["lost"]
+    if "manage_followups" in ctx.perms:
         out["followups_pending"] = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
                                                 where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (t,)).fetchone()["n"]
     return reply(ctx, out)
@@ -167,13 +175,12 @@ def _csv_safe(v):
 
 @r.get("/export/contacts.csv")
 def export_contacts(ctx: Ctx = Depends(read_ctx)):
-    """Owner download of the whole contact book (names and numbers are personal data, so owner only)."""
+    """Download of the whole contact book (names and numbers are personal data, so export_data only)."""
     import csv
     import io
 
     from fastapi.responses import Response
-    from .deps import require_owner
-    require_owner(ctx)
+    require_perm(ctx, "export_data")
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["type", "name", "chat_number", "email", "contact_person", "ssm_no", "address", "notes"])

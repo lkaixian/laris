@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { login, setAccessToken, ApiError } from './api'
+import { login, setAccessToken, takeNotice, ApiError } from './api'
 import { Brand, ThemeToggle } from './ui'
+
+const COOLDOWN_MS = 3000 // button pause after a 429, so a held Enter key does not hammer the server
 
 // Sign-in screen. Accounts are created by an owner (Team page) or with `scripts/create_token.py account`.
 export default function Login({ dark, setDark, onDone }: { dark: boolean; setDark: (d: boolean) => void; onDone: () => void }) {
@@ -10,16 +12,19 @@ export default function Login({ dark, setDark, onDone }: { dark: boolean; setDar
   const [token, setTokenText] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [cooling, setCooling] = useState(false)
+  const [notice] = useState(takeNotice)  // 'Your session ended' after a server-side sign out; read once
   const first = useRef<HTMLInputElement>(null)
   useEffect(() => { document.title = 'Sign in · LARIS'; first.current?.focus() }, [])
 
   const submit = async () => {
-    if (busy) return
+    if (busy || cooling) return
     if (!username.trim() || !password) return setErr('Enter your username and password.')
     setBusy(true); setErr('')
     try { await login(username.trim(), password); onDone() }
     catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Could not sign in.')
+      if (e instanceof ApiError && e.status === 429) { setCooling(true); setTimeout(() => setCooling(false), COOLDOWN_MS) }
       setPassword('')
       first.current?.focus()
     } finally { setBusy(false) }
@@ -52,8 +57,9 @@ export default function Login({ dark, setDark, onDone }: { dark: boolean; setDar
             <button type="button" className="btn" aria-pressed={show} onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}<span className="sr-only"> password</span></button>
           </span>
         </label>
+        {notice && !err && <p role="status" className="text-sm">{notice}</p>}
         {err && <p role="alert" className="text-sm text-warn">{err}</p>}
-        <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Signing in...' : 'Sign in'}</button>
+        <button type="submit" className="btn btn-primary" aria-disabled={busy || cooling || undefined}>{busy ? 'Signing in...' : cooling ? 'Wait a moment...' : 'Sign in'}</button>
       </form>
       <details className="text-sm">
         <summary className="flex min-h-11 cursor-pointer items-center text-muted">Demo deployment: use an access token instead</summary>

@@ -22,7 +22,7 @@ export interface Provenance {
   line_id: string; source_line_id: string; qty_consumed?: string; cost_date: string; unit_cost: string; cost_snapshot: string
   current_unit_cost: string; cost_is_stale: boolean; line_margin: string
 }
-export interface Me { id: string; role: Role; name: string; org: { name: string; logo_url: string | null } }
+export interface Me { id: string; role: Role; role_key?: string; role_name?: string; permissions?: string[]; name: string; org: { name: string; brand_color?: string | null; logo_url: string | null } }
 export interface DocDetail {
   doc: DocSummary
   lines: Line[]
@@ -45,7 +45,7 @@ export interface MarginReport {
   lowest_margin: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
 }
 export interface Job { id: string; status: 'todo' | 'doing' | 'done'; quote_id: string; quote_no: string; customer: string; total: string; summary: string | null }
-export interface Settings { min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null }
+export interface Settings { display_name?: string | null; brand_color?: string | null; logo_data_url?: string | null; min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null }
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }
 export interface AuditEvent { id: number; at: string; actor: string; entity: string; entity_id: string; event: string }
 
@@ -79,14 +79,28 @@ let userId = ''
 export async function resolveMe(r: Role): Promise<Me> {
   userId = ''
   const me = await call<Me>('GET', '/me', r, undefined, false)
-  if (r === role) userId = me.id
+  if (r === role) { userId = me.id; perms = me.permissions ?? [] }
   return me
 }
 
+// Permissions of the signed-in person, from GET /api/me. UI only: the server answers 403 permission_required either way.
+let perms: string[] = []
+export const can = (k: string) => perms.includes(k)
+// Pages that need a permission. Team, Roles and Settings are owner-class only (docs/roles.md, "Owner only, not assignable").
+const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers' }
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings'].includes(route) ? owner : !NEED[route] || can(NEED[route])
+
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
-const setToken = (t: string | null) => { try { if (t) sessionStorage.setItem('token', t); else sessionStorage.removeItem('token') } catch { /* storage blocked */ } }
-export const signedOut = () => { setToken(null); userId = ''; window.dispatchEvent(new Event('laris:signedout')) }
+const setToken = (t: string | null) => { try { if (t) sessionStorage.setItem('token', t); else { sessionStorage.removeItem('token'); sessionStorage.removeItem('acct') } } catch { /* storage blocked */ } }
+// Username of the real account signed in on this tab (null for a shared access token or demo header mode).
+export const getAccount = (): string | null => { try { return sessionStorage.getItem('acct') } catch { return null } }
+// One-time notice for the sign-in screen, set when the server ended the session (not on a deliberate sign out).
+let notice = ''
+export const takeNotice = () => { const n = notice; notice = ''; return n }
+export const signedOut = (ended = false) => { if (ended) notice = 'Your session ended, please sign in again.'; setToken(null); userId = ''; window.dispatchEvent(new Event('laris:signedout')) }
+// Single flight: only a 401 for the token still in use signs out. The first one clears it, so parallel 401s (and late ones after a new sign-in) do nothing.
+const expired = (res: Response, sent: string | null) => { if (res.status === 401 && sent && getToken() === sent) signedOut(true) }
 
 export async function authConfig(): Promise<{ login_required: boolean }> {
   if (MOCK) return { login_required: false }
@@ -101,6 +115,7 @@ export async function login(username: string, password: string): Promise<void> {
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Sign-in failed (${res.status})`)
   setToken(data.token)
+  try { sessionStorage.setItem('acct', username) } catch { /* storage blocked */ }
 }
 
 // Shared access token (APP_TOKEN, demo deployments): same header, no account behind it.
@@ -115,13 +130,14 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
 
-const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unknown, withUser: boolean): Promise<T> => {
+const call = async <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, r: Role, body: unknown, withUser: boolean): Promise<T> => {
   if (MOCK) {
     const { mock } = await import('./mock')
     await new Promise(res => setTimeout(res, 120))
     return mock(method, path, r, body) as T
   }
   const form = body instanceof FormData
+  const sent = getToken()
   const headers: Record<string, string> = { 'X-Role': r }
   if (!form) headers['Content-Type'] = 'application/json'
   if (withUser && userId) headers['X-User'] = userId
@@ -133,7 +149,7 @@ const call = async <T,>(method: 'GET' | 'POST', path: string, r: Role, body: unk
     throw new ApiError(0, 'network', 'Cannot reach the server.')
   }
   const data = await res.json().catch(() => null)
-  if (res.status === 401 && data?.error?.code === 'bad_token' && getToken()) signedOut()  // expired or revoked: back to the sign-in screen
+  expired(res, sent)  // expired or revoked: back to the sign-in screen with a notice
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
   return data as T
 }
@@ -143,8 +159,10 @@ export async function download(path: string, filename: string): Promise<void> {
   const headers: Record<string, string> = { 'X-Role': role }
   if (userId) headers['X-User'] = userId
   if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
+  const sent = getToken()
   let res: Response
   try { res = await fetch('/api' + path, { headers }) } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+  expired(res, sent)
   if (!res.ok) {
     const data = await res.json().catch(() => null)
     throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Download failed (${res.status})`)
@@ -161,9 +179,11 @@ export async function imageUrl(path: string): Promise<string> {
   const headers: Record<string, string> = { 'X-Role': role }
   if (userId) headers['X-User'] = userId
   if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
+  const sent = getToken()
   const res = await fetch(path, { headers })
+  expired(res, sent)
   if (!res.ok) throw new ApiError(res.status, 'error', `Image failed (${res.status})`)
   return URL.createObjectURL(await res.blob())
 }
 
-export const api =<T,>(method: 'GET' | 'POST', path: string, body?: unknown) => call<T>(method, path, role, body, true)
+export const api =<T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown) => call<T>(method, path, role, body, true)

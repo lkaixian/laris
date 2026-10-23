@@ -23,11 +23,11 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 - APScheduler starts only when `SCHEDULER=1` (set in `.replit`). Keep one worker (`run.sh` does).
 - `psycopg`, `APScheduler` and `python-multipart` are in `requirements.txt`. `pytest` and `pip-audit` live in `requirements-dev.txt`.
 - `.gitignore` ignores only the root `/package*.json`, so `web/package.json` and `web/package-lock.json` are committed.
-- Set `APP_TOKEN` on any public URL. Without it `/api` trusts the `X-Role` and `X-User` headers, which is only acceptable for synthetic demo data.
+- On any public URL, create a password account (below) and do not set `DEMO_MODE`. Header-only demo mode (anyone can send `X-Role: owner`) is acceptable only for synthetic demo data, and is off by default on a Replit deployment and whenever `APP_TOKEN` is set.
 
 ## First sign-in accounts
 
-Until an account has a password the app stays in header-only demo mode. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). From then on the login screen is shown, the owner adds everyone else on the Team page, and `REQUIRE_USER_TOKEN=1` removes the demo mode for good. Sessions last `SESSION_HOURS` (default 12).
+Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no sign-in) is allowed only while no account has a password, `REQUIRE_USER_TOKEN` is not `1`, and either `DEMO_MODE=1` is set or this is a plain local run (no `APP_TOKEN`, not a Replit deployment). Otherwise every `/api` call without a valid session or token gets 401. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). The moment one account has a password, demo mode is off for good, even if `DEMO_MODE=1`, and the login screen is shown; the owner adds everyone else on the Team page. `REQUIRE_USER_TOKEN=1` also forces it off before any account exists. `APP_TOKEN` only works in demo mode, and then only for users of the first tenant. Sessions last `SESSION_HOURS` (default 12).
 
 ## Health check and backups
 
@@ -72,6 +72,7 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth | yes (sponsor proof) |
+| `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
 
 Not secrets, already in `.replit` `[env]`: `SCHEDULER=1`.

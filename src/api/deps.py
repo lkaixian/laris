@@ -15,7 +15,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .. import db, ocr
-from ..auth import token_hash
+from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
 
@@ -78,8 +78,9 @@ def _open(request: Request, write: bool):
     """Identity, strongest first:
     1. a per-user API token (`Authorization: Bearer <token>`, stored only as SHA-256): user, role and tenant come from the DB row,
        X-Role / X-User are ignored;
-    2. the shared APP_TOKEN: demo mode, the caller still names its user with X-Role / X-User;
-    3. no token: demo mode too, unless APP_TOKEN or REQUIRE_USER_TOKEN=1 is set."""
+    2. the shared APP_TOKEN: demo mode only (auth.header_mode_allowed), the caller names its user with X-Role / X-User,
+       and that user must belong to the first tenant (never cross-tenant);
+    3. no token: demo mode too, only when auth.header_mode_allowed. Otherwise 401."""
     got = request.headers.get("authorization", "")
     tok = got[7:] if got.startswith("Bearer ") else None
     shared = os.environ.get("APP_TOKEN")
@@ -92,8 +93,9 @@ def _open(request: Request, write: bool):
         if u:
             role = u["role"]
         else:
-            if os.environ.get("REQUIRE_USER_TOKEN") == "1" or (shared and not shared_ok) or (tok and not shared_ok):  # a token that matches nothing is never ignored
+            if (shared and not shared_ok) or (tok and not shared_ok) or not header_mode_allowed(conn):  # a token that matches nothing is never ignored
                 raise ApiError(401, "bad_token", "missing or invalid bearer token")
+            home = conn.execute("select id from tenants order by name, id limit 1").fetchone()["id"] if shared_ok else None
             role = (request.headers.get("x-role") or "staff").lower()
             if role not in ("owner", "staff"):
                 raise ApiError(400, "bad_role", "X-Role must be owner or staff")
@@ -106,9 +108,11 @@ def _open(request: Request, write: bool):
                 except ValueError:
                     raise ApiError(401, "bad_user", "X-User is not a uuid")
                 u = conn.execute("select id, tenant_id, name, role from users where id=%s and active", (uid,)).fetchone()
+                if u and home and u["tenant_id"] != home:
+                    u = None
             elif request.url.path == "/api/me":  # bootstrap only: the UI learns its id here, then sends X-User
-                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active order by name, id limit 1",
-                                 (role,)).fetchone()
+                u = conn.execute("select id, tenant_id, name, role from users where role=%s and active and (%s::uuid is null or tenant_id=%s) order by name, id limit 1",
+                                 (role, home, home)).fetchone()
             else:
                 raise ApiError(401, "no_user", "X-User header required")
             if not u:

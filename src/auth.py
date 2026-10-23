@@ -60,3 +60,12 @@ def failed(key: str):
 
 def cleared(key: str):
     _FAILS.pop(key, None)
+
+
+def header_mode_allowed(conn) -> bool:
+    """Header-only demo mode (X-Role / X-User, no sign-in): the single decision for /api/auth/config and every /api call.
+    Never once any account has a password or REQUIRE_USER_TOKEN=1. Otherwise only when DEMO_MODE=1, or on a plain local run
+    (no APP_TOKEN, not a Replit deployment)."""
+    if os.environ.get("REQUIRE_USER_TOKEN") == "1" or conn.execute("select 1 from users where password_hash is not null limit 1").fetchone():
+        return False
+    return os.environ.get("DEMO_MODE") == "1" or not (os.environ.get("APP_TOKEN") or os.environ.get("REPL_DEPLOYMENT"))

@@ -1,5 +1,4 @@
 """Login, logout, password change and (owner) user management."""
-import os
 from uuid import UUID
 
 import psycopg
@@ -14,17 +13,10 @@ r = APIRouter(prefix="/api")
 USERNAME = r"^[A-Za-z0-9._-]{3,40}$"
 
 
-def login_required() -> bool:
-    """Header-only demo mode stays until real accounts exist (or the operator turns it off)."""
-    if os.environ.get("REQUIRE_USER_TOKEN") == "1" or os.environ.get("APP_TOKEN"):
-        return True
-    with db.tx("staff", "") as c:
-        return bool(c.execute("select 1 from users where password_hash is not null limit 1").fetchone())
-
-
 @r.get("/auth/config")
 def config():
-    return {"login_required": login_required()}
+    with db.tx("staff", "") as c:
+        return {"login_required": not auth.header_mode_allowed(c)}
 
 
 class Login(BaseModel, extra="forbid"):

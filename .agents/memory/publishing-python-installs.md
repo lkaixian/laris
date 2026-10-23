@@ -15,12 +15,14 @@ Python.” Unsetting that variable outside the wrapper is insufficient because
 the wrapper sets it again. The Python 3.13 module's `python` wrapper later had
 no `pip` module, while the matching standalone `pip` successfully installed
 packages into the workspace prefix. Its `sitecustomize` warning was noisy but
-non-fatal.
+non-fatal. Replit's publishing dependency detector did not apply `PIP_PREFIX`
+when it existed only in `[userenv.shared]`; put it in `.replit` `[env]` so the
+automatic pre-build installer also directs packages away from `/nix/store`.
 
-**How to apply:** Use shared non-secret pip settings that disable user mode and
-select the workspace package prefix. The custom build and Run script should
-explicitly use that prefix too. Test the exact standalone `pip install` command
-and the full custom build without the interactive shell's `PIP_CONFIG_FILE`,
-then restart the app and verify imports. Check that standalone pip matches the
-selected Python version. Until a publish succeeds, describe local checks as
-local checks, not proof that publishing is fixed.
+**How to apply:** Set non-secret `PIP_USER=0` and `PIP_PREFIX=.pythonlibs` in
+`.replit` `[env]`; keep the custom build and Run script explicit about their
+writable prefix too. Test standalone `pip install -r requirements.txt` with only
+those environment values, plus the full custom build without the interactive
+shell's `PIP_CONFIG_FILE`; then restart and verify imports. Check that standalone
+pip matches the selected Python version. Until a publish succeeds, describe
+local checks as local checks, not proof that publishing is fixed.

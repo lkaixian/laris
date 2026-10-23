@@ -52,3 +52,7 @@ waitForPort = 5000
 [userenv.shared]
 PIP_PREFIX = ".pythonlibs"
 PIP_USER = "0"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000

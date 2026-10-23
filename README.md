@@ -211,6 +211,42 @@ Real mode will show errors for any `/api` route that does not exist yet.
 
 See `docs/deploy.md` for the Replit Reserved VM setup, Secrets list, webhook setup, and smoke tests. The `.replit` file runs `run.sh`, which installs requirements, bootstraps the database once, and starts uvicorn on port 5000.
 
+## Secrets and API Keys
+
+Put every value below in Replit **Secrets** (and in the deployment's secrets too: a deployment does not always inherit the workspace ones). Locally, export them in your shell; the app does not load `.env`. Never commit real values. `.env.example` lists the same names.
+
+**Minimum to run the demo (nothing else needed):** `DATABASE_URL` (Replit PostgreSQL sets it), `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD` for the first sign-in (delete both afterwards), `TRUST_PROXY=1` on Replit, and `SECRET_KEY`.
+
+| Service | Secret | Needed for | Where to get it |
+|---|---|---|---|
+| Database | `DATABASE_URL` | everything | Replit PostgreSQL (the deployment has its own production database) |
+| Database | `DATABASE_URL_OWNER` (optional) | schema changes when the app runs as the least-privilege role | see `docs/deploy.md` |
+| App | `SECRET_KEY` | hashing the emailed one-time codes | any long random string |
+| App | `TRUST_PROXY=1` | correct client address behind Replit's proxy (login throttling) | set it on Replit only |
+| Telegram | `TELEGRAM_BOT_TOKEN` | the bot sends and receives | @BotFather, `/newbot` |
+| Telegram | `TELEGRAM_WEBHOOK_SECRET` | the webhook refuses requests without it | any long random string you make up |
+| WhatsApp (Meta) | `WHATSAPP_TOKEN` | sending (use a permanent system-user token) | Meta for Developers, WhatsApp, API Setup |
+| WhatsApp (Meta) | `WHATSAPP_PHONE_NUMBER_ID` | which number sends | same page |
+| WhatsApp (Meta) | `WHATSAPP_VERIFY_TOKEN` | webhook handshake | any random string you make up |
+| WhatsApp (Meta) | `WHATSAPP_APP_SECRET` | checks webhook signatures | App settings, Basic |
+| WhatsApp (Meta) | `WHATSAPP_RFQ_TEMPLATE`, `WHATSAPP_FOLLOWUP_TEMPLATE` | first message outside the 24-hour window | names of templates Meta has approved |
+| RunPod | `RUNPOD_API_KEY` | every RunPod call | RunPod console, Settings, API keys |
+| RunPod | `RUNPOD_VISION_URL` | catalog photos; ends in `/openai/v1` | `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` after you create the endpoint |
+| RunPod | `RUNPOD_VISION_MODEL` (optional) | model name, default `Qwen/Qwen2.5-VL-7B-Instruct` | |
+| RunPod | `RUNPOD_ENDPOINT_URL` (optional) | speech-to-text fallback endpoint | a second endpoint |
+| ILMU | `ILMU_API_KEY` | reading supplier price replies and typed quotes | your ILMU account (endpoint path still unverified) |
+| Mailtrap | `MAILTRAP_API_TOKEN` | sign-up and password-reset emails (unset = email is off) | Mailtrap, API tokens |
+| Mailtrap | `MAILTRAP_INBOX_ID` | set = sandbox inbox (nothing is delivered) | Email Testing, your inbox |
+| Mailtrap | `MAILTRAP_SENDER_EMAIL`, `MAILTRAP_SENDER_NAME` | the From address | your own |
+| Licence | `LICENSE_PUBLIC_KEY` | turns licence checking on (unset = off) | run `python scripts/issue_license.py keygen` once on your own machine |
+| Licence | `LICENSE_ISSUER_EMAIL` | where licence purchase requests are emailed | your own |
+
+Demo-only switches, never on a real deployment: `DEMO_MODE`, `APP_TOKEN`, `SIGNUP_DEV_ECHO`, `SEED`.
+
+The licence **private** key stays on your own machine (`LICENSE_PRIVATE_KEY_FILE` is read only by `scripts/issue_license.py`). Do not put it in Secrets or in the repo.
+
+The RunPod endpoint itself is a billed resource: create it in the RunPod console (serverless, vLLM worker, 24 GB GPU) before `RUNPOD_VISION_URL` can work. See `docs/deploy.md`.
+
 ## Project Structure
 
 ```

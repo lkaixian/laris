@@ -16,6 +16,7 @@ from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
 from .. import db, pipeline
+from .. import license as lic
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
 from ..tabular import sniff
@@ -29,6 +30,7 @@ r = APIRouter(prefix="/webhooks")
 LIMIT, WINDOW = 10, 600  # enquiries per sender per 10 minutes
 # ponytail: in-memory, per process (run.sh forces 1 worker), keys never pruned; move to Redis/DB if we scale out
 _HITS = defaultdict(deque)
+SENDER_LIMIT = 30  # messages per (business, sender) per 10 minutes on the supplier and staff paths
 MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
 CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 SORRY = "Sorry, we could not process that message. Our team will follow up."
@@ -56,14 +58,57 @@ def _clarify(conn, tid) -> str:
     return f"Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity."
 
 
-def _limited(sender) -> bool:
-    now, q = time.monotonic(), _HITS[sender]
+def _limited(key, limit=LIMIT) -> bool:
+    now, q = time.monotonic(), _HITS[key]
     while q and now - q[0] > WINDOW:
         q.popleft()
-    if len(q) >= LIMIT:
+    if len(q) >= limit:
         return True
     q.append(now)
     return False
+
+
+# a handle is a phone number for WhatsApp and `tg:<chat id>` for Telegram: neither channel's id can match the other's
+STAFF_Q = r"""select id, tenant_id from users
+              where active and ((%(ch)s = 'whatsapp' and coalesce(channel_handle,'') !~* '^\s*(tg|telegram):'
+                                 and regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %(d)s)
+                                or (%(ch)s = 'telegram' and lower(btrim(coalesce(channel_handle,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)))
+                and (%(scope)s::uuid is null or tenant_id = %(scope)s)"""
+# a `tg:<chat id>` contact belongs to that exact Telegram chat only (never read as a phone number)
+PARTY_Q = r"""select id, tenant_id, role from parties
+              where ((%(ch)s = 'whatsapp' and coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %(d)s)
+                     or (%(ch)s = 'telegram' and lower(btrim(coalesce(contact,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)))
+                and (%(scope)s::uuid is null or tenant_id = %(scope)s)
+              order by (role = 'supplier') desc, id"""
+
+
+def resolve_tenant(conn, m, digits):
+    """Which business is this message for? -> (tenant id, None) or (None, reason code). Never guesses:
+    1. WhatsApp: the tenant that owns the number it arrived on (tenants.wa_phone_number_id); a number nobody owns is dropped once any is mapped
+    2. env TELEGRAM_TENANT_ID (Telegram) / WHATSAPP_TENANT_ID (WhatsApp)
+    3. exactly one business exists: that one
+    4. otherwise only an exact sender match (active staff handle or contact) in exactly one business; none or several: dropped."""
+    if m.channel == "whatsapp" and m.to:
+        if t := conn.execute("select id from tenants where wa_phone_number_id = %s", (m.to,)).fetchone():
+            return t["id"], None
+        if conn.execute("select 1 from tenants where wa_phone_number_id is not null limit 1").fetchone():
+            return None, "unmapped_number"
+    env = os.environ.get("TELEGRAM_TENANT_ID" if m.channel == "telegram" else "WHATSAPP_TENANT_ID", "").strip().lower()
+    if env and (t := conn.execute("select id from tenants where id::text = %s", (env,)).fetchone()):
+        return t["id"], None
+    only = conn.execute("select id from tenants limit 2").fetchall()
+    if len(only) == 1:
+        return only[0]["id"], None
+    args = {"ch": m.channel, "d": digits, "s": m.sender, "scope": None}
+    hit = {x["tenant_id"] for q in (STAFF_Q, PARTY_Q) for x in conn.execute(q, args).fetchall()}
+    return (hit.pop(), None) if len(hit) == 1 else (None, "ambiguous_sender" if hit else "unknown_sender")
+
+
+def _hold(conn, tid, p, m):
+    """Licence blocks processing: keep only the raw message (as a new enquiry) so the owner can see it. No model, no reply."""
+    pid = p["id"] or pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender)
+    enq = conn.execute("insert into enquiries(tenant_id,party_id,channel,status) values (%s,%s,%s,'new') returning id", (tid, pid, m.channel)).fetchone()["id"]
+    pipeline._record_message(conn, enq, None, "in", m.channel, (m.text or f"[{m.media_kind}]")[:2000], m.external_id)
 
 
 def _handle(conn, s, m):
@@ -75,44 +120,34 @@ def _handle(conn, s, m):
     digits = "".join(ch for ch in m.sender if ch.isdigit())
     if not digits:
         return None
-    # Tenant: the one that owns the number the message arrived on. Once any tenant has a number mapped, a message to an
-    # unmapped number is dropped; with none mapped we keep the single-tenant fallback (WHATSAPP_TENANT_ID, else the first tenant).
-    own = conn.execute("select id from tenants where wa_phone_number_id = %s", (m.to,)).fetchone() if m.to else None
-    if m.to and not own and conn.execute("select 1 from tenants where wa_phone_number_id is not null limit 1").fetchone():
-        log.warning("inbound to unmapped number %s ignored", _h(m.to))
+    tid, why = resolve_tenant(conn, m, digits)
+    if tid is None:  # fail closed: no reply, no processing, no number or text in the log; 200 so the provider does not retry
+        log.warning("inbound from %s dropped: %s", _h(digits), why)
         return None
-    scope = own["id"] if own else None
-    # a handle is a phone number for WhatsApp and `tg:<chat id>` for Telegram: neither channel's id can match the other's
-    u = conn.execute(r"""select id, tenant_id from users
-                         where ((%(ch)s = 'whatsapp' and coalesce(channel_handle,'') !~* '^\s*(tg|telegram):'
-                                 and regexp_replace(coalesce(channel_handle,''), '\D', '', 'g') = %(d)s)
-                                or (%(ch)s = 'telegram' and lower(btrim(coalesce(channel_handle,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)))
-                           and (%(scope)s::uuid is null or tenant_id = %(scope)s) limit 1""",
-                     {"ch": m.channel, "d": digits, "s": m.sender, "scope": scope}).fetchone()
+    args = {"ch": m.channel, "d": digits, "s": m.sender, "scope": tid}  # from here every lookup is this business only
+    u = conn.execute(STAFF_Q + " limit 1", args).fetchone()
+    p = None
     if u:  # our own staff/owner forwarding a supplier document
-        tid, actor, p = u["tenant_id"], u["id"], {"id": None, "role": "supplier"}
+        actor, p = u["id"], {"id": None, "role": "supplier"}
     else:
-        actor = None
-        # a `tg:<chat id>` contact belongs to that exact Telegram chat only (never read as a phone number)
-        p = conn.execute(r"""select id, tenant_id, role from parties
-                             where ((%s = 'whatsapp' and coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s)
-                                    or (%s = 'telegram' and lower(btrim(coalesce(contact,''))) in ('tg:' || %s, 'telegram:' || %s)))
-                               and (%s::uuid is null or tenant_id = %s)
-                             order by (role = 'supplier') desc limit 1""", (m.channel, digits, m.channel, m.sender, m.sender, scope, scope)).fetchone()
-        if p and p["role"] == "supplier":
-            tid = p["tenant_id"]
-        else:
-            if _limited(digits):
-                log.warning("inbound from %s rate-limited", _h(digits))
-                return None
-            tid = p["tenant_id"] if p else None
-            if tid is None:
-                t = own or conn.execute("select id from tenants where id::text = %s", (os.environ.get("WHATSAPP_TENANT_ID", ""),)).fetchone() \
-                    or conn.execute("select id from tenants order by name, id limit 1").fetchone()
-                tid = t["id"]
-                p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
+        actor, p = None, conn.execute(PARTY_Q + " limit 1", args).fetchone()
+    if p and p["role"] == "supplier":
+        if _limited(f"sup:{tid}:{m.channel}:{digits}", SENDER_LIMIT):
+            log.warning("inbound from %s rate-limited (supplier/staff)", _h(digits))
+            return None
+    elif p and p["role"] == "contractor":  # contacts we record, not people who order
+        return None
+    elif _limited(digits):
+        log.warning("inbound from %s rate-limited", _h(digits))
+        return None
+    if lic.configured() and lic.status(conn, tid)["read_only"]:
+        log.warning("licence blocks inbound processing (sender %s)", _h(digits))
+        _hold(conn, tid, p or {"id": None}, m)
+        return None
+    if p is None:
+        p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
     if p["role"] == "supplier":
-        if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
+        if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)) and send["tenant_id"] == tid:
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
         if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
@@ -136,8 +171,6 @@ def _handle(conn, s, m):
         else:
             raise ApiError(415, "unsupported_media", "supplier documents: send a PDF, photo or text")
         return f"Received {res['doc_no'] or 'your document'}; it is queued for review."
-    if p["role"] == "contractor":  # contacts we record, not people who order
-        return None
     text = m.text if not m.media_kind else None
     if m.media_kind == "audio":
         data, mime = s.download(m.channel, m.media_ref, m.media_kind)

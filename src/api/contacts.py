@@ -85,6 +85,8 @@ class ContactEdit(BaseModel, extra="forbid"):
 @r.post("/contacts")
 def create_contact(body: ContactIn, ctx: Ctx = Depends(write_ctx)):
     require_perm(ctx, "manage_contacts")
+    if body.role == "supplier":
+        require_perm(ctx, "edit_supplier_contacts")  # a new supplier sets where its chat is routed
     d = body.model_dump()
     try:
         pid = ctx.conn.execute(

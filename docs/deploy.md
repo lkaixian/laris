@@ -78,9 +78,13 @@ Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-r
 - Images over 25 megapixels are refused (422) before OCR.
 - `CORS_ORIGINS` entries are trimmed; the app serves the UI itself, so leave it unset in production.
 
+## Logs and request ids
+
+`LOG_LEVEL` (default `INFO`) sets verbosity. Every line reads `time LEVEL logger [request_id] message`; `[-]` means outside a request. Every response carries `X-Request-Id`, and every error body has the same `request_id`: when a user quotes it, search the logs for it (Replit: Deployments > Logs, search `[<id>]`). Unhandled errors log once at ERROR with method, path, tenant and user ids and the traceback, never the query string or body. Webhook secrets (`hub.verify_token`, `token`, `secret`, `signature` in a `/webhooks/*` query string) are replaced by `***` in uvicorn's access log. A missing `DATABASE_URL` logs `DATABASE_URL is not set: the API cannot serve database requests` at startup.
+
 ## Health check and backups
 
-`GET /health` answers if the process is up; `GET /ready` also checks the database (503 if it is not reachable): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.
+`GET /health` answers if the process is up; `GET /ready` also checks the database (503 `{status:"not_ready", reason}`: `db_url_missing`, `db_unreachable` or `schema_missing`; the reason is also in the log): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.
 
 ## Roles and branding migration
 
@@ -123,6 +127,8 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `WHATSAPP_VERIFY_TOKEN` | Meta webhook verify. Make up a long random string. | yes if WhatsApp is shown |
 | `WHATSAPP_APP_SECRET` | checks `X-Hub-Signature-256` on inbound webhooks | yes if WhatsApp is shown |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
+| `TELEGRAM_TENANT_ID` | tenant uuid that receives Telegram messages (one bot per deployment); see "Which business gets a chat message" | only with more than one business |
+| `WHATSAPP_TENANT_ID` | tenant uuid used when a WhatsApp number is not mapped in Settings > Channels | optional |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
 | `RUNPOD_VISION_URL` | catalog photo model: `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` (section 10b) | only for catalog photos |
@@ -185,6 +191,16 @@ python scripts/setup_channels.py telegram-poll              # local only: long-p
 **Ask suppliers over Telegram (demo without WhatsApp).** Put `tg:<chat id>` (or `telegram:<chat id>`; a group id is negative, e.g. `tg:-1001234567`) in the supplier party's contact. That supplier gets the photo from the bot and their replies are read like WhatsApp ones (reply to the photo, or the newest open ask). The supplier must open the bot and press Start first, or the send fails with "supplier must open the bot and press Start first". To find a chat id: message the bot from that Telegram account, run `python scripts/setup_channels.py telegram-poll` and read the number after `chat` on each line it prints (webhook mode: the same id is in the update). Any other contact is sent on WhatsApp as before.
 
 `/webhooks/telegram` returns 403 until `TELEGRAM_WEBHOOK_SECRET` is set. WhatsApp: callback `https://<deployment-domain>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIFY_TOKEN` (the verify call returns 403 while it is unset), subscribe to `messages`. A person's `users.channel_handle` is their phone number for WhatsApp and `tg:<chat id>` for Telegram; a Telegram chat id never matches a phone number. A unique index on `messages (channel, external_id)` makes a replayed message a no-op; if old data already holds duplicates startup logs a NOTICE and skips the index until you delete them. Several shops on one deployment: set `tenants.wa_phone_number_id` for each (the id shown in Meta's WhatsApp setup); inbound messages route by the number they arrived on and messages to an unmapped number are ignored once any is mapped. Replies and sent quotes go out from that tenant's own number (a tenant with no number uses `WHATSAPP_PHONE_NUMBER_ID`). All numbers share the one `WHATSAPP_TOKEN`, so they must sit under the same Meta business; separate tokens per tenant are not built. After 24h of customer silence only a template can be sent: create a utility template with one `{{1}}` body parameter and set `WHATSAPP_FOLLOWUP_TEMPLATE` to its name. On a public URL prefer per-user tokens: `python scripts/create_token.py issue "<user name>"` prints a token once (only its SHA-256 is stored); the UI asks for it once per tab and role and tenant then come from the user row, not from headers. Set `REQUIRE_USER_TOKEN=1` to switch the header-only demo mode off. `APP_TOKEN` (one shared secret, headers still pick the user) remains for demos.
+
+**Which business gets a chat message.** Every inbound WhatsApp or Telegram message is tied to exactly one business, in this order:
+1. WhatsApp: the business whose number matches the number the message arrived on. The owner sets it in **Settings > Channels** (the `phone_number_id` from the Meta dashboard, digits only; one number belongs to one business).
+2. Telegram: `TELEGRAM_TENANT_ID` (the business's uuid). WhatsApp without a mapped number: `WHATSAPP_TENANT_ID`.
+3. Only one business exists: that one (single-business installs and the demo need no setup).
+4. Otherwise the sender must match exactly one business (an active staff `channel_handle` or a contact's number / `tg:<chat id>`).
+
+If none of these gives one business, the message is **dropped**: not stored, not answered, no AI call, and one WARNING line in the log (a short hash of the sender and the reason `unmapped_number`, `unknown_sender` or `ambiguous_sender`, never the number or text). The provider still gets 200 so it does not retry. This is deliberate: guessing a business would hand one business another's customers. Once any WhatsApp number is mapped, a message to an unmapped number is dropped too. Map your number as soon as a second business signs up.
+
+Other rules on this path: a business whose licence blocks writes only has the raw message stored (visible as a new enquiry), with no AI call and no reply; each supplier or staff sender is limited to 30 messages per 10 minutes per business (extra ones are silently dropped); chat photos for `/catalog` must be JPEG, PNG or WebP by their bytes and at most 8 MB.
 
 ## 10. RunPod endpoint (sponsor proof)
 

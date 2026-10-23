@@ -29,6 +29,11 @@ def create_listing(conn, tenant_id, user_id, data: bytes, mime: str, *, party_id
                    http=None, ocr=None) -> dict:
     """Read the photo, store it with one cropped picture per product. Used by the API and by the chat '/catalog' path.
     Raises vision.VisionError. The items are all 'needs_review'."""
+    if len(data) > MAX_IMAGE:  # both entry points (API upload, chat /catalog) end here: the provider's size and mime are not trusted
+        raise ApiError(413, "too_large", "photo over 8 MB")
+    mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
+    if mime not in IMAGES or (mime == "image/webp" and data[8:12] != b"WEBP"):
+        raise ApiError(415, "unsupported_media", "send a JPEG, PNG or WebP photo")
     items = vision.describe_listing(data, mime, client=http, **({"ocr": ocr} if ocr else {}))
     pics = vision.crops(data, items)
     lid = conn.execute("""insert into listings(tenant_id,created_by,party_id,note,source_channel,image,image_mime)
@@ -167,6 +172,7 @@ class Ask(BaseModel, extra="forbid"):
 @r.post("/listings/{listing_id}/items/{item_id}/ask")
 def ask(listing_id: UUID, item_id: UUID, body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
     """'How much?' about exactly this product: the same code as POST /api/rfq, with the crop as the photo."""
+    require_perm(ctx, "ask_suppliers")  # before the lookup: a role without it learns nothing about which products exist
     row = _crop_row(ctx, listing_id, item_id)
     desc = (body.description or row["description"] or " ".join(row["labels"]) or row["sku"] or "catalog item").strip()[:200]
     return rfq.ask(request, UploadFile(io.BytesIO(bytes(row["crop"])), filename="crop.jpg"), desc, body.note or rfq.DEFAULT_NOTE,

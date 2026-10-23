@@ -73,7 +73,9 @@ def test_staff_price_edit_is_audited_with_old_and_new_and_only_the_owner_sees_it
     doc = e.c.post("/api/documents/ingest", data={"text": "p1", "supplier": "Acme"}, headers=e.S).json()["id"]
     ln = e.c.get(f"/api/documents/{doc}", headers=e.S).json()["lines"][0]
     last = e.c.get("/api/audit", headers=e.O).json()[-1]["id"]
-    assert e.c.post(f"/api/documents/{doc}/lines/{ln['id']}", json={"unit_price": "45.50"}, headers=e.S).status_code == 200
+    url = f"/api/documents/{doc}/lines/{ln['id']}"
+    assert e.c.post(url, json={"unit_price": "45.50"}, headers=e.S).status_code == 403  # step 105: a price edit needs view_costs; the owner has it
+    assert e.c.post(url, json={"unit_price": "45.50"}, headers=e.O).status_code == 200
     ev = [x["event"] for x in e.c.get(f"/api/audit?after={last}", headers=e.O).json() if x["entity"] == "document_lines"]
     assert len(ev) == 1 and "unit_price" in ev[0] and "40" in ev[0] and "45.5" in ev[0]
     row = e.sql("select before, after from audit_log where entity='document_lines' and entity_id=%s", (ln["id"],))[0]

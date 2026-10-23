@@ -157,6 +157,8 @@ class Transition(BaseModel, extra="forbid"):
 
 @r.post("/documents/{doc_id}/transition")
 def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depends(write_ctx)):
+    if not ctx.owner:  # staff-class moves (parsed, reviewed, read ...) are document work; owner-class ones the DB guard refuses a non-owner anyway
+        require_perm(ctx, "upload_documents")
     d = get_doc(ctx, doc_id, lock=True)
     c, to = ctx.conn, body.to
     if to == d["status"]:  # the DB guard treats same-status as a no-op; we must not re-send / re-stamp
@@ -194,8 +196,11 @@ class LineEdit(BaseModel, extra="forbid"):
 
 @r.post("/documents/{doc_id}/lines/{line_id}")
 def edit_line(doc_id: UUID, line_id: UUID, body: LineEdit, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "upload_documents")
     d = get_doc(ctx, doc_id, lock=True)
     sets = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "unit_price" in sets:
+        require_perm(ctx, "view_costs")  # a role that cannot see costs must not change them blindly
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     if d["direction"] == "out":
@@ -248,11 +253,12 @@ def margin_report(days: int = Query(7, ge=1, le=366), ctx: Ctx = Depends(read_ct
     stale = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s",
                       (ctx.tenant_id,)).fetchone()
     won, lost = (sum(outcome.get(k, 0) for k in ks) for ks in (("accepted", "job_created"), ("rejected", "expired")))
-    return reply(ctx, {"days": days, "quotes": t["quotes"], "revenue": t["revenue"], "cost": t["cost"],
-                       "margin": t["revenue"] - t["cost"],
-                       "margin_pct": round((t["revenue"] - t["cost"]) / t["revenue"] * 100, 2) if t["revenue"] else None,
-                       "outcomes": outcome, "won": won, "lost": lost,
-                       "lowest_margin": low, "stale_quotes": stale["n"], "stale_margin_lost": stale["lost"]})
+    out = {"days": days, "quotes": t["quotes"], "revenue": t["revenue"], "cost": t["cost"],
+           "margin": t["revenue"] - t["cost"],
+           "margin_pct": round((t["revenue"] - t["cost"]) / t["revenue"] * 100, 2) if t["revenue"] else None,
+           "outcomes": outcome, "won": won, "lost": lost,
+           "lowest_margin": low, "stale_quotes": stale["n"], "stale_margin_lost": stale["lost"]}
+    return reply(ctx, out if ctx.costs else {k: v for k, v in out.items() if k not in ("lowest_margin", "stale_quotes")})  # margins and cost movement need view_costs; reply() drops cost, margin, margin_pct, stale_margin_lost
 
 
 @r.get("/cost-items")
@@ -346,6 +352,7 @@ class JobMove(BaseModel, extra="forbid"):
 
 @r.post("/jobs/{job_id}")
 def move_job(job_id: UUID, body: JobMove, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "manage_contacts")
     old = ctx.conn.execute("select status from jobs where id=%s and tenant_id=%s for update", (job_id, ctx.tenant_id)).fetchone()
     if not old:
         raise ApiError(404, "not_found", "job not found")
@@ -357,6 +364,7 @@ def move_job(job_id: UUID, body: JobMove, ctx: Ctx = Depends(write_ctx)):
 @r.get("/followups")
 def followups(ctx: Ctx = Depends(read_ctx)):
     """Quotes with no answer after the template's follow-up window, each with the suggested chase message."""
+    require_perm(ctx, "manage_followups")
     rows = ctx.conn.execute(
         """select f.id, f.document_id, d.doc_no, p.name as customer, d.status, f.due_at, f.reason
            from followups f join documents d on d.id=f.document_id join parties p on p.id=d.party_id
@@ -457,6 +465,7 @@ class Enquiry(BaseModel, extra="forbid"):
 
 @r.post("/enquiries/simulate")
 def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "manage_contacts")
     throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # each one costs a model call
     cust = pipeline.party(ctx.conn, ctx.tenant_id, "customer", body.customer or "Walk-in customer (simulated)")
     res = pipeline.handle_enquiry(ctx.conn, ctx.tenant_id, cust, body.channel, body.text, actor=ctx.user_id,

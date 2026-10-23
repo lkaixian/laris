@@ -56,7 +56,7 @@ def create_invite(body: NewInvite, request: Request, bg: BackgroundTasks, ctx: C
     token = secrets.token_urlsafe(32)
     iid = c.execute("insert into invites(tenant_id, email, role_id, invited_by, token_sha256) values (%s,%s,%s,%s,%s) returning id",
                     (ctx.tenant_id, body.email, role["id"], ctx.user_id, auth.token_hash(token))).fetchone()["id"]
-    audit(ctx, "invites", iid, f"invited {body.email} ({role['key']})")
+    audit(ctx, "invites", iid, f"invitation sent ({role['key']})")
     _mail(ctx, request, bg, body.email, role["name"], token)
     return reply(ctx, _one(c, iid), 201)
 
@@ -81,7 +81,7 @@ def resend_invite(iid: UUID, request: Request, bg: BackgroundTasks, ctx: Ctx = D
     token = secrets.token_urlsafe(32)
     to = c.execute("update invites set token_sha256=%s, created_at=now(), expires_at=now() + interval '7 days' where id=%s returning email",
                    (auth.token_hash(token), iid)).fetchone()["email"]
-    audit(ctx, "invites", iid, "invitation sent again")
+    audit(ctx, "invites", iid, "invitation resent")
     _mail(ctx, request, bg, to, _one(c, iid)["role_name"], token)
     return reply(ctx, _one(c, iid))
 

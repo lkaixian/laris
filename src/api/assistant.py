@@ -80,6 +80,8 @@ def run(ctx: Ctx, intent: str, query: str | None, days: int | None) -> tuple[str
     need = {"stale_costs": "view_costs", "cost_of": "view_costs", "margin_report": "view_reports"}  # margin_report shows margins: also view_costs
     if intent in need and not (need[intent] in ctx.perms and ctx.costs):
         return ("That needs cost and margin figures, which only the owner can see.", [])
+    if intent == "followups" and "manage_followups" not in ctx.perms:  # names customers, like GET /api/followups
+        return ("That needs the follow-up permission, which your role does not have.", [])
     if intent == "attention":
         n_review = c.execute("""select count(distinct d.id) n from documents d join document_lines l on l.document_id=d.id
                                 where d.tenant_id=%s and l.needs_review and d.status in ('received','parsed','draft')""", (ctx.tenant_id,)).fetchone()["n"]

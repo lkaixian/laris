@@ -38,3 +38,36 @@ These are refused with 422 `not_assignable` when put in a role, and stay `requir
 | decide field proposals; clear `needs_review` on a quote line | owner decision |
 
 Branding (display name, colour, logo) is readable by every signed-in role in `GET /api/me` `org`, writable by the owner only.
+
+## Every write route and its gate (step 105)
+
+A custom role with **no** permissions is read-only. `tests/test_permissions.py` walks every `POST/PUT/PATCH/DELETE` route under `/api`, calls it as such a role and demands 403, except the explicit `OPEN` set below; a new write route without a gate fails that test.
+
+| Route | Gate |
+|---|---|
+| `POST /api/documents/ingest`, `POST /api/documents/manual` | `upload_documents` |
+| `POST /api/documents/{id}/lines/{lid}` | `upload_documents`; sending `unit_price` also needs `view_costs` |
+| `POST /api/documents/{id}/transition` | owner-class moves: owner (database guard); any other caller needs `upload_documents` |
+| `POST /api/listings`, `PATCH /api/listings/{id}/items/{iid}` | `upload_documents` (a `price` in the patch also needs `view_costs`) |
+| `POST /api/listings/{id}/items/{iid}/ask`, `POST /api/rfq` | `ask_suppliers` |
+| `POST /api/rfq/{id}/replies/{rid}/accept` | owner |
+| `POST /api/enquiries/simulate` | `manage_contacts` |
+| `POST /api/jobs/{id}` | `manage_contacts` |
+| `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
+| `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
+| `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
+| `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |
+| `POST /api/users`, `POST /api/users/{id}`, `POST/PATCH/DELETE /api/roles...`, `POST /api/invites`, `POST /api/invites/{id}/resend`, `DELETE /api/invites/{id}` | owner |
+| `POST /api/license`, `POST /api/license/request` | owner |
+
+`OPEN` (no permission needed): own account and public pages (`login`, `logout`, `signup`, `signup/verify`, `signup/resend`, `password/forgot`, `password/reset`, `invites/preview`, `invites/accept`, `me/password`, `me/sessions/revoke-others`, `me/sessions/{sid}`) and `POST /api/assistant`, which only answers questions with the caller's own scrubbed read access (its follow-up answer needs `manage_followups`, its cost and margin answers `view_costs`).
+
+Reads: without `view_costs` every response is scrubbed (tracker, documents, contacts, dashboard, search, margin report, RFQ replies); `GET /api/followups` needs `manage_followups`.
+
+## Accepted risk: catalog photos and crops
+
+`GET /api/listings/{id}/image` and `GET /api/listings/{id}/items/{item_id}/crop` serve the original photo and each product's crop to every signed-in role, including one without `view_costs`. A photographed supplier price list could therefore be read from the picture itself. This is accepted: staff reviewing a catalog need the crop. The structured `price` and `currency` are withheld without `view_costs`. If this stops being acceptable, gate both routes on `view_costs` or on `upload_documents`.
+
+## Audit log and personal data
+
+Audit events name entities by id, never by email. Invitations log `invitation sent (role)` / `invitation resent`. Known remaining personal data: `contact changed` events store the old and new chat number of a contact (kept on purpose, it traces where a supplier's chat is routed).

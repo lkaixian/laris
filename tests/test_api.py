@@ -134,7 +134,9 @@ def test_inbound_review_flow_and_line_rules(env):
     ln = e.c.get(f"/api/documents/{doc['id']}", headers=e.S).json()["lines"][0]
     assert ln["needs_review"] and ln["item_key"] is None
     url = f"/api/documents/{doc['id']}/lines/{ln['id']}"
-    r = e.c.post(url, json={"item_key": "screw_m4", "unit_price": "3.5", "needs_review": False}, headers=e.S)
+    assert e.c.post(url, json={"unit_price": "3.5"}, headers=e.S).status_code == 403  # step 105: changing a price needs view_costs, staff has none by default
+    assert e.c.post(url, json={"unit_price": "3.5"}, headers=e.O).json()["unit_price"] == "3.5000"
+    r = e.c.post(url, json={"item_key": "screw_m4", "needs_review": False}, headers=e.S)
     assert r.status_code == 200 and r.json()["unit_price"] == "3.5000" and r.json()["item_key"] == "screw_m4"
     assert e.c.post(url, json={"price_source": "owner_override"}, headers=e.S).status_code == 422  # unknown key
     assert e.c.post(url, json={"qty": -1}, headers=e.S).status_code == 422
@@ -561,7 +563,8 @@ def test_followup_is_suggested_then_owner_sends(env):
     e = env
     d = sent_quote_on_telegram(e)
     assert scheduler.run_once()["followups"] >= 1
-    fu = [x for x in e.c.get("/api/followups", headers=e.S).json() if x["document_id"] == d][0]
+    assert e.c.get("/api/followups", headers=e.S).status_code == 403  # step 105: the list needs manage_followups, staff has none by default
+    fu = [x for x in e.c.get("/api/followups", headers=e.O).json() if x["document_id"] == d][0]
     assert fu["suggested_text"].startswith("Hi ") and "RM" not in fu["suggested_text"] and "MYR" in fu["suggested_text"]
     assert "cost" not in json.dumps(fu).lower()
     act = lambda who, a: e.c.post(f"/api/followups/{fu['id']}", json={"action": a}, headers=who)
@@ -952,7 +955,8 @@ def test_contractor_messages_do_not_become_enquiries(env, monkeypatch):
 
 def test_contacts_csv_owner_only_and_formula_safe(env):
     e = env
-    e.c.post("/api/contacts", json={"role": "supplier", "name": "=HYPERLINK(\"x\")", "notes": "+1"}, headers=e.S)
+    assert e.c.post("/api/contacts", json={"role": "supplier", "name": "x", "notes": "+1"}, headers=e.S).status_code == 403  # step 105: new suppliers need edit_supplier_contacts
+    e.c.post("/api/contacts", json={"role": "supplier", "name": "=HYPERLINK(\"x\")", "notes": "+1"}, headers=e.O)
     assert e.c.get("/api/export/contacts.csv", headers=e.S).status_code == 403
     r = e.c.get("/api/export/contacts.csv", headers=e.O)
     rows = list(csv.reader(io.StringIO(r.text)))

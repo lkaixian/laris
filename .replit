@@ -35,6 +35,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "publish-build"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -46,6 +50,17 @@ outputType = "webview"
 task = "shell.exec"
 args = "bash run.sh"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "publish-build"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/check-publish-build.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [userenv]
 

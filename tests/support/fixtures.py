@@ -26,6 +26,8 @@ class FakeSvc(Services):
     def __init__(self, ai):
         super().__init__()
         self.sent, self.media = [], {}
+        self.outbox = []  # emails: (to, subject, text, html, category)
+        self.mail = lambda to, subject, text, html=None, category=None: self.outbox.append((to, subject, text, html, category)) or True
 
         def handler(req: httpx.Request):
             ai.calls += 1

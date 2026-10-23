@@ -48,8 +48,8 @@ def login(body: Login, request: Request):
     if auth.throttled(key, ip):
         raise ApiError(429, "too_many_attempts", "Too many failed sign-ins. Wait a few minutes and try again.")
     with db.tx("staff", "") as c:
-        u = c.execute("""select id, name, role, password_hash from users where lower(username) = lower(%s) and active""",
-                      (body.username,)).fetchone()
+        u = c.execute("""select id, name, role, password_hash from users where (lower(username) = lower(%s) or lower(email) = lower(%s)) and active""",
+                      (body.username, body.username)).fetchone()  # an email works as the user name; unverified signups are not active
         ok = auth.verify_password(body.password, u["password_hash"] if u else None)
         if not (u and ok):
             auth.failed(key, ip)

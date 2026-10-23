@@ -18,7 +18,7 @@ from psycopg.types.json import Jsonb
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .. import db, ocr, perms
+from .. import db, mailer, ocr, perms
 from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -201,6 +201,7 @@ class Services:
         self.ilmu = None  # httpx.Client for ILMU (None = real)
         self.http = None  # httpx.Client for WhatsApp / Telegram (None = real)
         self.ocr = ocr
+        self.mail = mailer.send  # (to, subject, text, html=None, category=None) -> bool, never raises
 
     def send(self, channel: str, to: str, text: str, phone_id: str | None = None) -> str:
         """phone_id: the tenant's own WhatsApp business number; None falls back to WHATSAPP_PHONE_NUMBER_ID."""

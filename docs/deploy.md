@@ -31,6 +31,20 @@ Config files in the repo: `.replit` (run and deployment), `replit.nix` (Python 3
 
 Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no sign-in) is allowed only while no account has a password, `REQUIRE_USER_TOKEN` is not `1`, and either `DEMO_MODE=1` is set or this is a plain local run (no `APP_TOKEN`, not a Replit deployment). Otherwise every `/api` call without a valid session or token gets 401. To switch to real sign-in: `python scripts/create_token.py list`, then `python scripts/create_token.py account "<owner name>" <username>` (asks for the password). The moment one account has a password, demo mode is off for good, even if `DEMO_MODE=1`, and the login screen is shown; the owner adds everyone else on the Team page. `REQUIRE_USER_TOKEN=1` also forces it off before any account exists. `APP_TOKEN` only works in demo mode, and then only for users of the first tenant. Sessions last `SESSION_HOURS` (default 12).
 
+## Self-service signup and password reset (email codes)
+
+`POST /api/signup` creates a business and its owner; the owner confirms with a 6-digit code emailed through Mailtrap's HTTP API, then signs in with the email (or a username, if one is set) and the password. So the first owner on a fresh deployment can simply sign up; `BOOTSTRAP_OWNER_*` is only needed for an existing database. `POST /api/password/forgot` and `/api/password/reset` do the same for a forgotten password. Codes live 10 minutes, die after 5 wrong tries, and are stored only as an HMAC-SHA256 keyed with `SECRET_KEY` (if unset, a key derived from `DATABASE_URL`; set `SECRET_KEY` to a long random string if the database URL ever changes).
+
+| Secret | Meaning |
+|---|---|
+| `MAILTRAP_API_TOKEN` | Mailtrap API token. **Unset = email is off**: signups are still created but nobody receives the code (the log says `email is off` once) |
+| `MAILTRAP_INBOX_ID` | Set = **sandbox** (Email Testing: `https://sandbox.api.mailtrap.io/api/send/<inbox>`, nothing is delivered, mails land in that Mailtrap inbox). Unset = **live** sending (`https://send.api.mailtrap.io/api/send`, needs a sender on a domain verified in Mailtrap) |
+| `MAILTRAP_SENDER_EMAIL`, `MAILTRAP_SENDER_NAME` | the From address (must be on the verified domain for live sending) and name |
+| `SIGNUP_DEV_ECHO` = `1` | **Local demos only, never on a real deployment.** While email is off, signup/resend/forgot also return the code as `dev_code`. Ignored when `MAILTRAP_API_TOKEN` is set |
+| `SECRET_KEY` | optional key for the code HMAC (see above) |
+
+Notes: an email address belongs to one account across all tenants. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
+
 ## Credentials: tokens, lockout, sessions
 
 - **API tokens expire.** `python scripts/create_token.py issue <user> [--days N]` prints the expiry (default 90 days); an expired token gets the same 401 as an unknown one. Tokens that existed before this change were given 90 days from the first start after the upgrade. `revoke` removes the token and every session of that user.

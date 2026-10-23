@@ -1,6 +1,7 @@
 """psycopg access. One transaction per request; laris.role / laris.actor feed the DB guard and audit."""
 import logging
 import os
+import secrets
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -26,7 +27,6 @@ def tx(role="staff", actor="", tenant="*"):
 
 def apply_schema(seed: bool | None = None) -> None:
     """Idempotent: schema/transitions/functions only on an empty DB, tiers/views/rls/rfq/rbac always (CREATE OR REPLACE)."""
-    from .templates import load_template  # local: keeps db.py importable without yaml
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
     with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None, connect_timeout=15) as c:
@@ -41,6 +41,7 @@ def apply_schema(seed: bool | None = None) -> None:
         c.execute((DB_DIR / "rfq.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "listings.sql").read_text(encoding="utf-8"))
         c.execute((DB_DIR / "rbac.sql").read_text(encoding="utf-8"))
+        c.execute((DB_DIR / "signup.sql").read_text(encoding="utf-8"))
         if (os.environ.get("SEED") == "1" if seed is None else seed) and \
                 not c.execute("select 1 from tenants limit 1").fetchone():
             c.execute((DB_DIR / "seed_made_to_order.sql").read_text(encoding="utf-8"))
@@ -48,12 +49,32 @@ def apply_schema(seed: bool | None = None) -> None:
             c.execute((DB_DIR / "roles.sql").read_text(encoding="utf-8"))
         # trade-template fields become the tenant's starting registry (owner can still add via proposals)
         for t in c.execute("select id, trade_template from tenants").fetchall():
-            for f in load_template(t[1])["fields"]:
-                c.execute("""insert into tenant_fields(tenant_id,key,label,type,unit,options,applies_to,sort_order)
-                             values (%s,%s,%s,%s,%s,%s,%s::doc_direction[],%s) on conflict (tenant_id,key) do nothing""",
-                          (t[0], f["key"], f["label"], f["type"], f.get("unit"),
-                           psycopg.types.json.Jsonb(f["options"]) if f.get("options") else None,
-                           f["applies_to"], f.get("sort_order", 100)))
+            seed_tenant_fields(c, t[0], t[1])
+
+
+def seed_tenant_fields(c, tenant_id, trade_template: str) -> None:
+    from .templates import load_template  # local: keeps db.py importable without yaml
+    for f in load_template(trade_template)["fields"]:
+        c.execute("""insert into tenant_fields(tenant_id,key,label,type,unit,options,applies_to,sort_order)
+                     values (%s,%s,%s,%s,%s,%s,%s::doc_direction[],%s) on conflict (tenant_id,key) do nothing""",
+                  (tenant_id, f["key"], f["label"], f["type"], f.get("unit"),
+                   psycopg.types.json.Jsonb(f["options"]) if f.get("options") else None,
+                   f["applies_to"], f.get("sort_order", 100)))
+
+
+def create_tenant(c, name: str, trade_template: str, currency: str = "MYR"):
+    """New tenant (needs laris.tenant='*') with its trade-template fields; the owner/staff roles come from a trigger.
+    `name` is the stable key and made unique with a short suffix; the display name stays as typed. Raises TemplateError for a bad template.
+    `c` must be a dict_row connection (tx())."""
+    from .templates import load_template  # local: keeps db.py importable without yaml
+    t = load_template(trade_template)
+    key = name
+    while c.execute("select 1 from tenants where lower(name)=lower(%s)", (key,)).fetchone():
+        key = f"{name}-{secrets.token_hex(2)}"
+    tid = c.execute("insert into tenants(name, display_name, trade_template, currency, min_margin_pct) values (%s,%s,%s,%s,%s) returning id",
+                    (key, name, trade_template, currency, t["min_margin_pct"])).fetchone()["id"]
+    seed_tenant_fields(c, tid, trade_template)
+    return tid
 
 
 def rls_status(conn) -> tuple[bool, bool]:

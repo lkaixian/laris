@@ -21,7 +21,7 @@ const savePending = (p: Pending | null) => { try { if (p) sessionStorage.setItem
 const goSignIn = (email: string, notice: string) => { savePending(null); setNotice(notice); setPrefill(email); location.hash = '#/login' }
 
 // ---- shared pieces
-function Field({ label, error, hint, ...p }: { label: string; error?: string; hint?: ReactNode } & InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ label, error, hint, ...p }: { label: string; error?: string; hint?: ReactNode } & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId()
   const desc = [hint ? `${id}-h` : '', error ? `${id}-e` : '', p['aria-describedby'] ?? ''].filter(Boolean).join(' ') || undefined
   return (
@@ -93,7 +93,7 @@ function CodeField({ value, onChange, onComplete, error, autoSubmit }: { value: 
   )
 }
 
-function Card({ title, lead, children, onSubmit, focusKey }: { title: string; lead?: ReactNode; children: ReactNode; onSubmit: () => void; focusKey: string }) {
+export function Card({ title, lead, children, onSubmit, focusKey }: { title: string; lead?: ReactNode; children: ReactNode; onSubmit: () => void; focusKey: string }) {
   const h = useRef<HTMLHeadingElement>(null)
   useEffect(() => { document.title = `${title} · LARIS`; h.current?.focus() }, [focusKey, title])
   return (
@@ -179,7 +179,7 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
       <Card title="Create a business account" lead="Set up LARIS for your business. We email a 6-digit code to confirm your address." focusKey="form" onSubmit={submit}>
         <Field label="Business name" name="business_name" autoComplete="organization" minLength={2} maxLength={80} value={f.business_name} onChange={set('business_name')} error={errs.business_name} />
         <Field label="Your name" name="owner_name" autoComplete="name" maxLength={80} value={f.owner_name} onChange={set('owner_name')} error={errs.owner_name} />
-        <Field label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={f.email} onChange={set('email')} error={errs.email} />
+        <Field label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={f.email} onChange={set('email')} error={errs.email} hint="The same email can be used for a second business." />
         <label className="flex flex-col gap-1 text-sm font-semibold">Type of business
           <select name="trade_template" className="input font-normal" value={f.trade_template} onChange={set('trade_template')} aria-invalid={errs.trade_template ? true : undefined}>
             {TEMPLATES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
@@ -246,7 +246,7 @@ export function Forgot({ dark, setDark }: { dark: boolean; setDark: (d: boolean)
 
   if (step === 'email') return (
     <AuthPage dark={dark} setDark={setDark}>
-      <Card title="Reset your password" lead="Enter the email you signed up with. If it can be used, we send a 6-digit code." focusKey="email" onSubmit={askCode}>
+      <Card title="Reset your password" lead="Enter the email you signed up with. If it can be used, we send a 6-digit code. The reset applies to every account that uses this email." focusKey="email" onSubmit={askCode}>
         <Field label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={e => setEmail(e.target.value)} error={emailErr} />
         <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Sending...' : 'Send code'}</button>
       </Card>

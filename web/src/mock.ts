@@ -213,12 +213,66 @@ function mockLicense(method: string, p: string, owner: boolean, body: any): unkn
   return undefined
 }
 
+// ---- invites (step 100). Tokens: 'good' previews Acme Printing / Staff / new.hire@demo.test, 'bad' is invalid. Accept refuses username 'taken'.
+const at = (hours: number) => new Date(Date.now() + hours * 36e5).toISOString()
+type Inv = { id: string; email: string; role_key: string; role_name: string; status: 'pending' | 'accepted' | 'revoked' | 'expired'; invited_by_name: string; created_at: string; expires_at: string }
+const invites: Inv[] = [
+  { id: 'inv-1', email: 'alex.tan@demo.test', role_key: 'staff', role_name: 'Staff', status: 'pending', invited_by_name: 'SAMPLE Owner', created_at: at(-3), expires_at: at(24 * 7 - 3) },
+  { id: 'inv-2', email: 'old.offer@demo.test', role_key: 'staff', role_name: 'Staff', status: 'expired', invited_by_name: 'SAMPLE Owner', created_at: at(-24 * 10), expires_at: at(-24 * 3) },
+  { id: 'inv-3', email: 'sam.lee@demo.test', role_key: 'staff', role_name: 'Staff', status: 'accepted', invited_by_name: 'SAMPLE Owner', created_at: at(-24 * 4), expires_at: at(24 * 3) },
+]
+function mockInvites(method: string, p: string, owner: boolean, body: any): unknown {
+  const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
+  const gone = () => new ApiError(404, 'invite_invalid', 'This invitation is no longer valid')
+  let m: RegExpMatchArray | null
+  if (method === 'POST' && p === '/invites/preview') {
+    if (body?.token !== 'good') throw gone()
+    return { business_name: 'Acme Printing', role_name: 'Staff', email: 'new.hire@demo.test' }
+  }
+  if (method === 'POST' && p === '/invites/accept') {
+    if (body?.token !== 'good') throw gone()
+    if (String(body.username).toLowerCase() === 'taken') throw new ApiError(409, 'username_taken', 'That username is already used. Choose another.')
+    if (String(body.password).length < 10) throw new ApiError(422, 'weak_password', 'That password is too weak. Use at least 10 characters.')
+    return { ok: true }
+  }
+  if (p === '/invites' && method === 'GET') { need(); return invites }
+  if (p === '/invites' && method === 'POST') {
+    need()
+    const email = String(body?.email ?? '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(422, 'invalid_email', 'Enter a valid email address.')
+    const r = roleOf(body.role ?? 'staff')
+    if (!r) throw new ApiError(422, 'unknown_role', 'No such role.')
+    if (members.some(x => x.username?.toLowerCase() === email) || email === 'member@demo.test') throw new ApiError(409, 'already_member', 'That person already belongs to this business.')
+    if (email === 'full@demo.test') throw new ApiError(409, 'seat_limit', 'No free seat. Raise the plan or deactivate someone first.')
+    invites.forEach(i => { if (i.email === email && i.status === 'pending') i.status = 'revoked' })
+    const inv: Inv = { id: 'inv-' + Date.now(), email, role_key: r.key, role_name: r.name, status: 'pending', invited_by_name: 'SAMPLE Owner', created_at: at(0), expires_at: at(24 * 7) }
+    invites.unshift(inv)
+    return inv
+  }
+  if ((m = p.match(/^\/invites\/([^/]+)\/resend$/)) && method === 'POST') {
+    need()
+    const i = invites.find(x => x.id === m![1])
+    if (!i || !['pending', 'expired'].includes(i.status)) throw new ApiError(404, 'not_found', 'Invitation not found.')
+    Object.assign(i, { status: 'pending', created_at: at(0), expires_at: at(24 * 7) })
+    return i
+  }
+  if ((m = p.match(/^\/invites\/([^/]+)$/)) && method === 'DELETE') {
+    need()
+    const i = invites.find(x => x.id === m![1])
+    if (!i) throw new ApiError(404, 'not_found', 'Invitation not found.')
+    i.status = 'revoked'
+    return { ok: true }
+  }
+  return undefined
+}
+
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
   const who = owner ? 'SAMPLE Owner' : 'SAMPLE Staff'
   const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
+  if (p.startsWith('/invites')) { const r = mockInvites(method, p, owner, body); if (r !== undefined) return r }
   if (/^\/(signup|password\/(forgot|reset))/.test(p)) { const r = mockPublic(method, p, body); if (r !== undefined) return r }
   if (p.startsWith('/license')) { const r = mockLicense(method, p, owner, body); if (r !== undefined) return r }
   if (method !== 'GET' && licBlocked() && !p.startsWith('/me')) throw new ApiError(402, 'license_required', 'Your licence is missing or expired, so changes are not allowed.')

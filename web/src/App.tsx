@@ -4,6 +4,7 @@ import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, get
 import type { License } from './api'
 import Login from './Login'
 import { Register, Forgot } from './Signup'
+import AcceptInvite from './Invite'
 import { LicenseProvider, LicenceGate, LicenceBanner, LicenceView, PurchaseView, Frame, blocked, useWriteGate, setLicenceOn } from './Licence'
 import { Shell } from './Shell'
 import { ToastProvider, useToast } from './Toast'
@@ -767,7 +768,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
 }
 
-const routeOf = (h: string) => h.split('/')[1] || 'home'
+const routeOf = (h: string) => (h.split('/')[1] || 'home').split('?')[0]
 
 // Put a list page back where the reader left it (after Back from a document). Waits for the content to be tall enough; stops if the reader scrolls.
 function restoreScroll(y: number) {
@@ -839,7 +840,7 @@ function AppShell() {
   }, [role, tries, gate])
   const owner = role === 'owner'
   const [, page, arg] = hash.split('/')
-  const route = page || 'home'
+  const route = (page || 'home').split('?')[0]  // '#/invite?token=...' is route 'invite'
   useEffect(() => applyBrand(me?.org), [me?.org])
   // Branding saved on the Settings page: re-read /me without blanking the page.
   useEffect(() => {
@@ -859,6 +860,7 @@ function AppShell() {
   const onRole = (r: Role) => { setRole(r); setRoleState(r); toast(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
+  if (route === 'invite') return <AcceptInvite dark={dark} setDark={setDark} />
   if (gate === 'login' || (['login', 'register', 'forgot'].includes(route) && (MOCK || !getToken()))) {
     if (route === 'register') return <Register dark={dark} setDark={setDark} />
     if (route === 'forgot') return <Forgot dark={dark} setDark={setDark} />

@@ -112,14 +112,20 @@ export async function authConfig(): Promise<{ login_required: boolean }> {
   try { return await (await fetch('/api/auth/config')).json() } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
 }
 
-export async function login(username: string, password: string): Promise<void> {
-  if (MOCK) return  // mock mode has no accounts: any entry signs in
+export interface Business { id: string; name: string }
+// businessId: set after the server answered 409 choose_business (the error then carries `businesses`).
+export async function login(username: string, password: string, businessId?: string): Promise<void> {
+  if (MOCK) {  // mock mode has no accounts: any entry signs in, except multi@demo.test which has two businesses
+    if (username.toLowerCase() === 'multi@demo.test' && !businessId)
+      throw new ApiError(409, 'choose_business', 'This email is used by more than one business. Choose one.', [{ id: 'biz-acme', name: 'Acme Printing' }, { id: 'biz-bright', name: 'Bright Catering' }])
+    return
+  }
   let res: Response
   try {
-    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
+    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(businessId ? { username, password, business_id: businessId } : { username, password }) })
   } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
   const data = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Sign-in failed (${res.status})`)
+  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Sign-in failed (${res.status})`, data?.error?.businesses)
   setToken(data.token)
   try { sessionStorage.setItem('acct', username) } catch { /* storage blocked */ }
 }
@@ -133,7 +139,7 @@ export async function logout(): Promise<void> {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) { super(message) }
+  constructor(public status: number, public code: string, message: string, public businesses?: Business[]) { super(message) }
 }
 
 // ---- licence (docs/licensing.md). A 402 license_required on a write never signs out: it raises an event, the shell refreshes the licence and shows a toast with a link.

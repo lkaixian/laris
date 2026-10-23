@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { MOCK, login, setAccessToken, takeNotice, takePrefill, ApiError } from './api'
+import type { Business } from './api'
 import type { ReactNode } from 'react'
 import { Brand, ThemeToggle } from './ui'
 
 const COOLDOWN_MS = 3000 // button pause after a 429, so a held Enter key does not hammer the server
+
+// Last business chosen per email, so the picker preselects it. Convenience only: a blocked or corrupt store is ignored.
+const BIZ_KEY = 'laris.biz'
+const lastBiz = (email: string): string => { try { return JSON.parse(localStorage.getItem(BIZ_KEY) ?? '{}')[email.toLowerCase()] ?? '' } catch { return '' } }
+const rememberBiz = (email: string, id: string) => { try { const m = JSON.parse(localStorage.getItem(BIZ_KEY) ?? '{}'); m[email.toLowerCase()] = id; localStorage.setItem(BIZ_KEY, JSON.stringify(m)) } catch { /* storage blocked */ } }
 
 // Full-bleed centred page for sign-in, register, verify and reset: logo, theme toggle, then the card(s). No sidebar.
 export function AuthPage({ dark, setDark, children }: { dark: boolean; setDark: (d: boolean) => void; children: ReactNode }) {
@@ -30,16 +36,24 @@ export default function Login({ dark, setDark, onDone, demo }: { dark: boolean; 
   const [busy, setBusy] = useState(false)
   const [cooling, setCooling] = useState(false)
   const [notice] = useState(takeNotice)  // 'Your session ended' or 'Your account is ready'; read once
+  const [choices, setChoices] = useState<Business[]>()  // set after 409 choose_business: the picker step. Credentials stay in this component's memory only.
+  const [biz, setBiz] = useState('')
   const first = useRef<HTMLInputElement>(null)
   const pw = useRef<HTMLInputElement>(null)
   useEffect(() => { document.title = 'Sign in · LARIS'; (username ? pw : first).current?.focus() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = async () => {
+  useEffect(() => { if (choices) document.getElementById('biz-' + biz)?.focus() }, [choices])  // eslint-disable-line react-hooks/exhaustive-deps
+  const submit = async (businessId?: string) => {
     if (busy || cooling) return
     if (!username.trim() || !password) { setErr('Enter your email or username and your password.'); (username.trim() ? pw : first).current?.focus(); return }
     setBusy(true); setErr('')
-    try { await login(username.trim(), password); onDone() }
+    try { await login(username.trim(), password, businessId); if (businessId) rememberBiz(username.trim(), businessId); onDone() }
     catch (e) {
+      if (e instanceof ApiError && e.code === 'choose_business' && e.businesses?.length) {
+        const l = lastBiz(username.trim())
+        setBiz(e.businesses.some(b => b.id === l) ? l : e.businesses[0].id); setChoices(e.businesses); setBusy(false); return
+      }
+      setChoices(undefined)  // any other answer (wrong password, 429) goes back to the form with the normal error
       setErr(e instanceof ApiError ? e.message : 'Could not sign in.')
       if (e instanceof ApiError && e.status === 429) { setCooling(true); setTimeout(() => setCooling(false), COOLDOWN_MS) }
       setPassword('')
@@ -51,6 +65,31 @@ export default function Login({ dark, setDark, onDone, demo }: { dark: boolean; 
     setAccessToken(token)
     onDone()
   }
+
+  if (choices) return (
+    <AuthPage dark={dark} setDark={setDark}>
+      <form className="card grid gap-4" onSubmit={e => { e.preventDefault(); submit(biz) }} aria-labelledby="choose-h" noValidate>
+        <div>
+          <h1 id="choose-h" tabIndex={-1} className="text-2xl font-semibold">Choose a business</h1>
+          <p className="mt-1 text-sm text-muted">This email is used by more than one business. Pick the one to sign in to.</p>
+        </div>
+        <fieldset className="grid gap-2">
+          <legend className="sr-only">Business</legend>
+          {choices.map(b => (
+            <label key={b.id} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-ui border p-3 text-sm font-semibold ${biz === b.id ? 'border-accent bg-tint' : 'border-soft'}`}>
+              <input id={'biz-' + b.id} type="radio" name="business" value={b.id} checked={biz === b.id} onChange={() => setBiz(b.id)} />
+              <span className="min-w-0 break-words">{b.name}</span>
+            </label>
+          ))}
+        </fieldset>
+        {err && <p role="alert" className="text-sm text-warn">{err}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Signing in...' : 'Continue'}</button>
+          <button type="button" className="btn" onClick={() => { setChoices(undefined); setErr(''); requestAnimationFrame(() => pw.current?.focus()) }}>Back</button>
+        </div>
+      </form>
+    </AuthPage>
+  )
 
   return (
     <AuthPage dark={dark} setDark={setDark}>

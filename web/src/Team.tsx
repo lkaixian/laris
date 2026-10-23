@@ -5,6 +5,79 @@ import { useToast } from './Toast'
 
 interface Member { id: string; name: string; username: string | null; role: 'owner' | 'staff'; role_key?: string; role_name?: string; active: boolean; has_password: boolean; sessions: number }
 
+interface Invite { id: string; email: string; role_key: string; role_name: string; status: 'pending' | 'accepted' | 'revoked' | 'expired'; invited_by_name?: string; created_at: string; expires_at: string }
+
+// Owner: invite by email. The person sets their own name, username and password on #/invite. Accepted and revoked ones are not listed (the person shows above).
+function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; onChange: () => void }) {
+  const s = useFetch<Invite[]>('/invites')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('staff')
+  const [formErr, setFormErr] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busyId, setBusyId] = useState('')
+  const [rowErr, setRowErr] = useState('')
+  const a = useAction()
+  const toast = useToast()
+  const list = (s.data ?? []).filter(i => i.status === 'pending' || i.status === 'expired')
+  const send = () => {
+    const em = email.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || em.length > 254) return setFormErr('Enter a valid email address.')
+    setFormErr('')
+    a.run(async () => { await api('POST', '/invites', { email: em, role }); setEmail(''); toast(`Invitation sent to ${em}`); s.reload(); onChange() })
+  }
+  const row = async (i: Invite, fn: () => Promise<unknown>, done: string) => {
+    if (busyId) return
+    setBusyId(i.id); setRowErr('')
+    try { await fn(); toast(done); s.reload() } catch (e) { setRowErr(msg(e)) } finally { setBusyId(''); setConfirm('') }
+  }
+  return (
+    <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv">
+      <h2 id="inv" className="text-base font-semibold">Invite by email</h2>
+      <p className="mb-2 text-sm text-muted">We email a link. The person chooses their own username and password, so you never see it.</p>
+      <form className="card grid max-w-xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" noValidate onSubmit={e => { e.preventDefault(); send() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Email address
+          <input className="input font-normal" type="email" name="invite_email" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={email}
+            aria-invalid={formErr ? true : undefined} aria-describedby={formErr ? 'inv-err' : undefined} onChange={e => { setEmail(e.target.value); setFormErr('') }} /></label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Role
+          <select className="input font-normal" value={role} onChange={e => setRole(e.target.value)}>{opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
+        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Sending...' : 'Send invitation'}</button></div>
+        {formErr && <p id="inv-err" role="alert" className="text-sm text-warn sm:col-span-2">{formErr}</p>}
+      </form>
+      <ActionError err={a.err} onRetry={send} label="Try again" />
+      <h3 className="mt-6 text-base font-semibold">Pending invitations</h3>
+      {rowErr && <p role="alert" className="mt-2 text-sm text-warn">{rowErr}</p>}
+      <div className="mt-2">
+        <Async s={s} rows={2} empty={!list.length} emptyText="No pending invitations." emptyHint="Invite a colleague by email and they show up here until they accept.">
+          <ul className="grid gap-2">
+            {list.map(i => (
+              <li key={i.id} className="card">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-all font-semibold">{i.email}</span>
+                  <span className="badge">{i.role_name}</span>
+                  <span className={i.status === 'expired' ? 'badge badge-warn' : 'badge'}>{i.status === 'expired' ? 'Expired' : 'Pending'}</span>
+                </p>
+                <p className="mt-1 text-sm text-muted">Sent {relTime(i.created_at)}. {i.status === 'expired' ? `Expired ${relTime(i.expires_at)}.` : `Expires ${relTime(i.expires_at)}.`}</p>
+                {confirm === i.id ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={`Confirm revoking the invitation for ${i.email}`}>
+                    <span className="text-sm font-semibold">Revoke the invitation for {i.email}?</span>
+                    <button type="button" className="btn btn-danger" autoFocus aria-disabled={!!busyId || undefined} onClick={() => row(i, () => api('DELETE', `/invites/${i.id}`), `Invitation for ${i.email} revoked.`)}>Yes, revoke<span className="sr-only"> {i.email}</span></button>
+                    <button type="button" className="btn" onClick={() => { setConfirm(''); requestAnimationFrame(() => document.getElementById('rv-' + i.id)?.focus()) }}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn" aria-disabled={!!busyId || undefined} onClick={() => row(i, () => api('POST', `/invites/${i.id}/resend`), `Invitation sent again to ${i.email}.`)}>{busyId === i.id ? 'Sending...' : 'Resend'}<span className="sr-only"> invitation to {i.email}</span></button>
+                    {i.status === 'pending' && <button id={'rv-' + i.id} type="button" className="btn" onClick={() => setConfirm(i.id)}>Revoke<span className="sr-only"> invitation to {i.email}</span></button>}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Async>
+      </div>
+    </section>
+  )
+}
+
 // Owner: who can sign in. Passwords are never shown; a reset signs that person out everywhere.
 export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
   const s = useFetch<Member[]>('/users')
@@ -78,8 +151,10 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
           ))}
         </ul>
       </Async>
+      <Invites opts={opts} onChange={s.reload} />
       <section className="mt-8 border-t border-soft pt-6" aria-labelledby="newu">
-        <h2 id="newu" className="text-base font-semibold">Add a person</h2>
+        <h2 id="newu" className="text-base font-semibold">Add with a password</h2>
+        <p className="text-sm text-muted">For people without an email address. You set the first password and tell them in person.</p>
         <form className="mt-2 grid max-w-xl gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); add() }}>
           <label className="flex flex-col gap-1 text-sm font-semibold">Name
             <input className="input font-normal" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></label>
@@ -90,7 +165,7 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
               {opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
           <label className="flex flex-col gap-1 text-sm font-semibold">First password (10+ characters)
             <input className="input font-normal" type="password" autoComplete="new-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></label>
-          <div className="sm:col-span-2"><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Working...' : 'Add person'}</button></div>
+          <div className="sm:col-span-2"><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Working...' : 'Add with a password'}</button></div>
         </form>
       </section>
     </>

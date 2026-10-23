@@ -41,6 +41,16 @@ from documents d join parties p on p.id = d.party_id
 """
 
 
+def read_capped(up: UploadFile, cap: int, msg: str) -> bytes:
+    """Read an upload in chunks and stop with 413 the moment it passes cap (does not trust the spooled size)."""
+    buf = bytearray()
+    while chunk := up.file.read(65536):
+        buf += chunk
+        if len(buf) > cap:
+            raise ApiError(413, "too_large", msg)
+    return bytes(buf)
+
+
 def summary(ctx: Ctx, d: dict) -> dict:
     flags = {"needs_review": d["needs_review"]}
     if ctx.owner:
@@ -423,9 +433,7 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
     """Extra (not in the contract): upload a supplier PDF/photo/XLSX/DOCX/CSV or paste its text."""
-    data = file.file.read(MAX_UPLOAD + 1) if file else None
-    if data is not None and len(data) > MAX_UPLOAD:
-        raise ApiError(413, "too_large", "file over 10 MB")
+    data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")
     mime = None

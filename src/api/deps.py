@@ -1,7 +1,9 @@
 """Request context (one transaction per request), JSON rendering, staff scrubbing, injectable services."""
 import hmac
 import json
+import logging
 import os
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -19,6 +21,7 @@ from ..auth import header_mode_allowed, token_hash
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
 
+log = logging.getLogger("laris")
 Q4 = Decimal("0.0001")
 
 
@@ -135,6 +138,10 @@ def write_ctx(request: Request):
     yield from _open(request, True)
 
 
+GENERIC = "the change conflicts with existing data"
+GUARD_MSGS = re.compile(r"illegal transition|audit_log is append-only|no inbound document|document \S+ is |\d+ line\(s\) need review")  # db/*.sql guards: safe to show
+
+
 @contextmanager
 def guarded():
     """Map DB guard / constraint errors to 403 / 409 (the statement must be the last thing before raising)."""
@@ -143,9 +150,10 @@ def guarded():
     except psycopg.errors.RaiseException as e:
         m = e.diag.message_primary or str(e)
         denied = m.startswith("role ") or m.startswith("approval needs")
-        raise ApiError(403 if denied else 409, "forbidden" if denied else "conflict", m)
+        raise ApiError(403 if denied else 409, "forbidden" if denied else "conflict", m if denied or GUARD_MSGS.match(m) else GENERIC)
     except (psycopg.errors.IntegrityError, psycopg.errors.DataError) as e:
-        raise ApiError(409, "conflict", e.diag.message_primary or str(e))
+        log.warning("constraint violation: %s", e.diag.message_primary)
+        raise ApiError(409, "conflict", GENERIC)  # constraint / column names stay in the server log, not the response
 
 
 def audit(ctx: Ctx, entity: str, entity_id, event: str, before=None, after=None):

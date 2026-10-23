@@ -1,6 +1,18 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+MAX_MEDIA = 20_000_000
+
+
+def read_capped(r, cap: int = MAX_MEDIA) -> bytes:
+    """Body of a streamed httpx response, aborting as soon as it passes the cap (never buffers more than cap + one chunk)."""
+    buf = bytearray()
+    for chunk in r.iter_bytes():
+        buf += chunk
+        if len(buf) > cap:
+            raise ValueError(f"media over {cap // 1_000_000} MB")
+    return bytes(buf)
+
 
 @dataclass
 class InboundMessage:

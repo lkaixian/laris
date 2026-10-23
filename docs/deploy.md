@@ -37,6 +37,15 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 - Passwords are scrypt N=2^16 (64 MiB per sign-in; size the instance accordingly). Older hashes keep working and are upgraded on the next successful sign-in. Very common passwords and a password equal to the username are refused.
 - Each user keeps at most 10 sessions (the oldest is dropped at sign-in); expired sessions are purged at sign-in. `db/auth.sql` (new columns) is applied on every start.
 
+## Transport hardening
+
+Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy` (camera for this origin only; the Ask page uses it) and a `Content-Security-Policy` (same-origin only, no CDNs, no frames). The CSP allows the one inline theme script in `web/dist/index.html` by SHA-256 hash, computed at startup from the built file; if you add another inline script, rebuild and restart. `Strict-Transport-Security` (1 year) is added only on https requests: the request scheme, or `X-Forwarded-Proto` when `TRUST_PROXY=1`. `/api/*` responses are `Cache-Control: no-store`.
+
+- `/docs`, `/redoc` and `/openapi.json` are off. Set `ENABLE_DOCS=1` for a developer machine only.
+- Upload caps: 10 MB for `/api/documents/ingest`, 8 MB for the Ask photo, 1 MB for webhooks, 20 MB for downloaded WhatsApp/Telegram media. POST/PUT/PATCH under `/api` and `/webhooks` must send `Content-Length`; chunked bodies get 411, oversized ones 413, and uploads are also cut off while being read. A reverse proxy in front must not re-chunk request bodies.
+- Images over 25 megapixels are refused (422) before OCR.
+- `CORS_ORIGINS` entries are trimmed; the app serves the UI itself, so leave it unset in production.
+
 ## Health check and backups
 
 `GET /health` answers if the process is up; `GET /ready` also checks the database (503 if it is not reachable): point an uptime monitor at `/ready`. `scripts/backup.sh` writes a compressed `pg_dump`; run it on a schedule from somewhere other than the app server and keep the files private (they hold customer names, numbers and supplier prices). Restore command is in the script header. Not yet tried against Replit's Postgres.

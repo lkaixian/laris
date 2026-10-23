@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .base import InboundMessage
+from .base import MAX_MEDIA, InboundMessage, read_capped
 
 
 def _ok(r, what):
@@ -73,11 +73,9 @@ def get_file(file_id, *, client=None, token=None) -> bytes:
     r = c.get(_api("getFile", token), params={"file_id": file_id})
     _ok(r, "getFile")
     path = r.json()["result"]["file_path"]
-    r = c.get(f"https://api.telegram.org/file/bot{token}/{path}")
-    _ok(r, "file download")
-    if len(r.content) > 20_000_000:
-        raise ValueError("file over 20 MB")
-    return r.content
+    with c.stream("GET", f"https://api.telegram.org/file/bot{token}/{path}") as r:
+        _ok(r, "file download")
+        return read_capped(r, MAX_MEDIA)
 
 
 def get_updates(offset=None, timeout=25, *, client=None, token=None) -> list[dict]:

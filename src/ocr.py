@@ -5,6 +5,7 @@ TESS_DIR = r"C:\Program Files\Tesseract-OCR"
 
 
 MAX_PIXELS = 25_000_000  # decompression-bomb guard (about 5000x5000)
+MAX_IMAGE_PIXELS = 40_000_000
 MAX_PAGES = 30
 TESS_TIMEOUT = 30
 
@@ -12,6 +13,7 @@ TESS_TIMEOUT = 30
 def _open_image(image_bytes):
     from PIL import Image
 
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS  # Pillow raises DecompressionBombError at 2x this; MAX_PIXELS below stops sooner
     im = Image.open(io.BytesIO(image_bytes))
     if im.width * im.height > MAX_PIXELS:
         raise OcrError(f"image too large ({im.width}x{im.height})")

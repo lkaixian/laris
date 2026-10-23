@@ -1,4 +1,5 @@
 """psycopg access. One transaction per request; laris.role / laris.actor feed the DB guard and audit."""
+import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -29,6 +30,7 @@ def apply_schema(seed: bool | None = None) -> None:
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
     with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None) as c:
+        c.execute("select set_config('laris.tenant', '*', false)")  # FORCE RLS applies to the owner: seeding crosses tenants on purpose
         if not c.execute("select to_regclass('public.tenants')").fetchone()[0]:
             for f in ("schema.sql", "transitions.sql", "functions.sql"):
                 c.execute((DB_DIR / f).read_text(encoding="utf-8"))
@@ -49,3 +51,24 @@ def apply_schema(seed: bool | None = None) -> None:
                           (t[0], f["key"], f["label"], f["type"], f.get("unit"),
                            psycopg.types.json.Jsonb(f["options"]) if f.get("options") else None,
                            f["applies_to"], f.get("sort_order", 100)))
+
+
+def rls_status(conn) -> tuple[bool, bool]:
+    """(role bypasses row level security, role owns audit_log). Superuser/BYPASSRLS skip RLS even with FORCE; the owner can disable triggers."""
+    row = conn.execute(
+        "select (select rolsuper or rolbypassrls from pg_roles where rolname = current_user) bypass,"
+        " (select pg_get_userbyid(relowner) = current_user from pg_class where oid = 'public.audit_log'::regclass) owns").fetchone()
+    bypass, owns = row.values() if isinstance(row, dict) else row  # tx() rows are dicts
+    return bool(bypass), bool(owns)
+
+
+def check_rls(conn) -> None:
+    """Startup check: warn when tenant isolation is off; refuse to start if REQUIRE_RLS=1."""
+    log, (bypass, owns) = logging.getLogger("laris"), rls_status(conn)
+    if bypass:
+        msg = "tenant isolation OFF: connected as a role that bypasses row level security; use db/roles.sql laris_app"
+        if os.environ.get("REQUIRE_RLS") == "1":
+            raise RuntimeError(msg + " (REQUIRE_RLS=1)")
+        log.warning(msg)
+    if owns:
+        log.warning("connected role owns audit_log, so it can disable the audit and guard triggers; use db/roles.sql laris_app")

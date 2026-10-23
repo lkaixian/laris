@@ -44,6 +44,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['rfq_items','rfq_sends','rfq_replies'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_scope ON %I', t);
     EXECUTE format('CREATE POLICY tenant_scope ON %I USING (laris_tenant_ok(tenant_id)) WITH CHECK (laris_tenant_ok(tenant_id))', t);
   END LOOP;

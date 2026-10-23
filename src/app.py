@@ -18,6 +18,8 @@ from .errors import ApiError
 async def lifespan(app):
     if os.environ.get("DATABASE_URL"):
         db.apply_schema()  # idempotent; SEED=1 loads the synthetic made-to-order demo
+        with db.tx() as c:
+            db.check_rls(c)
     sch = scheduler.start() if os.environ.get("SCHEDULER") == "1" else None
     yield
     if sch:

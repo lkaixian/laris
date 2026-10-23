@@ -1,5 +1,6 @@
 -- Row-level security: the database, not only the API, keeps one tenant's rows from another's (audit D3).
--- Applied by the owner on every start (idempotent). The owner bypasses RLS; laris_app (db/roles.sql) does not.
+-- Applied by the owner on every start (idempotent). FORCE makes a non-superuser table owner obey the policies too;
+-- a superuser or BYPASSRLS role still skips RLS (the app warns at startup, src/db.py rls_status).
 -- A request sets laris.tenant to its tenant after the user is known. System work that crosses tenants on purpose
 -- (login lookup, webhooks, the scheduler, startup) sets '*'. Unset or any other value sees nothing (fails closed).
 -- ponytail: '*' is a convention the app role could also set itself; this guards against missing WHERE clauses and
@@ -14,12 +15,14 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['users','parties','enquiries','documents','tenant_fields','field_proposals',
                            'cost_items','ai_actions','jobs','audit_log'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_scope ON %I', t);
     EXECUTE format('CREATE POLICY tenant_scope ON %I USING (laris_tenant_ok(tenant_id)) WITH CHECK (laris_tenant_ok(tenant_id))', t);
   END LOOP;
 END $$;
 
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_scope ON tenants;
 CREATE POLICY tenant_scope ON tenants USING (laris_tenant_ok(id)) WITH CHECK (laris_tenant_ok(id));
 
@@ -34,6 +37,7 @@ BEGIN
       ('messages',        'documents d WHERE d.id = messages.document_id) OR EXISTS (SELECT 1 FROM enquiries e WHERE e.id = messages.enquiry_id'),
       ('sessions',        'users u WHERE u.id = sessions.user_id')) AS v(tbl, sub) LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', r.tbl);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', r.tbl);
     EXECUTE format('DROP POLICY IF EXISTS tenant_scope ON %I', r.tbl);
     EXECUTE format('CREATE POLICY tenant_scope ON %I USING (EXISTS (SELECT 1 FROM %s)) WITH CHECK (EXISTS (SELECT 1 FROM %s))',
                    r.tbl, r.sub, r.sub);

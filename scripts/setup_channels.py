@@ -39,7 +39,7 @@ def main(a):
                 off = u["update_id"] + 1
                 r = httpx.post(f"{base}/webhooks/telegram", json=u,
                                headers={"X-Telegram-Bot-Api-Secret-Token": os.environ["TELEGRAM_WEBHOOK_SECRET"]})
-                print(u["update_id"], r.status_code)
+                print(u["update_id"], r.status_code, "chat", (u.get("message") or {}).get("chat", {}).get("id"))  # the chat id for a supplier's tg: contact
     else:
         sys.exit(__doc__)
 

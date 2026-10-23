@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -10,6 +11,15 @@ def _ok(r, what):
     """raise_for_status without the URL: it embeds the bot token and ends up in logs."""
     if r.status_code >= 400:
         raise RuntimeError(f"telegram {what} failed: HTTP {r.status_code}")
+
+
+TG_CONTACT = re.compile(r"^\s*(?:tg|telegram):(-?\d+)\s*$", re.I)  # a party contact that means "send on Telegram"
+NOT_STARTED = "supplier must open the bot and press Start first"
+
+
+def chat_of(contact) -> str | None:
+    m = TG_CONTACT.match(contact or "")
+    return m.group(1) if m else None
 
 
 def _api(method, token=None):
@@ -25,6 +35,8 @@ def parse_update(update: dict) -> InboundMessage | None:
         text=m.get("text") or m.get("caption"),
         at=datetime.fromtimestamp(m["date"], timezone.utc),
     )
+    if (rt := m.get("reply_to_message")) and "message_id" in rt:
+        msg.reply_to = f"{m['chat']['id']}:{rt['message_id']}"  # same shape send_message/send_photo return
     if "voice" in m or "audio" in m:
         msg.media_kind, msg.media_ref = "audio", (m.get("voice") or m["audio"])["file_id"]
     elif "photo" in m:
@@ -39,6 +51,17 @@ def send_message(chat_id, text, *, client=None, token=None) -> str:
         _api("sendMessage", token), json={"chat_id": chat_id, "text": text}
     )
     _ok(r, "sendMessage")
+    res = r.json()["result"]
+    return f"{res['chat']['id']}:{res['message_id']}"
+
+
+def send_photo(chat_id, image_bytes, mime, caption, *, client=None, token=None) -> str:
+    r = (client or httpx.Client(timeout=30)).post(
+        _api("sendPhoto", token), data={"chat_id": str(chat_id), "caption": caption[:1024]},
+        files={"photo": ("photo." + ("png" if mime == "image/png" else "jpg"), image_bytes, mime)})
+    if r.status_code == 403 or (r.status_code == 400 and "chat not found" in r.text.lower()):
+        raise RuntimeError(NOT_STARTED)  # never pressed Start (or blocked the bot); no URL, it carries the token
+    _ok(r, "sendPhoto")
     res = r.json()["result"]
     return f"{res['chat']['id']}:{res['message_id']}"
 

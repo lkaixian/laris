@@ -349,3 +349,115 @@ def test_apply_schema_twice_keeps_data(env):
     db.apply_schema(seed=False)
     db.apply_schema(seed=False)
     assert e.sql("select count(*) n from rfq_items")[0]["n"] == 1
+
+
+# ---------------------------------------------------------------- Telegram suppliers (tg:<chat id> contact)
+TG_SECRET = "tgsecret"
+
+
+class Both:
+    """Mock WhatsApp (Meta) and Telegram in one client. `deny` = chat ids Telegram answers 403 for."""
+
+    def __init__(self, meta, deny=()):
+        self.meta, self.deny, self.tg = meta, deny, []
+        self.client = httpx.Client(transport=httpx.MockTransport(self))
+
+    def __call__(self, req):
+        if req.url.host != "api.telegram.org":
+            return self.meta(req)
+        chat = int(next(l for l in req.content.decode("latin1").split("\r\n") if l.lstrip("-").isdigit()))
+        self.tg.append((req.url.path.rsplit("/", 1)[1], chat, req.content))
+        if chat in self.deny:
+            return httpx.Response(403, json={"ok": False, "description": "Forbidden: bot can't initiate conversation with a user"})
+        return httpx.Response(200, json={"result": {"message_id": 70 + len(self.tg), "chat": {"id": chat}}})
+
+
+def tg_setup(e, monkeypatch, deny=()):
+    sup = setup(e, monkeypatch)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:SECRETTOKEN")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", TG_SECRET)
+    e.both = Both(e.meta, deny)
+    e.svc.http = e.both.client
+    e.sql("update parties set contact='tg:5551' where id=%s", (sup["A"],))
+    e.sql("update parties set contact='Telegram:-100777' where id=%s", (sup["B"],))
+    return sup
+
+
+def tg_in(e, text, chat=5551, mid=1, **m):
+    upd = {"message": {"message_id": mid, "chat": {"id": chat}, "date": 1700000000, "text": text, **m}}
+    return e.c.post("/webhooks/telegram", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": TG_SECRET})
+
+
+def test_telegram_send_photo_and_parse_reply_to():
+    from src.channels import telegram
+    seen = []
+    c = httpx.Client(transport=httpx.MockTransport(lambda r: (seen.append(r), httpx.Response(200, json={"result": {"message_id": 9, "chat": {"id": -100}}}))[1]))
+    assert telegram.send_photo(-100, JPEG, "image/jpeg", "x" * 2000, client=c, token="T") == "-100:9"
+    assert seen[0].url.path == "/botT/sendPhoto" and JPEG in seen[0].content and b'name="chat_id"' in seen[0].content
+    assert seen[0].content.count(b"x") == 1024  # caption cap
+    base = {"message_id": 5, "chat": {"id": 99}, "date": 1700000000, "text": "RM5"}
+    assert telegram.parse_update({"message": {**base, "reply_to_message": {"message_id": 3}}}).reply_to == "99:3"
+    assert telegram.parse_update({"message": base}).reply_to is None
+
+
+def test_telegram_403_says_press_start_without_leaking(env, monkeypatch):
+    e = env
+    sup = tg_setup(e, monkeypatch, deny=(5551,))
+    out = ask(e, [sup["A"]]).json()["sends"][0]
+    assert out["status"] == "failed" and out["error"] == "supplier must open the bot and press Start first"
+    assert "SECRETTOKEN" not in json.dumps(out) and "api.telegram" not in json.dumps(out)
+
+
+def test_ask_mixed_whatsapp_and_telegram(env, monkeypatch):
+    e = env
+    sup = tg_setup(e, monkeypatch)
+    out = ask(e, [sup["A"], sup["B"], sup["C"]], note="how much?").json()["sends"]
+    assert [s["status"] for s in out] == ["sent"] * 3
+    assert [(m, c) for m, c, _ in e.both.tg] == [("sendPhoto", 5551), ("sendPhoto", -100777)]
+    assert [c[0] for c in e.meta.calls].count("media") == 1 and e.meta.calls[-1][2]["to"] == "600000000003"
+    assert {r["wamid"] for r in e.sql("select wamid from rfq_sends")} >= {"5551:71", "-100777:72"}
+    # a Telegram-only request never touches WhatsApp
+    n = len(e.meta.calls)
+    assert ask(e, [sup["A"]]).status_code == 201 and len(e.meta.calls) == n
+    e.sql("update parties set contact='tg:abc' where id=%s", (sup["A"],))
+    assert ask(e, [sup["A"]]).status_code == 422
+
+
+def test_telegram_reply_links_by_reply_to_then_fallback(env, monkeypatch):
+    e = env
+    sup = tg_setup(e, monkeypatch)
+    e.ai.payload = {"unit_price": 3}
+    first = ask(e, [sup["A"]], description="first").json()["rfq_id"]
+    second = ask(e, [sup["A"]], description="second").json()["rfq_id"]
+    w1 = e.sql("select wamid from rfq_sends where rfq_item_id=%s", (first,))[0]["wamid"]
+    assert tg_in(e, "RM3 first", reply_to_message={"message_id": int(w1.split(":")[1])}).status_code == 200
+    by = {i["id"]: i["replies"][0] for i in listing(e)}
+    assert by[first]["status"] == "ready" and D(by[first]["unit_price"]) == 3 and by[second]["status"] == "waiting"
+    assert e.svc.sent[-1] == ("telegram", "5551", "Thanks, we have your reply.")  # acknowledged on the same channel
+    assert tg_in(e, "RM3", mid=2).status_code == 200  # no quote: newest waiting ask
+    assert {i["id"]: i["replies"][0]["status"] for i in listing(e)}[second] == "ready"
+    ai = e.ai.calls
+    assert tg_in(e, "RM3", mid=2).status_code == 200 and e.ai.calls == ai  # retry
+    assert e.sql("select count(*) n from rfq_replies")[0]["n"] == 2
+
+
+def test_telegram_group_supplier_voice_photo_and_isolation(env, monkeypatch):
+    e = env
+    sup = tg_setup(e, monkeypatch)
+    ask(e, [sup["A"], sup["B"]])
+    calls = e.ai.calls
+    assert tg_in(e, "", chat=-100777, voice={"file_id": "V"}).status_code == 200  # group supplier, voice: stored, not read
+    x = e.sql("select status, message_text from rfq_replies where external_id='-100777:1'")[0]
+    assert x["status"] == "needs_review" and x["message_text"].startswith("[audio]") and e.ai.calls == calls
+    e.svc.media["P"] = (JPEG, "image/jpeg")
+    tg_in(e, "list", mid=2, chat=5551, photo=[{"file_id": "P"}])  # photo without reply_to: a price list, never an ask reply
+    assert e.sql("select count(*) n from rfq_replies where status='waiting'")[0]["n"] == 1  # only A still waits
+    wa = e.sql("select wamid from rfq_sends where supplier_id=%s", (sup["A"],))[0]["wamid"]
+    tg_in(e, "this one", mid=3, photo=[{"file_id": "P"}], reply_to_message={"message_id": int(wa.split(":")[1])})  # quoting our photo
+    assert e.sql("select status from rfq_replies where external_id='5551:3'")[0]["status"] == "needs_review"
+    # a stranger whose chat id differs, and a WhatsApp sender whose digits equal the chat id, are not the supplier
+    n = e.sql("select count(*) n from rfq_replies where message_text is not null")[0]["n"]
+    tg_in(e, "RM9", chat=5552, mid=4)
+    reply_in(e, "RM9", sender="5551", mid="wamid.x")
+    assert e.sql("select count(*) n from rfq_replies where message_text is not null")[0]["n"] == n
+    assert listing(e, other_tenant(e)) == []

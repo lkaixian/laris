@@ -82,10 +82,12 @@ def _handle(conn, s, m):
         tid, actor, p = u["tenant_id"], u["id"], {"id": None, "role": "supplier"}
     else:
         actor = None
+        # a `tg:<chat id>` contact belongs to that exact Telegram chat only (never read as a phone number)
         p = conn.execute(r"""select id, tenant_id, role from parties
-                             where regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s
+                             where ((coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %s)
+                                    or (%s = 'telegram' and lower(btrim(coalesce(contact,''))) in ('tg:' || %s, 'telegram:' || %s)))
                                and (%s::uuid is null or tenant_id = %s)
-                             order by (role = 'supplier') desc limit 1""", (digits, scope, scope)).fetchone()
+                             order by (role = 'supplier') desc limit 1""", (digits, m.channel, m.sender, m.sender, scope, scope)).fetchone()
         if p and p["role"] == "supplier":
             tid = p["tenant_id"]
         else:
@@ -99,7 +101,7 @@ def _handle(conn, s, m):
                 tid = t["id"]
                 p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
     if p["role"] == "supplier":
-        if actor is None and m.channel == "whatsapp" and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
+        if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)):
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
         if m.media_kind in ("image", "document"):

@@ -189,6 +189,9 @@ class Services:
             return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"), [" ".join(note.split())[:1000]],
                                           header_image=media_id, client=self.http, phone_id=phone_id)
 
+    def send_photo(self, chat_id: str, data: bytes, mime: str, note: str) -> str:
+        return telegram.send_photo(chat_id, data, mime, note, client=self.http)
+
     def download(self, channel: str, ref: str, kind: str) -> tuple[bytes, str]:
         if channel == "whatsapp":
             return whatsapp.download_media(ref, client=self.http)

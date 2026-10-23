@@ -1,7 +1,8 @@
-"""Ask suppliers: send a photographed item to suppliers on WhatsApp, compare their price replies, accept one into the cost book.
-Replies arrive through /webhooks/whatsapp (pipeline.record_rfq_reply). Supplier prices are owner-only, as everywhere."""
+"""Ask suppliers: send a photographed item to suppliers on WhatsApp or Telegram, compare their price replies, accept one into the cost book.
+Replies arrive through /webhooks/whatsapp and /webhooks/telegram (pipeline.record_rfq_reply). Supplier prices are owner-only, as everywhere."""
 import json
 import logging
+import re
 from uuid import UUID
 
 import httpx
@@ -11,6 +12,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import pipeline
+from ..channels import telegram
 from ..errors import ApiError
 from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, write_ctx
 from .routes import MAGIC, Transition, transition
@@ -23,11 +25,11 @@ MAX_IMAGE, MAX_SUPPLIERS = 8_000_000, 20
 IMAGES = ("image/jpeg", "image/png")  # WhatsApp image messages take nothing else (WebP is for stickers)
 
 
-def _why(e: Exception) -> str:
+def _why(e: Exception, ch: str = "WhatsApp") -> str:
     """Short, safe reason shown to staff (no URLs, no tokens)."""
     if isinstance(e, httpx.HTTPStatusError):
-        return f"WhatsApp refused it (HTTP {e.response.status_code})"
-    return str(e)[:200] if isinstance(e, RuntimeError) else "could not reach WhatsApp"
+        return f"{ch} refused it (HTTP {e.response.status_code})"
+    return str(e)[:200] if isinstance(e, RuntimeError) else f"could not reach {ch}"
 
 
 @r.post("/rfq")
@@ -59,29 +61,33 @@ def ask(request: Request, image: UploadFile = File(...), description: str = Form
     sup = {s["id"]: s for s in c.execute("select id, contact from parties where tenant_id=%s and role='supplier' and id = any(%s)",
                                          (ctx.tenant_id, ids)).fetchall()}
     for i in ids:
-        to = "".join(ch for ch in (sup[i]["contact"] or "") if ch.isdigit()) if i in sup else ""
-        if not to:
-            raise ApiError(422, "bad_supplier", f"{i} is not a supplier of yours with a phone number")
-        sup[i]["to"] = to
+        contact = sup[i]["contact"] if i in sup else None
+        tg = telegram.chat_of(contact)
+        to = tg or "".join(ch for ch in (contact or "") if ch.isdigit())
+        if not to or (not tg and re.match(r"\s*(tg|telegram):", contact, re.I)):  # "tg:abc" is a bad Telegram id, not a phone number
+            raise ApiError(422, "bad_supplier", f"{i} is not a supplier of yours with a phone number or a tg:<chat id> contact")
+        sup[i]["to"], sup[i]["tg"] = to, bool(tg)
     rfq = c.execute("""insert into rfq_items(tenant_id,created_by,description,note,circle,image,image_mime)
                        values (%s,%s,%s,%s,%s,%s,%s) returning id""",
                     (ctx.tenant_id, ctx.user_id, description, note, Jsonb(ring) if ring else None, data, mime)).fetchone()["id"]
     pn = c.execute("select wa_phone_number_id from tenants where id=%s", (ctx.tenant_id,)).fetchone()["wa_phone_number_id"]
     s, media, err = svc(request), None, None
-    try:
-        media = s.upload_media(data, mime, pn)  # once; the same id goes to every supplier
-    except Exception as e:
-        log.exception("rfq photo upload failed")
-        err = _why(e)
+    if not all(sup[i]["tg"] for i in ids):  # Telegram-only requests need no WhatsApp upload
+        try:
+            media = s.upload_media(data, mime, pn)  # once; the same id goes to every WhatsApp supplier
+        except Exception as e:
+            log.exception("rfq photo upload failed")
+            err = _why(e)
     sends = []
     for i in ids:
-        wamid, e_msg = None, err
-        if media:
+        tg = sup[i]["tg"]
+        wamid, e_msg = None, None if tg else err
+        if tg or media:
             try:
-                wamid = s.send_image(sup[i]["to"], media, note, pn)
+                wamid = s.send_photo(sup[i]["to"], data, mime, note) if tg else s.send_image(sup[i]["to"], media, note, pn)
             except Exception as e:  # one supplier failing must not stop the rest
                 log.exception("rfq send failed")
-                e_msg = _why(e)
+                e_msg = _why(e, "Telegram" if tg else "WhatsApp")
         st = "sent" if wamid else "failed"
         sid = c.execute("insert into rfq_sends(rfq_item_id,tenant_id,supplier_id,wamid,status,error) values (%s,%s,%s,%s,%s,%s) returning id",
                         (rfq, ctx.tenant_id, i, wamid, st, None if wamid else e_msg)).fetchone()["id"]

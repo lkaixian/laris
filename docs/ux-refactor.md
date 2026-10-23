@@ -89,3 +89,27 @@ Add a new pre-login screen: add a route check before the licence gate in `AppShe
 - `Field` and `Card` are now exported from `Signup.tsx`. Copy: Forgot says a reset applies to every account using the email; Register hints the same email can be used for a second business.
 - **Mock**: sign in as `multi@demo.test` (any password) for the picker (Acme Printing, Bright Catering). `#/invite?token=good` previews Acme Printing / Staff / new.hire@demo.test; `token=bad` is invalid; username `taken` gives 409. Team invites: pending, expired and accepted samples; `full@demo.test` gives seat_limit, `member@demo.test` already_member.
 - Not verified: against the real backend (contracts mocked from the brief), real email links, screen reader behaviour.
+
+## Error handling and graceful failure (step 103)
+
+**Error boundaries** (`web/src/ErrorBoundary.tsx`). Root: wraps `<App/>` in `main.tsx`; plain full-page fallback (LARIS, "Something went wrong", Reload, reference when known, no stack). Page: one around every page render in `App.tsx`, inside the keyed route wrapper, so navigating away resets it. Fallback is a `role=alert` card, "This page hit a problem", heading takes focus, "Try again" resets, Home link; sidebar and header keep working. The error is logged once with `console.error` (`createRoot(..., { onCaughtError })` silences React's duplicate). `decodeURIComponent` of a hash argument goes through `safeDecode` (malformed `%E0%A4%A` means empty search, not a blank app).
+
+**Request wrapper** (`api.ts`, one internal `request()` behind `api`, `publicApi`, `download`, `imageUrl`, `login`, `authConfig`).
+- Timeout via `AbortSignal.timeout`: 30 s; 120 s for FormData bodies and `/listings`, `/rfq`, `/documents/ingest`, `/assistant`. Override with the last argument `{ timeoutMs, signal }`. Timeout gives `ApiError(0,'timeout',...)`, no connection gives `ApiError(0,'network',...)`.
+- Only GET/HEAD retry, once after 800 ms, on network error, timeout, 502, 503, 504. Never POST/PUT/PATCH/DELETE.
+- Server envelope `{error:{code,message,request_id,fields?}}` plus `X-Request-Id`. `ApiError.requestId` (optional), `.fields`, `.retryAfter` (seconds, 429 only). 5xx text is `Server error. Reference: <id>` (or `Server error (500)`); a 503 that carries a message (db_unavailable) shows it; 409 and 422 show the server message (422 prefers `fields[0]`, as "Field label: message").
+- 401 with no token calls `signedOut()` (sign-in screen, no "session ended" notice). A failed `/license` read keeps the previous state, logs, retries once after 5 s and never switches enforcement off by itself.
+
+**Toasts** (`Toast.tsx`). `toast(text)` polite, 5 s. `toast.error(text)`: separate `role=alert` region, stays until dismissed, de-duplicated by text for 10 s, max 3 in total. Fired by `window` `unhandledrejection` and `error` (AbortError, ResizeObserver and cross-origin "Script error" ignored; generic text) and by `request()` for a 5xx (not 503 unless db_unavailable) that nobody showed within 300 ms: `msg()`, `useAction` and `Async` set `ApiError.shown`, so an error already inline is not toasted again; when the toast fires, `.toasted = true`.
+
+**Offline** (`OfflineBanner` in `ui.tsx`, in the Shell banner slot). `role=status`: "You are offline. Changes cannot be saved until you reconnect.", then "Back online" for 3 s. On reconnect it fires `laris:online`; `useFetch` loads that had failed reload themselves (loads that worked and form state are not touched).
+
+**Other**: Login keeps the password on network, timeout and 5xx errors (cleared on 4xx except 429). A 409 on a document transition or an invite action reloads that data. Catalog upload after timeout/502/504 says "The upload may still be processing. Check the list below before trying again."
+
+**Test it in mock mode** (`cd web && npx vite --mode mock`; query goes before the hash, e.g. `http://localhost:5173/?fail=500#/contacts`)
+- `?crash=1#/contacts`: the Contacts page throws while rendering (page fallback). Mock only (build constant, dropped from real builds). Open another page from the sidebar to see it recover.
+- `?fail=500`: `GET /contacts` answers 500 with the new envelope (request id `mock-500-7f3a`). `&failpath=/users` picks another GET path; on Home that one is not shown inline, so you get the error toast.
+- `?slow=40000`: `GET /contacts` waits 40 s. `&timeout=1500` shortens the default timeout (mock only) so the timeout path takes about 3.5 s including the one retry.
+- Offline: `dispatchEvent(new Event('offline'))` / `'online'` in the console, or DevTools Network, Offline.
+- `#/search/%E0%A4%A` must show an empty search, not a blank app.
+- Not exercised against a real server: retry on 502/503/504, `Retry-After`, 401 without token, `/license` retry, Login keeping the password, 409 reload (code read, no walk).

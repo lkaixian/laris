@@ -70,6 +70,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
       onDone(r.listing_id)
     } catch (e) {
       if (e instanceof ApiError && e.status === 503) setErr({ text: owner ? e.message : 'Photo reading is not set up yet. Ask the owner to set up photo reading.', retry: false })
+      else if (e instanceof ApiError && (e.code === 'timeout' || e.status === 502 || e.status === 504)) setErr({ text: 'The upload may still be processing. Check the list below before trying again.', retry: false })  // the server may still finish
       else if (transient(e)) setErr({ text: 'The photo reader is not answering yet (it may still be waking up). Nothing was saved. Try again in a minute.', retry: true })
       else setErr({ text: msg(e), retry: false })
     } finally { setBusy(false) }

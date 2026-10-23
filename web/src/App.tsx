@@ -7,6 +7,7 @@ import { Register, Forgot } from './Signup'
 import AcceptInvite from './Invite'
 import { LicenseProvider, LicenceGate, LicenceBanner, LicenceView, PurchaseView, Frame, blocked, useWriteGate, setLicenceOn } from './Licence'
 import { Shell } from './Shell'
+import { ErrorBoundary } from './ErrorBoundary'
 import { ToastProvider, useToast } from './Toast'
 import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
@@ -17,7 +18,7 @@ import { AssistantView } from './Assistant'
 import { HomeView } from './Home'
 import { AskView } from './Ask'
 import { CatalogView } from './Listings'
-import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand } from './ui'
+import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
 
@@ -264,7 +265,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
       if (r.delivery === 'not_sent') toast(`${docNo} moved to ${label(to)}. No chat contact on file, so nothing was sent.`)
       else toast(`${docNo} moved to ${label(to)}.`)
       if (r.delivery === 'failed') setErr('Marked as sent, but the message to the customer did not go through. Send the quote PDF by hand.')
-    } catch (e) { setErr(msg(e)) } finally { setBusy('') }
+    } catch (e) { setErr(msg(e)); if (e instanceof ApiError && e.status === 409) s.reload() } finally { setBusy('') }  // 409: the document changed under us, show its real state
   }
   const save = async (path: string, name: string) => {
     setErr('')
@@ -746,6 +747,8 @@ function ActivityView() {
   Detail pages use PageHeader's `back` prop and a route like #/thing/<id> (arg).
 */
 interface PageCtx { me: Me; owner: boolean; arg?: string }
+// Mock-only test switch: /?crash=1#/contacts throws while rendering, to see the page fallback. MOCK is a build constant, so real builds drop it.
+function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => <><PageHeader title="Page not found" /><EmptyState title="That page does not exist." action={{ label: 'Open the tracker', href: '#/tracker' }} /></>
 const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }> = {
   home: { title: 'Home', render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
@@ -756,7 +759,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   ask: { title: 'Ask suppliers', render: () => <AskView owner={can('view_replies_prices')} /> },
   catalog: { title: 'Catalog photos', render: c => <CatalogView me={c.me} owner={c.owner} id={c.arg} /> },
   assistant: { title: 'Assistant', render: () => <AssistantView /> },
-  search: { title: 'Search', render: c => <SearchView q={decodeURIComponent(c.arg ?? '')} /> },
+  search: { title: 'Search', render: c => <SearchView q={safeDecode(c.arg)} /> },
   jobs: { title: 'Jobs', render: () => <JobsView /> },
   settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} /> },
   team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
@@ -767,6 +770,10 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   purchase: { title: 'Get a licence', render: c => <PurchaseView owner={c.owner} backHref="#/licence" /> },
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
 }
+
+// A malformed escape in the hash (#/search/%E0%A4%A) must not throw: treat it as empty.
+const safeDecode = (s = '') => { try { return decodeURIComponent(s) } catch { return '' } }
+const NOT_ENFORCED: License = { status: 'active', plan: null, seats: null, seats_used: 0, expires_at: null, days_left: null, enforced: false, read_only: false, clock: null }
 
 const routeOf = (h: string) => (h.split('/')[1] || 'home').split('?')[0]
 
@@ -816,6 +823,7 @@ function AppShell() {
   const [lic, setLic] = useState<License>()
   const [licTries, setLicTries] = useState(0)
   const [roOk, setRoOk] = useState(false)
+  const licRetried = useRef(false)
   useEffect(() => {
     if (!MOCK) authConfig().then(c => { setDemo(!c.login_required); setGate(c.login_required && !getToken() ? 'login' : 'ready') }, () => setGate('ready'))
     const out = () => { setMe(undefined); setLic(undefined); setRoOk(false); setGate('login') }
@@ -827,7 +835,13 @@ function AppShell() {
   useEffect(() => {
     if (gate !== 'ready' || !me) return
     let live = true
-    api<License>('GET', '/license').then(l => { if (live) { setLicenceOn(l.enforced); setLic(l) } }, () => { if (live) { setLicenceOn(false); setLic({ status: 'active', plan: null, seats: null, seats_used: 0, expires_at: null, days_left: null, enforced: false, read_only: false, clock: null }) } })
+    // Failed read (the wrapper already retried once): keep what was known, log, try once more later. Never turns enforcement off by itself.
+    api<License>('GET', '/license').then(l => { if (live) { licRetried.current = false; setLicenceOn(l.enforced); setLic(l) } }, e => {
+      if (!live) return
+      console.warn('Licence check failed', e)
+      setLic(p => p ?? NOT_ENFORCED)  // first read: let the app open, the later retry corrects it
+      if (!licRetried.current) { licRetried.current = true; setTimeout(() => setLicTries(t => t + 1), 5000) }
+    })
     return () => { live = false }
   }, [gate, me?.id, licTries])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -876,7 +890,7 @@ function AppShell() {
   return (
     <LicenseProvider value={{ lic, readOnly: !!lic?.enforced && lic.read_only, reload: () => setLicTries(t => t + 1) }}>
     <OrgCtx value={orgName}>
-      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<LicenceBanner lic={lic} owner={owner} />}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /></>}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>Could not identify the signed-in user: {meErr}</p>
@@ -887,7 +901,12 @@ function AppShell() {
             {!canOpen(route, owner) ? <>
               <PageHeader title={entry?.title ?? 'Page'} />
               <p role="alert" className="card text-muted">You do not have access to this page. Ask the owner to change your role if you need it.</p>
-            </> : entry ? entry.render({ me, owner, arg }) : <NotFound />}
+            </> : (
+              <ErrorBoundary level="page">
+                {MOCK && route === 'contacts' && new URLSearchParams(location.search).get('crash') === '1' && <MockCrash />}
+                {entry ? entry.render({ me, owner, arg }) : <NotFound />}
+              </ErrorBoundary>
+            )}
           </div>
         )}
       </Shell>

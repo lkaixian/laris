@@ -56,7 +56,7 @@ export default function Login({ dark, setDark, onDone, demo }: { dark: boolean; 
       setChoices(undefined)  // any other answer (wrong password, 429) goes back to the form with the normal error
       setErr(e instanceof ApiError ? e.message : 'Could not sign in.')
       if (e instanceof ApiError && e.status === 429) { setCooling(true); setTimeout(() => setCooling(false), COOLDOWN_MS) }
-      setPassword('')
+      if (!(e instanceof ApiError) || (e.status >= 400 && e.status < 500 && e.status !== 429)) setPassword('')  // keep it on network, timeout and server errors: nothing was wrong with the password
       pw.current?.focus()
     } finally { setBusy(false) }
   }

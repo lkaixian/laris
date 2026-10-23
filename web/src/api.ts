@@ -105,11 +105,12 @@ export const setPrefill = (e: string) => { prefill = e }
 export const takePrefill = () => { const e = prefill; prefill = ''; return e }
 export const signedOut = (ended = false) => { if (ended) notice = 'Your session ended, please sign in again.'; setToken(null); userId = ''; window.dispatchEvent(new Event('laris:signedout')) }
 // Single flight: only a 401 for the token still in use signs out. The first one clears it, so parallel 401s (and late ones after a new sign-in) do nothing.
-const expired = (res: Response, sent: string | null) => { if (res.status === 401 && sent && getToken() === sent) signedOut(true) }
+// A 401 with no token at all (for example /me after the auth config failed) goes to sign-in too, without the 'session ended' notice.
+const expired = (res: Response, sent: string | null) => { if (res.status === 401 && getToken() === sent) signedOut(!!sent) }
 
 export async function authConfig(): Promise<{ login_required: boolean }> {
   if (MOCK) return { login_required: false }
-  try { return await (await fetch('/api/auth/config')).json() } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
+  return publicApi('GET', '/auth/config')
 }
 
 export interface Business { id: string; name: string }
@@ -120,12 +121,7 @@ export async function login(username: string, password: string, businessId?: str
       throw new ApiError(409, 'choose_business', 'This email is used by more than one business. Choose one.', [{ id: 'biz-acme', name: 'Acme Printing' }, { id: 'biz-bright', name: 'Bright Catering' }])
     return
   }
-  let res: Response
-  try {
-    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(businessId ? { username, password, business_id: businessId } : { username, password }) })
-  } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
-  const data = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Sign-in failed (${res.status})`, data?.error?.businesses)
+  const data = await publicApi<{ token: string }>('POST', '/login', businessId ? { username, password, business_id: businessId } : { username, password })
   setToken(data.token)
   try { sessionStorage.setItem('acct', username) } catch { /* storage blocked */ }
 }
@@ -138,7 +134,14 @@ export async function logout(): Promise<void> {
   signedOut()
 }
 
+// requestId: server reference (error.request_id or X-Request-Id), optional on older servers. retryAfter: seconds, from Retry-After on a 429.
+// shown: a page put this error in front of the user (msg(), Async). toasted: the global error toast was raised for it instead.
 export class ApiError extends Error {
+  requestId?: string
+  retryAfter?: number
+  fields?: { field: string; message: string }[]
+  shown = false
+  toasted = false
   constructor(public status: number, public code: string, message: string, public businesses?: Business[]) { super(message) }
 }
 
@@ -150,80 +153,101 @@ export interface License {
 }
 const licence402 = (e: unknown) => { if (e instanceof ApiError && e.status === 402 && e.code === 'license_required') window.dispatchEvent(new Event('laris:license402')) }
 
-// Public endpoints (signup, verify, password reset): no identity headers, no sign-out on 401.
-export async function publicApi<T,>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-  if (MOCK) {
-    const { mock } = await import('./mock')
-    await new Promise(res => setTimeout(res, 150))
-    return mock(method, path, role, body) as T
+
+// ---- request core: one place for timeout, retry, the error envelope ({error:{code,message,request_id,fields?}} + X-Request-Id) and the 5xx toast.
+export interface ReqOpts { timeoutMs?: number; signal?: AbortSignal }
+const sleep = (ms: number, s?: AbortSignal) => new Promise<void>((res, rej) => { const t = setTimeout(res, ms); s?.addEventListener('abort', () => { clearTimeout(t); rej(s.reason) }, { once: true }) })
+const mockQ = (k: string) => new URLSearchParams(location.search).get(k)  // mock-only test switches (docs/ux-refactor.md)
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+const LONG = /^\/(listings|rfq|documents\/ingest|assistant)/  // uploads and vision routes: 120 s
+
+// Mock mode answers through the same pipeline as a real server (a Response), so timeout, retry and error handling run in mock too.
+async function mockFetch(method: string, path: string, r: Role, body: unknown, signal: AbortSignal): Promise<Response> {
+  const { mock } = await import('./mock')
+  const [p] = path.split('?')
+  const contacts = p === '/contacts' && method === 'GET'
+  await sleep((contacts ? Number(mockQ('slow')) || 0 : 0) + 120, signal)
+  const err = (status: number, error: object) => new Response(JSON.stringify({ error: { request_id: `mock-${status}-7f3a`, ...error } }), { status, headers: { 'X-Request-Id': `mock-${status}-7f3a` } })
+  if (method === 'GET' && p === (mockQ('failpath') ?? '/contacts') && mockQ('fail') === '500') return err(500, { code: 'internal', message: 'Internal error' })
+  try { return new Response(JSON.stringify(mock(method, path, r, body)), { status: 200 }) }
+  catch (e) {
+    if (e instanceof ApiError) return err(e.status, { code: e.code, message: e.message })
+    return err(500, { code: 'internal', message: String(e) })
   }
-  let res: Response
-  try {
-    res = await fetch('/api' + path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
-  } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
-  const data = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
-  return data as T
 }
 
-const call = async <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, r: Role, body: unknown, withUser: boolean): Promise<T> => {
-  if (MOCK) {
-    const { mock } = await import('./mock')
-    await new Promise(res => setTimeout(res, 120))
-    try { return mock(method, path, r, body) as T } catch (e) { licence402(e); throw e }
-  }
-  const form = body instanceof FormData
+function toError(res: Response, data: any): ApiError {  // eslint-disable-line @typescript-eslint/no-explicit-any
+  const er = data?.error
+  const rid: string | undefined = er?.request_id ?? res.headers.get('X-Request-Id') ?? undefined
+  let message: string = er?.message ?? `Request failed (${res.status})`
+  // 5xx: never show server internals; a 503 that carries its own message (db_unavailable, vision not set up) keeps it
+  if (res.status >= 500 && !(res.status === 503 && er?.message)) message = rid ? `Server error. Reference: ${rid}` : `Server error (${res.status})`
+  const f = res.status === 422 && Array.isArray(er?.fields) ? er.fields[0] : undefined
+  if (f?.message) message = f.field ? `${cap(String(f.field).replace(/_/g, ' '))}: ${f.message}` : f.message
+  const e = new ApiError(res.status, er?.code ?? 'error', message, er?.businesses)
+  e.requestId = rid; e.fields = er?.fields
+  const ra = Number(res.headers.get('Retry-After'))
+  if (res.status === 429 && ra > 0) e.retryAfter = ra
+  return e
+}
+
+interface Req extends ReqOpts { body?: unknown; as?: 'json' | 'blob'; auth?: boolean; user?: boolean; quiet?: boolean; role?: Role }
+
+async function once<T>(method: string, path: string, o: Req, ms: number): Promise<T> {
   const sent = getToken()
-  const headers: Record<string, string> = { 'X-Role': r }
-  if (!form) headers['Content-Type'] = 'application/json'
-  if (withUser && userId) headers['X-User'] = userId
-  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
-  let res: Response
+  const form = o.body instanceof FormData
+  const headers: Record<string, string> = {}
+  if (o.auth) { headers['X-Role'] = o.role ?? role; if (o.user && userId) headers['X-User'] = userId; if (sent) headers['Authorization'] = 'Bearer ' + sent }
+  if (o.body !== undefined && !form) headers['Content-Type'] = 'application/json'
+  const signal = AbortSignal.any([AbortSignal.timeout(ms), ...(o.signal ? [o.signal] : [])])
   try {
-    res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) })
-  } catch {
+    const res = MOCK ? await mockFetch(method, path, o.role ?? role, o.body, signal)
+      : await fetch('/api' + path, { method, headers, signal, body: o.body === undefined ? undefined : form ? (o.body as FormData) : JSON.stringify(o.body) })
+    if (o.auth) expired(res, sent)  // expired or revoked: back to the sign-in screen with a notice
+    if (res.ok) return (o.as === 'blob' ? await res.blob() : await res.json().catch(() => null)) as T
+    throw toError(res, await res.json().catch(() => null))
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    if (o.signal?.aborted) throw e  // the caller cancelled: not our error
+    if (signal.aborted) throw new ApiError(0, 'timeout', 'The server took too long to answer. Check your connection and try again.')
     throw new ApiError(0, 'network', 'Cannot reach the server.')
   }
-  const data = await res.json().catch(() => null)
-  expired(res, sent)  // expired or revoked: back to the sign-in screen with a notice
-  if (!res.ok) {
-    const err = new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`)
-    licence402(err)
-    throw err
-  }
-  return data as T
 }
 
-// File download (PDF, xlsx, csv): same identity headers as api(), result saved through a temporary link.
-export async function download(path: string, filename: string): Promise<void> {
-  const headers: Record<string, string> = { 'X-Role': role }
-  if (userId) headers['X-User'] = userId
-  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
-  const sent = getToken()
-  let res: Response
-  try { res = await fetch('/api' + path, { headers }) } catch { throw new ApiError(0, 'network', 'Cannot reach the server.') }
-  expired(res, sent)
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Download failed (${res.status})`)
+// Only GET/HEAD are retried (once, after 800 ms): repeating a POST could save twice.
+async function request<T>(method: string, path: string, o: Req = {}): Promise<T> {
+  const ms = o.timeoutMs ?? ((MOCK && Number(mockQ('timeout'))) || (o.body instanceof FormData || LONG.test(path) ? 120_000 : 30_000))
+  const safe = method === 'GET' || method === 'HEAD'
+  for (let n = 0; ; n++) {
+    try { return await once<T>(method, path, o, ms) } catch (e) {
+      if (n === 0 && safe && !o.signal?.aborted && e instanceof ApiError && (e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504)) { await sleep(800, o.signal); continue }
+      // A 5xx nobody put on screen (msg(), Async) within 300 ms gets the global error toast, once.
+      if (e instanceof ApiError && !o.quiet && ((e.status >= 500 && e.status !== 503) || e.code === 'db_unavailable'))
+        setTimeout(() => { if (!e.shown) { e.toasted = true; window.dispatchEvent(new CustomEvent('laris:error', { detail: e.message })) } }, 300)
+      throw e
+    }
   }
-  const url = URL.createObjectURL(await res.blob())
+}
+
+// Public endpoints (signup, verify, password reset, sign-in): no identity headers, no sign-out on 401.
+export const publicApi = <T,>(method: 'GET' | 'POST', path: string, body?: unknown, opts?: ReqOpts): Promise<T> => request<T>(method, path, { ...opts, body, quiet: true })
+
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+const call = <T,>(method: Method, path: string, r: Role, body: unknown, withUser: boolean, opts?: ReqOpts): Promise<T> =>
+  request<T>(method, path, { ...opts, body, auth: true, user: withUser, role: r }).catch(e => { licence402(e); throw e })
+
+// File download (PDF, xlsx, csv): same identity headers as api(), result saved through a temporary link.
+export async function download(path: string, filename: string, opts?: ReqOpts): Promise<void> {
+  const url = URL.createObjectURL(await request<Blob>('GET', path, { ...opts, auth: true, user: true, as: 'blob' }))
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
 }
 
 // Image for <img>: the API needs the identity headers, so fetch it as a blob. Mock data and data/blob URLs pass through.
-export async function imageUrl(path: string): Promise<string> {
+export async function imageUrl(path: string, opts?: ReqOpts): Promise<string> {
   if (MOCK || !path.startsWith('/api/')) return path
-  const headers: Record<string, string> = { 'X-Role': role }
-  if (userId) headers['X-User'] = userId
-  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken()
-  const sent = getToken()
-  const res = await fetch(path, { headers })
-  expired(res, sent)
-  if (!res.ok) throw new ApiError(res.status, 'error', `Image failed (${res.status})`)
-  return URL.createObjectURL(await res.blob())
+  return URL.createObjectURL(await request<Blob>('GET', path.slice(4), { ...opts, auth: true, user: true, as: 'blob', quiet: true }))
 }
 
-export const api =<T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown) => call<T>(method, path, role, body, true)
+export const api = <T,>(method: Method, path: string, body?: unknown, opts?: ReqOpts) => call<T>(method, path, role, body, true, opts)

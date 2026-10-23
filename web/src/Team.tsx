@@ -28,7 +28,7 @@ function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; on
   const row = async (i: Invite, fn: () => Promise<unknown>, done: string) => {
     if (busyId) return
     setBusyId(i.id); setRowErr('')
-    try { await fn(); toast(done); s.reload() } catch (e) { setRowErr(msg(e)) } finally { setBusyId(''); setConfirm('') }
+    try { await fn(); toast(done); s.reload() } catch (e) { setRowErr(msg(e)); if (e instanceof ApiError && e.status === 409) s.reload() } finally { setBusyId(''); setConfirm('') }  // 409: it changed meanwhile, show the current list
   }
   return (
     <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv">

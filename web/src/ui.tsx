@@ -7,22 +7,27 @@ import { Icon } from './icons'
 // ---------- helpers ----------
 export const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 export const label = (s: string) => s.replace(/_/g, ' ')
-export const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+const errText = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+// Text for putting an error in front of the user; marks it shown so api.ts does not also raise the global error toast for it.
+export const msg = (e: unknown) => { if (e instanceof ApiError) e.shown = true; return errText(e) }
 export const REVIEWABLE = ['received', 'parsed'] // 'in' statuses where the API still allows line edits (src/api/routes.py)
 // Stable focus target after an action or a route change: the page h1, else the main landmark.
 export const focusTop = (preventScroll = false) => (document.querySelector<HTMLElement>('main h1') ?? document.getElementById('main'))?.focus({ preventScroll })
 
 // path === null means "do not fetch" (a call that only some roles can make).
 export function useFetch<T>(path: string | null) {
-  const [s, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: path !== null })
+  const [s, set] = useState<{ data?: T; error?: string; err?: unknown; loading: boolean }>({ loading: path !== null })
   const [n, setN] = useState(0)
   useEffect(() => {
     if (path === null) return set({ loading: false })
     let live = true
-    set(p => ({ ...p, loading: true, error: undefined }))
-    api<T>('GET', path).then(data => live && set({ data, loading: false }), e => live && set({ loading: false, error: msg(e) }))
+    set(p => ({ ...p, loading: true, error: undefined, err: undefined }))
+    api<T>('GET', path).then(data => live && set({ data, loading: false }), e => live && set({ loading: false, error: errText(e), err: e }))
     return () => { live = false }
   }, [path, n])
+  // Back online: a load that failed is tried again (one that worked is left alone).
+  const failed = !!s.error
+  useEffect(() => { if (!failed) return; const h = () => setN(x => x + 1); addEventListener('laris:online', h); return () => removeEventListener('laris:online', h) }, [failed])
   return { ...s, reload: () => setN(x => x + 1) }
 }
 
@@ -37,6 +42,7 @@ export function useAction() {
       const ai = e instanceof ApiError && e.code === 'ilmu_unavailable'
       const denied = e instanceof ApiError && e.code === 'permission_required'
       setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : denied ? 'Your role does not allow this. Ask the owner to change your role.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
+      if (e instanceof ApiError) e.shown = true
     } finally { setBusy(false) }
   }
   return { busy, err, run }
@@ -54,9 +60,10 @@ export function ActionError({ err, onRetry, label }: { err?: { text: string; ret
 
 // Loading, error and empty states in one place. `rows`/`shape` size the skeleton; `emptyHint`/`emptyAction` turn an empty list into a next step.
 export function Async({ s, empty, emptyText, emptyHint, emptyAction, rows, shape, children }: {
-  s: { loading: boolean; error?: string; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string
+  s: { loading: boolean; error?: string; err?: unknown; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string
   emptyHint?: string; emptyAction?: EmptyAction; rows?: number; shape?: 'list' | 'cards' | 'text'; children: ReactNode
 }) {
+  useEffect(() => { if (s.err instanceof ApiError) s.err.shown = true }, [s.err])  // on screen here: no extra toast
   if (s.error) return (
     <div role="alert" className="card border-warn bg-warn-bg text-warn">
       <p>{s.error}</p>
@@ -196,3 +203,20 @@ export function OrgMark({ org }: { org: Me['org'] }) {
 }
 
 export function Status({ v }: { v: string }) { return <span className="badge">{label(v)}</span> }
+
+// Slim status line in the shell's banner slot. Offline: say changes cannot be saved. Back online: say so for 3 s and tell loaders that failed to try again ('laris:online').
+export function OfflineBanner() {
+  const [state, setState] = useState<'on' | 'off' | 'back'>(navigator.onLine ? 'on' : 'off')
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined
+    const off = () => { clearTimeout(t); setState('off') }
+    const on = () => { setState('back'); window.dispatchEvent(new Event('laris:online')); clearTimeout(t); t = setTimeout(() => setState('on'), 3000) }
+    addEventListener('offline', off); addEventListener('online', on)
+    return () => { clearTimeout(t); removeEventListener('offline', off); removeEventListener('online', on) }
+  }, [])
+  return (
+    <div role="status" className={state === 'on' ? undefined : `px-4 py-2 text-center text-sm ${state === 'off' ? 'bg-warn-bg text-warn' : 'bg-tint text-ink'}`}>
+      {state === 'off' ? 'You are offline. Changes cannot be saved until you reconnect.' : state === 'back' ? 'Back online' : ''}
+    </div>
+  )
+}

@@ -62,6 +62,7 @@
   /* Loading placeholder: static block, pulses only when motion is allowed. */
   .skeleton { @apply rounded-ui bg-soft; animation: pulse-soft 1.4s ease-in-out infinite; }
   .toast { @apply flex w-full items-start gap-2 rounded-ui border border-line bg-surface px-3 py-2 text-sm text-ink shadow-lg; border-left: 4px solid var(--brand, var(--accent)); animation: page-in 150ms ease-out; }
+  .toast-err { border-left-color: var(--warn); }
   .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
   .page-in { animation: page-in 150ms ease-out; }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }

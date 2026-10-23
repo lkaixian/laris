@@ -9,7 +9,7 @@ packages = ["freetype", "glibcLocales", "lcms2", "libimagequant", "libjpeg", "li
 
 [deployment]
 deploymentTarget = "vm"
-build = ["bash", "-c", "python -m pip install --user --break-system-packages -q -r requirements.txt && cd web && npm ci && npm run build"]
+build = ["bash", "-c", "python -m pip install --no-user --prefix=\"$PWD/.pythonlibs\" -q -r requirements.txt && cd web && npm ci && npm run build"]
 run = ["bash", "run.sh"]
 
 [[ports]]
@@ -45,7 +45,9 @@ task = "shell.exec"
 args = "bash run.sh"
 waitForPort = 5000
 
-# Dependencies are installed explicitly by deployment.build; the automatic
-# standalone pip wrapper disables user site-packages on this Nix runtime.
-[packager.features]
-enabledForHosting = false
+
+[userenv]
+
+[userenv.shared]
+PIP_PREFIX = ".pythonlibs"
+PIP_USER = "false"

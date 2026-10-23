@@ -5,10 +5,10 @@ cd "$(dirname "$0")"
 
 : "${DATABASE_URL:?DATABASE_URL not set: add Replit PostgreSQL (Database tool) first}"
 
-# Workflows do not inherit the shell's pip config. Install only into the
-# workspace user base, never the immutable Nix interpreter.
+# Use a writable prefix rather than user-install mode: the Nix standalone
+# pip used during publishing disables user site-packages.
 export PYTHONUSERBASE="${PYTHONUSERBASE:-$PWD/.pythonlibs}"
-python -m pip install --user --break-system-packages -q -r requirements.txt
+python -m pip install --no-user --prefix="$PYTHONUSERBASE" -q -r requirements.txt
 
 # FastAPI serves the built React app from web/dist.
 npm ci --prefix web --no-audit --no-fund

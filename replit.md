@@ -12,17 +12,20 @@ workflow to rebuild them.
 
 Use `python -m pip` and `python -m uvicorn`, not the standalone `pip` or `uvicorn`
 commands, so installation and execution use the same Python runtime.
-The Run script explicitly installs with `--user --break-system-packages` into
-the workspace `.pythonlibs` directory: workflows do not inherit the shell's pip
-configuration. This leaves the immutable Nix interpreter untouched.
+The Run script explicitly installs with `--no-user --prefix` into the workspace
+`.pythonlibs` directory. This leaves the immutable Nix interpreter untouched.
 
 ## Publishing build
 
-`[packager.features].enabledForHosting = false` skips Replit's automatic package
-installation. Dependencies are still installed by the explicit deployment build
-command in `.replit`, followed by `npm ci` and the frontend build in `web/`.
-Keep this setting: the Nix standalone `pip` wrapper disables user site-packages
-and fails before the custom build runs. The build uses `python -m pip` instead.
+Shared environment variables `PIP_USER=false` and `PIP_PREFIX=.pythonlibs`
+make the automatic publishing installer use a writable prefix instead of
+user-install mode. The Nix standalone `pip` wrapper disables user site-packages,
+so `--user` installation fails even before the custom build runs.
+These are non-secret build settings, managed through Replit's environment tools.
+The custom build also uses an explicit prefix, followed by `npm ci` and the
+frontend build in `web/`. Do not rely on
+`[packager.features].enabledForHosting = false`: a publishing attempt still ran
+automatic installation with that flag present.
 Python comes from the Python 3.12 module; do not add another Python interpreter
 to `replit.nix`.
 

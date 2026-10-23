@@ -1,1 +1,1 @@
-- [Publishing Python installs](publishing-python-installs.md) — Nix standalone pip disables user sites; use the explicit build instead of automatic hosting installs.
+- [Publishing Python installs](publishing-python-installs.md) — Nix pip disables user sites; use a writable prefix, not user mode; the hosting-disable flag was ignored.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { publicApi, setNotice, setPrefill, ApiError } from './api'
+import { publicApi, setNotice, setPrefill, ApiError, getToken, getAccount, logout } from './api'
 import { AuthPage } from './Login'
 import { Card, Checklist, Field } from './Signup'
 import { Skeleton, msg } from './ui'
@@ -33,6 +33,7 @@ export default function AcceptInvite({ dark, setDark }: { dark: boolean; setDark
   const [errs, setErrs] = useState<Record<string, string>>({})
   const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [wasIn] = useState(() => !!getToken())  // opened while signed in: the new account is a different one, so end this session on success
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setF(p => ({ ...p, [k]: e.target.value })); setErrs(p => ({ ...p, [k]: '' })) }
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function AcceptInvite({ dark, setDark }: { dark: boolean; setDark
     try {
       await publicApi('POST', '/invites/accept', { token, name, username, password: f.password })
       kept = ''
+      if (wasIn) await logout()  // clears the old session first, otherwise #/login would keep showing the app
       setNotice('Your account is ready. Sign in to continue.'); setPrefill(username); location.hash = '#/login'
     } catch (x) {
       const t = x instanceof ApiError ? x : undefined
@@ -92,6 +94,7 @@ export default function AcceptInvite({ dark, setDark }: { dark: boolean; setDark
   return (
     <AuthPage dark={dark} setDark={setDark}>
       <Card title={`You are invited to join ${pv!.business_name} as ${pv!.role_name}`} lead="Choose how you will sign in. Your email is fixed by the invitation." focusKey="form" onSubmit={submit}>
+        {wasIn && <p role="note" className="rounded-lg border border-line bg-tint p-3 text-sm">You are signed in{getAccount() ? ` as ${getAccount()}` : ''}. This invitation creates a separate account in {pv!.business_name}. When it is ready you will be signed out of this session so you can sign in to the new one.</p>}
         <Field label="Email" name="email" type="email" value={pv!.email} readOnly autoComplete="email" />
         <Field label="Your name" name="name" autoComplete="name" maxLength={80} value={f.name} onChange={set('name')} error={errs.name} />
         <Field label="Username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={40} value={f.username} onChange={set('username')} error={errs.username}

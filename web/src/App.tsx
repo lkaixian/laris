@@ -23,6 +23,7 @@ import { TrackView } from './Track'
 import { Timeline } from './Timeline'
 import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
+import { StatusView, HealthBanner } from './Status'
 import { CatalogView } from './Listings'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
@@ -740,6 +741,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
   account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} /> },
   activity: { title: 'Activity log', render: () => <ActivityView /> },
+  status: { title: 'System status', render: () => <StatusView /> },
   licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
   purchase: { title: 'Get a licence', render: c => <PurchaseView owner={c.owner} backHref="#/licence" /> },
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
@@ -866,7 +868,7 @@ function AppShell() {
   return (
     <LicenseProvider value={{ lic, readOnly: !!lic?.enforced && lic.read_only, reload: () => setLicTries(t => t + 1) }}>
     <OrgCtx value={orgName}>
-      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /></>}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /><HealthBanner owner={owner && !!me} hash={hash} /></>}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>Could not identify the signed-in user: {meErr}</p>

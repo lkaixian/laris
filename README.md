@@ -199,14 +199,14 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 ## Submission Checklist
 
 - [x] Team name, domain and SDG track filled in
-- [ ] Slide deck link added
-- [ ] Demo video link added
+- [x] Slide deck link added
+- [x] Demo video link added
 - [x] Replit used, with proof of use in `submission/`
 - [x] RunPod used, with proof of use in `submission/`
 - [x] Preliminary submission (`SDC2026_SparkSurge_Preliminary.pdf`) in `submission/`
 - [x] Technology declaration in `submission/`
 - [x] Submission files renamed with the team name
-- [ ] "How to Run" steps verified on a clean machine
+- [x] "How to Run" steps verified on a clean machine
 - [x] No API keys or secrets committed to the repository
 
 ## License

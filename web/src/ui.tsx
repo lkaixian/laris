@@ -140,7 +140,7 @@ export function TableRegion({ label, children }: { label: string; children: Reac
   }, [])
   return (
     <div className="min-w-0 max-w-full">
-      <div ref={box} className="max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label={label} tabIndex={0}>{children}</div>
+      <div ref={box} className="relative max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label={label} tabIndex={0}>{children}</div>
       {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">Scroll sideways to see more columns</p>}
     </div>
   )

@@ -6,6 +6,7 @@ import { ApiError, NEXT } from './api'
 import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Alert, Provenance } from './api'
 
 import { mockListings } from './mockListings'
+import { mockTrack, jobStats, dashTrack, extraMembers } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
 const cust = { id: 'p3', name: 'SAMPLE Customer Cafe (synthetic)' }
@@ -193,11 +194,10 @@ const roles = [
   { id: 'r-staff', key: 'staff', name: 'Staff', class: 'staff', is_system: true, permissions: CATALOG.filter(p => p.default).map(p => p.key) },
 ]
 // Test switches (query before the hash): ?perms=none gives the staff role no permissions at all, ?deny=1 makes every gated write answer 403 permission_required
-// even though /me lists the permissions (shows the 403 handling), ?jobs=1 adds one sample job, ?tenants=one hides the channels warning, ?wa=1 starts with WhatsApp mapped.
+// even though /me lists the permissions (shows the 403 handling), ?jobs=0 starts with no jobs (see mockTrack.ts for the track and jobs switches), ?tenants=one hides the channels warning, ?wa=1 starts with WhatsApp mapped.
 const Q = new URLSearchParams(location.search)
 const permsOf = (r: { key: string; permissions: string[] }) => (Q.get('perms') === 'none' && r.key !== 'owner' ? [] : r.permissions)
 const channels = { wa: Q.get('wa') === '1' ? '60123456789' : null as string | null }
-const jobs = Q.get('jobs') === '1' ? [{ id: 'job-1', status: 'todo', quote_id: 'out-1', quote_no: 'SAMPLE-QT-0001', customer: cust.name, total: money(2400), summary: '40 signboards 60x30' }] : []
 const members = [
   { id: 'sample-owner', name: 'SAMPLE Owner', username: 'owner', role: 'owner', role_id: 'r-owner', role_key: 'owner', role_name: 'Owner', active: true, has_password: true, sessions: 1 },
   { id: 'sample-staff', name: 'SAMPLE Staff', username: 'staff', role: 'staff', role_id: 'r-staff', role_key: 'staff', role_name: 'Staff', active: true, has_password: true, sessions: 0 },
@@ -467,7 +467,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (p === '/dashboard') {
     const all = Object.values(docs).map(d => d.doc), stale = all.filter(d => d.flags.cost_is_stale)
     return { customer_replies: [], contacts: { customers: 1, suppliers: 2, contractors: 0 }, needs_review: all.filter(d => d.flags.needs_review).length,
-      open_quotes: all.filter(d => d.direction === 'out').length, jobs: { todo: 0, doing: 0, done: 0 },
+      open_quotes: all.filter(d => d.direction === 'out').length, ...jobStats(), track: dashTrack(),
       recent_contacts: contacts().slice(0, 3).map(c => ({ id: c.id, name: c.name, role: c.role, last_activity: new Date().toISOString() })),
       recent_documents: all.slice(0, 5).map(d => (owner || d.direction === 'out' ? d : { ...d, total: null })),
       ...(owner ? { stale_quotes: stale.length, stale_margin_lost: '-400', followups_pending: 0 } : {}) }
@@ -498,7 +498,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body?.role === 'supplier' || (p !== '/contacts' && (body?.name !== undefined || body?.contact !== undefined) && contacts().find(c => c.id === p.split('/')[2])?.role === 'supplier')) perm('edit_supplier_contacts')
   }
   if (p.startsWith('/contacts')) throw new ApiError(409, 'mock', 'Mock mode does not save contacts.')
-  if (p === '/users' && method === 'GET') { need(); return members }
+  if (p === '/users' && method === 'GET') { need(); return [...members, ...extraMembers()] }
   if (p === '/users' && method === 'POST') {
     need()
     const r = roleOf(body.role)
@@ -547,13 +547,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body.permissions !== undefined) r.permissions = body.permissions
     return { ...r, users: members.filter(x => x.role_id === r.id).length }
   }
-  if (p === '/jobs') return jobs  // mock quotes never reach job_created (?jobs=1 adds one sample job)
-  if ((m = p.match(/^\/jobs\/([^/]+)$/)) && method === 'POST') {
-    perm('manage_contacts')
-    const j = jobs.find(x => x.id === m![1]); if (!j) throw new ApiError(404, 'not_found', 'Job not found.')
-    j.status = body.status
-    return j
-  }
+  { const r = mockTrack(method, p, q, { owner, me: owner ? 'sample-owner' : 'sample-staff', perm, people: members.filter(x => x.active).map(x => x.id), doc: id => docs[id]?.doc }, body); if (r !== undefined) return r }
   if (p === '/settings/channels') {
     need()
     if (method === 'POST') {

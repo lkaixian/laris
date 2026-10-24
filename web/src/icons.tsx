@@ -30,6 +30,7 @@ const P = {
   key: 'M14 10a4 4 0 1 1-3.9 3L3 20v-3l2-1v-2l2-1 3.1-3.1A4 4 0 0 1 14 10z M16 8h.01',
   warn: 'M12 3l10 18H2z M12 10v5 M12 18h.01',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
+  pipeline: 'M4 5h4v14H4z M10 5h4v9h-4z M16 5h4v6h-4z',
   inbox: 'M3 13l3-8h12l3 8v6H3z M3 13h5l1 3h6l1-3h5',
 } as const
 

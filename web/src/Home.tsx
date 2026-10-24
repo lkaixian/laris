@@ -14,7 +14,10 @@ interface Dash {
   recent_documents: DocSummary[]
   customer_replies: { document_id: string; doc_no: string; customer: string; text: string; at: string; kind: 'accept' | 'decline' | null }[]
   stale_quotes?: number; stale_margin_lost?: string; followups_pending?: number
+  jobs_overdue?: number | null; jobs_due_today?: number | null
+  track?: { overdue?: number | null; waiting_supplier?: number | null; waiting_approval?: number | null } | null
 }
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 // Every counter is a link to the list it counts.
 function Stat({ title, value, href, hint, warn }: { title: string; value: number | string; href: string; hint?: string; warn?: boolean }) {
@@ -119,12 +122,28 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
             </section>
           )}
 
+          {d.track && [d.track.overdue, d.track.waiting_supplier, d.track.waiting_approval].some(num) && (
+            <section className="mt-8" aria-labelledby="tk">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="tk" className="text-lg font-semibold">On track</h2>
+                <a className="link inline-flex min-h-11 items-center" href="#/track">Open Track</a>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {num(d.track.overdue) && <Stat title="Overdue items" value={d.track.overdue} href="#/track?overdue=1" warn={d.track.overdue > 0} />}
+                {num(d.track.waiting_supplier) && <Stat title="Waiting for a supplier" value={d.track.waiting_supplier} href="#/track?kind=rfq&stage=waiting" />}
+                {num(d.track.waiting_approval) && <Stat title="Quotes waiting for approval" value={d.track.waiting_approval} href="#/track?kind=quote&stage=draft" />}
+              </div>
+            </section>
+          )}
+
           <section className="mt-8" aria-labelledby="jb">
             <h2 id="jb" className="mb-2 text-lg font-semibold">Jobs</h2>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <Stat title="To do" value={d.jobs.todo} href="#/jobs" />
               <Stat title="In progress" value={d.jobs.doing} href="#/jobs" />
               <Stat title="Done" value={d.jobs.done} href="#/jobs" />
+              {num(d.jobs_overdue) && <Stat title="Overdue jobs" value={d.jobs_overdue} href="#/jobs?overdue" warn={d.jobs_overdue > 0} />}
+              {num(d.jobs_due_today) && <Stat title="Jobs due today" value={d.jobs_due_today} href="#/jobs?view=agenda" />}
             </div>
           </section>
 

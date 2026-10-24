@@ -45,7 +45,12 @@ export interface MarginReport {
   won: number; lost: number; stale_quotes?: number; stale_margin_lost?: string
   lowest_margin?: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
 }
-export interface Job { id: string; status: 'todo' | 'doing' | 'done'; quote_id: string; quote_no: string; customer: string; total: string; summary: string | null }
+export interface Assignee { id: string; name: string }
+export interface Job {
+  id: string; status: 'todo' | 'doing' | 'done'; created_at?: string; quote_id: string; quote_no: string; customer: string; total: string; quote_total?: string; summary: string | null
+  due_on?: string | null; assignee?: Assignee | null; priority?: 'low' | 'normal' | 'high'; notes?: string | null; started_at?: string | null; done_at?: string | null
+  overdue?: boolean; days_to_due?: number | null  // days_to_due: negative = late
+}
 export interface Settings { display_name?: string | null; brand_color?: string | null; logo_data_url?: string | null; min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null
   quote_validity_days?: number | null; quote_prefix?: string | null; quote_payment_terms?: string | null; quote_terms_text?: string | null; issuer_email?: string | null; issuer_phone?: string | null }
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }

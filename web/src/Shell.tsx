@@ -22,6 +22,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
   { label: 'Work', items: [
     { key: 'home', label: 'Home', icon: 'home' },
     { key: 'tracker', label: 'Tracker', icon: 'tracker' },
+    { key: 'track', label: 'Track', icon: 'pipeline' },
     { key: 'jobs', label: 'Jobs', icon: 'jobs' },
     { key: 'followups', label: 'Follow-ups', icon: 'clock' },
   ] },

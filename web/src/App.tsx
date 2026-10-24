@@ -19,10 +19,13 @@ import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
 import { HomeView } from './Home'
+import { TrackView } from './Track'
+import { Timeline } from './Timeline'
+import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
 import { CatalogView } from './Listings'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, Job, MarginReport, Settings, Proposal, AuditEvent } from './api'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
 
 // ---------- Tracker ----------
@@ -348,6 +351,8 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
               {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
             </section>
 
+            <Timeline key={id} id={id} status={d.doc.status} />
+
             {costs && d.provenance && (
               <section aria-labelledby="prov">
                 <h2 id="prov" className="text-lg font-semibold">Cost provenance <span className="text-sm font-normal text-muted">(owner only)</span></h2>
@@ -412,53 +417,6 @@ function Report() {
   )
 }
 
-const JOB_COLS: [Job['status'], string][] = [['todo', 'To do'], ['doing', 'In progress'], ['done', 'Done']]
-
-function JobsView() {
-  const s = useFetch<Job[]>('/jobs')
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState('')  // "<job id>:<status>" while that move runs
-  const toast = useToast()
-  const move = async (j: Job, status: Job['status']) => {
-    if (busy) return
-    setErr(''); setBusy(`${j.id}:${status}`)
-    try { await api('POST', `/jobs/${j.id}`, { status }); toast(`${j.quote_no} moved to ${JOB_COLS.find(c => c[0] === status)![1]}.`); s.reload() }
-    catch (e) { setErr(msg(e)) } finally { setBusy('') }
-  }
-  return (
-    <>
-      <PageHeader title="Jobs" description={'Created when a customer accepts a quote ("Sign and create job" on the quote).'} />
-      {!can('manage_contacts') && <p className="mb-2 text-sm text-muted">{why('manage_contacts')} to move jobs. You can see the board.</p>}
-      {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
-      <Async s={s} rows={3} shape="cards" empty={!s.data?.length} emptyText="No jobs yet." emptyHint="A job appears when a customer accepts a quote and it is signed." emptyAction={{ label: 'Open the tracker', href: '#/tracker/open' }}>
-        <div className="grid gap-4 md:grid-cols-3">
-          {JOB_COLS.map(([st, title]) => {
-            const list = (s.data ?? []).filter(j => j.status === st)
-            return (
-              <section key={st} aria-labelledby={`jobs-${st}`}>
-                <h2 id={`jobs-${st}`} className="mb-2 text-base font-semibold">{title} ({list.length})</h2>
-                <ul className="grid gap-2">
-                  {list.map(j => (
-                    <li key={j.id} className="card">
-                      <p className="font-semibold"><a className="link" href={`#/doc/${j.quote_id}`}>{j.quote_no}</a> <span className="font-normal">for {j.customer}</span></p>
-                      <p className="mt-1 text-sm">{j.summary}</p>
-                      <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {JOB_COLS.filter(c => c[0] !== st).map(([to, label]) => (
-                          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} {...needs('manage_contacts', () => move(j, to))}>{busy === `${j.id}:${to}` ? 'Moving...' : `Move ${j.quote_no} to ${label}`}</button>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
-        </div>
-      </Async>
-    </>
-  )
-}
 
 type Row = { description: string; qty: string; uom: string; unit_price: string }
 const blank = (): Row => ({ description: '', qty: '', uom: '', unit_price: '' })
@@ -775,7 +733,8 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   catalog: { title: 'Catalog photos', render: c => <CatalogView me={c.me} owner={c.owner} id={c.arg} /> },
   assistant: { title: 'Assistant', render: () => <AssistantView /> },
   search: { title: 'Search', render: c => <SearchView q={safeDecode(c.arg)} /> },
-  jobs: { title: 'Jobs', render: () => <JobsView /> },
+  track: { title: 'Track', render: () => <TrackView /> },
+  jobs: { title: 'Jobs', render: c => <JobsView me={c.me} /> },
   settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} /> },
   team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },

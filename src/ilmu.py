@@ -40,7 +40,8 @@ def _post(client, url, **kw):
 
 
 def transcribe(audio_bytes: bytes, mime: str = "audio/ogg", *, client=None, language: str | None = None) -> str:
-    ext = mime.split("/")[-1].split(";")[0] or "ogg"
+    ext = {"mpeg": "mp3", "x-m4a": "m4a", "x-wav": "wav", "wave": "wav", "opus": "ogg"}.get(e := mime.split("/")[-1].split(";")[0].strip(), e) or "ogg"  # ILMU reads the format from the file name
+    client = client or httpx.Client(timeout=httpx.Timeout(180, connect=10))  # ILMU: a transcript can take up to 120 s
     data = {"model": os.environ.get("ILMU_ASR_MODEL") or ASR_MODEL, **({"language": language} if language else {})}
     j = _post(
         client, _base() + os.environ.get("ILMU_ASR_PATH", ASR_PATH),

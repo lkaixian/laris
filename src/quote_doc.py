@@ -28,7 +28,8 @@ def compose(org: dict, doc: dict, customer: str, lines: list[dict], party: dict 
             items.append({"no": None, "description": l["description"], "qty": None, "uom": None, "unit_price": None,
                           "discount_pct": None, "amount": None, "is_header": True, "section": l.get("section")})
             continue
-        amt = _q(l["qty"] * l["unit_price"] * (1 - (l["discount_pct"] or 0) / Decimal(100)))
+        # a catalog line can still await its price (unit_price NULL): it counts as 0 until staff set it
+        amt = _q(l["qty"] * (l["unit_price"] or 0) * (1 - (l["discount_pct"] or 0) / Decimal(100)))
         sub += amt
         if org["sst_registered"] and l.get("tax_rate") is not None:  # never invent a rate: no per-line rate, no SST line
             tax, taxed = tax + _q(amt * l["tax_rate"] / 100), True

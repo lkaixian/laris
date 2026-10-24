@@ -23,7 +23,7 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 | Live Demo | https://laris-malaysia.replit.app |
 | RunPod Endpoint | vLLM GPU pod serving Qwen2.5-VL-7B (private, key required). See the RunPod proof of use |
 | Slide Deck | [TO ADD] |
-| Demo Video | [TO ADD] |
+| Demo Video | https://youtu.be/JVA05hTM_HU |
 
 ## Demo
 

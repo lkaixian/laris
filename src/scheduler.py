@@ -114,7 +114,7 @@ def run_once() -> dict:
             log.info("scheduler: purged %s stale row(s)", purge_stale(c))
     except Exception as e:
         errors, last = errors + 1, type(e).__name__
-        log.warning("scheduler: purge failed: %s", type(e).__name__)
+        log.warning("scheduler: purge failed: %s %s", type(e).__name__, getattr(getattr(e, "diag", None), "message_primary", "") or "")  # a database error names the column or table, never row values
     for t in tenants:
         for key, step in (("purged", lambda c: purge_old_chats(c)), ("expired", lambda c: expire_quotes(c, t["id"])),
                           ("followups", lambda c: queue_followups(c, t["id"], t["trade_template"])), ("reminders", lambda c: remind_jobs(c, t["id"]))):

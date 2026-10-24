@@ -96,7 +96,7 @@ The full model and library list with licences is in `submission/SDC2026_SparkSur
 ├── tests/                # pytest suite and PGlite schema/role checks
 ├── docs/                 # Deployment, API, roles, licensing, build log
 ├── knowledge/            # Research notes, sources, decisions
-├── submission/           # Hackathon submission documents
+├── submission/           # Final submission PDFs (Preliminary, TechDeclaration, Replit and RunPod proof of use)
 ├── .replit, replit.nix, run.sh   # Replit run and deploy configuration
 ├── .env.example          # Environment variable names (no values)
 ├── requirements.txt
@@ -202,7 +202,7 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - [ ] Demo video link added
 - [x] Replit used, with proof of use in `submission/`
 - [x] RunPod used, with proof of use in `submission/`
-- [ ] Preliminary submission (`SDC2026_SparkSurge_Preliminary.pdf`) added to `submission/`
+- [x] Preliminary submission (`SDC2026_SparkSurge_Preliminary.pdf`) in `submission/`
 - [x] Technology declaration in `submission/`
 - [x] Submission files renamed with the team name
 - [ ] "How to Run" steps verified on a clean machine

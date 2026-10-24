@@ -5,7 +5,7 @@ import io
 import re
 import zipfile
 from datetime import date, datetime, time
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -130,7 +130,7 @@ def _docx(data: bytes) -> str:
         xml = z.read("word/document.xml")
     if re.search(rb"<!(DOCTYPE|ENTITY)", xml.replace(b"\x00", b""), re.I):  # XXE / billion laughs: never parse
         raise ValueError("document contains a DOCTYPE/ENTITY declaration")
-    body = ET.fromstring(xml).find(W + "body")
+    body = ET.fromstring(xml, forbid_dtd=True).find(W + "body")
     if body is None:
         raise ValueError("not a Word document")
     lines = []

@@ -32,6 +32,24 @@ def purge_old_chats(c) -> int:
                      (days,)).rowcount
 
 
+def purge_stale(c) -> int:
+    """Housekeeping across all businesses (ages are in docs/deploy.md): spent or expired email codes (1 day), finished invites (30 days),
+    signups never verified (7 days, with their otherwise empty business), supplier reply text (180 days) and catalog photos (90 days).
+    Rows stay for replies and catalog items; only the text / image bytes go (empty bytea, the image columns are NOT NULL)."""
+    from .api.signup import _drop_pending
+    n = c.execute("delete from email_codes where coalesce(used_at, expires_at) < now() - interval '1 day'").rowcount
+    n += c.execute("""delete from invites where coalesce(accepted_at, expires_at) < now() - interval '30 days'
+                      and (status <> 'pending' or expires_at < now() - interval '30 days')""").rowcount
+    for u in c.execute("""select id, tenant_id from users u where not active and email_verified_at is null and created_at < now() - interval '7 days'
+                          and not exists (select 1 from users o where o.tenant_id=u.tenant_id and o.id<>u.id) for update""").fetchall():
+        _drop_pending(c, u)
+        n += 1
+    n += c.execute("update rfq_replies set message_text = null where message_text is not null and created_at < now() - interval '180 days'").rowcount
+    n += c.execute("update listing_items set crop = ''::bytea where length(crop) > 0 and listing_id in (select id from listings where created_at < now() - interval '90 days')").rowcount
+    n += c.execute("update listings set image = ''::bytea where length(image) > 0 and created_at < now() - interval '90 days'").rowcount
+    return n
+
+
 def expire_quotes(c, tid) -> int:
     return c.execute("""update documents set status='expired', decision_reason='validity period ended'
                         where tenant_id=%s and direction='out' and status in ('sent','read') and valid_until < current_date""", (tid,)).rowcount
@@ -91,6 +109,12 @@ def run_once() -> dict:
     except Exception as e:
         log.warning("scheduler: could not list tenants: %s", type(e).__name__)
         tenants, errors, last = [], 1, type(e).__name__
+    try:
+        with db.tx("owner", "system:scheduler") as c:
+            log.info("scheduler: purged %s stale row(s)", purge_stale(c))
+    except Exception as e:
+        errors, last = errors + 1, type(e).__name__
+        log.warning("scheduler: purge failed: %s", type(e).__name__)
     for t in tenants:
         for key, step in (("purged", lambda c: purge_old_chats(c)), ("expired", lambda c: expire_quotes(c, t["id"])),
                           ("followups", lambda c: queue_followups(c, t["id"], t["trade_template"])), ("reminders", lambda c: remind_jobs(c, t["id"]))):

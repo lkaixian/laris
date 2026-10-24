@@ -19,7 +19,7 @@ log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
 OK = {"ok": True, "message": "If this email can be used, we sent a 6-digit code"}
 BAD_CODE = ("invalid_code", "invalid or expired code")
-MAX_TRIES, MINUTES = 5, 10
+MAX_TRIES, MINUTES, MAX_DAILY = 5, 10, 10
 
 
 def _clean(v):
@@ -71,9 +71,12 @@ def _issue(c, user_id, tenant_id, purpose: str, code: str | None = None, ident=N
     """A fresh code (or `code`, to share one across accounts); every older one of the same purpose dies for this user.
     `ident` is what the code is bound to: the user (default), or the email for a reset code valid for all its accounts."""
     code = code or f"{secrets.randbelow(10 ** 6):06d}"
+    # wrong guesses follow the user, not the code: a re-requested code starts with the tries already spent in the last hour
+    spent = c.execute("select coalesce(max(attempts), 0) n from email_codes where user_id=%s and purpose=%s and created_at > now() - interval '1 hour'",
+                      (user_id, purpose)).fetchone()["n"]
     c.execute("update email_codes set used_at = now() where user_id=%s and purpose=%s and used_at is null", (user_id, purpose))
-    c.execute("insert into email_codes(purpose, user_id, tenant_id, code_hash, expires_at) values (%s,%s,%s,%s, now() + %s * interval '1 minute')",
-              (purpose, user_id, tenant_id, _digest(ident or user_id, purpose, code), MINUTES))
+    c.execute("insert into email_codes(purpose, user_id, tenant_id, code_hash, expires_at, attempts) values (%s,%s,%s,%s, now() + %s * interval '1 minute', %s)",
+              (purpose, user_id, tenant_id, _digest(ident or user_id, purpose, code), MINUTES, spent))
     return code
 
 
@@ -93,13 +96,16 @@ def _redeem(c, users, purpose: str, code: str, email: str | None = None):
 
 
 def _echo(code: str) -> dict:
-    """Demo only: SIGNUP_DEV_ECHO=1 hands the code back when email is off, so a local demo works without a mailbox. Never when email is on."""
-    return {"dev_code": code} if os.environ.get("SIGNUP_DEV_ECHO") == "1" and not mailer.enabled() else {}
+    """Demo only: SIGNUP_DEV_ECHO=1 hands the code back when email is off, so a local demo works without a mailbox. Never when email is on,
+    and never on a Replit deployment (a forgotten variable there would hand out account codes)."""
+    deployed = os.environ.get("REPLIT_DEPLOYMENT") or os.environ.get("REPL_DEPLOYMENT")
+    return {"dev_code": code} if os.environ.get("SIGNUP_DEV_ECHO") == "1" and not mailer.enabled() and not deployed else {}
 
 
 def _guard(request: Request, what: str, email: str, n_ip: int, n_email: int, window: int):
     throttle(f"{what}:ip:{auth.client_ip(request)}", n_ip, window, "Too many requests. Try again later.")
     throttle(f"{what}:{email}", n_email, window, "Too many requests for this email. Try again later.")
+    throttle(f"codes:{email}", MAX_DAILY, 86400, "Too many codes requested for this email today. Try again tomorrow.")  # signup, resend and reset together
 
 
 def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
@@ -131,7 +137,7 @@ def signup(body: Signup, request: Request, bg: BackgroundTasks):
         code = _issue(c, uid, tid, "verify")
         if not mailer.enabled():
             log.warning("signup created but email is off (MAILTRAP_API_TOKEN unset): nobody receives the code")
-    bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code, body.owner_name), category="signup")
+    bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code), category="signup")
     return {**OK, **_echo(code)}
 
 
@@ -153,10 +159,10 @@ def resend(body: EmailOnly, request: Request, bg: BackgroundTasks):
     _guard(request, "resend", body.email, 10, 3, 900)
     echo = {}
     with db.tx("owner", "signup") as c:
-        u = c.execute("select id, tenant_id, name from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchone()
+        u = c.execute("select id, tenant_id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchone()
         if u:
             code = _issue(c, u["id"], u["tenant_id"], "verify")
-            bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code, u["name"]), category="signup")
+            bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code), category="signup")
             echo = _echo(code)
     return {**OK, **echo}
 
@@ -166,12 +172,12 @@ def forgot(body: EmailOnly, request: Request, bg: BackgroundTasks):
     _guard(request, "forgot", body.email, 10, 3, 900)
     echo = {}
     with db.tx("owner", "signup") as c:
-        us = c.execute("select id, tenant_id, name from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
+        us = c.execute("select id, tenant_id from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
         if us:
             code = None  # ONE code for the email: one row per account, all bound to the email
             for u in us:
                 code = _issue(c, u["id"], u["tenant_id"], "reset", code, body.email)
-            bg.add_task(svc(request).mail, body.email, *mailer.reset_mail(code, us[0]["name"]), category="password-reset")
+            bg.add_task(svc(request).mail, body.email, *mailer.reset_mail(code), category="password-reset")
             echo = _echo(code)
     return {**OK, **echo}
 

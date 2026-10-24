@@ -126,6 +126,8 @@ def listing_image(listing_id: UUID, ctx: Ctx = Depends(read_ctx)):
     row = ctx.conn.execute("select image, image_mime from listings where id=%s and tenant_id=%s", (listing_id, ctx.tenant_id)).fetchone()
     if not row:
         raise ApiError(404, "not_found", "catalog photo not found")
+    if not row["image"]:
+        raise ApiError(404, "expired", "photo removed after the retention period")
     return Response(bytes(row["image"]), media_type=row["image_mime"])
 
 
@@ -140,6 +142,8 @@ def _crop_row(ctx: Ctx, listing_id, item_id) -> dict:
 @r.get("/listings/{listing_id}/items/{item_id}/crop")
 def crop(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(read_ctx)):
     row = _crop_row(ctx, listing_id, item_id)
+    if not row["crop"]:
+        raise ApiError(404, "expired", "photo removed after the retention period")
     return Response(bytes(row["crop"]), media_type=row["crop_mime"])
 
 

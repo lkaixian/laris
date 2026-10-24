@@ -14,5 +14,6 @@ psycopg[binary]==3.3.6
 # Ed25519 licence signature check (src/license.py); abi3 wheels for Python 3.11 through 3.14
 cryptography==50.0.2
 openpyxl==3.1.5
+defusedxml==0.7.1
 APScheduler==3.11.3
 python-multipart==0.0.32

@@ -3,6 +3,7 @@ NOTHING if ILMU/OCR fails (the owner keys lines manually). The LLM never supplie
 from pricing.price_quote, supplier prices come from the paper and are checked by validate.validate_extraction."""
 import hashlib
 import json
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -10,10 +11,12 @@ from statistics import mean
 
 from psycopg.types.json import Jsonb
 
-from . import ilmu, ocr as ocr_mod, pricing, tabular, validate
+from . import ilmu, mailer, ocr as ocr_mod, pricing, quote_doc, quote_pdf, tabular, validate
+from .channels import telegram
 from .errors import ApiError
 from .templates import load_template
 
+log = logging.getLogger("laris")
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 BIG = Decimal(10) ** 10
 
@@ -59,13 +62,14 @@ def today_my() -> date:
     return datetime.now(MY).date()
 
 
-def next_quote_no(conn, tenant_id) -> str:
-    """QT-<year>-NNNN, one counter per tenant and year; the advisory lock serialises concurrent creates."""
+def next_quote_no(conn, tenant_id, prefix="QT") -> str:
+    """<prefix>-<year>-NNNN, one counter per tenant and year whatever the prefix was (changing it mid-year carries on from the
+    highest number); the advisory lock serialises concurrent creates."""
     conn.execute("select pg_advisory_xact_lock(hashtext(%s))", (f"quote-no:{tenant_id}",))
-    pre = f"QT-{today_my().year}-"
+    year = today_my().year
     n = conn.execute("""select coalesce(max(substring(doc_no from '[0-9]+$')::int), 0) n from documents
-                        where tenant_id=%s and direction='out' and doc_no like %s""", (tenant_id, pre + "%")).fetchone()["n"]
-    return f"{pre}{n + 1:04d}"
+                        where tenant_id=%s and direction='out' and doc_no ~ %s""", (tenant_id, f"-{year}-[0-9]+$")).fetchone()["n"]
+    return f"{prefix}-{year}-{n + 1:04d}"
 
 
 PII = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"                       # email
@@ -354,11 +358,13 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
 
     enq = conn.execute("insert into enquiries(tenant_id,party_id,channel,status) values (%s,%s,%s,'quoted') returning id",
                        (tenant_id, party_id, channel)).fetchone()["id"]
-    doc_no = next_quote_no(conn, tenant_id)
+    doc_no = next_quote_no(conn, tenant_id, t["quote_prefix"])
     doc_id = conn.execute(
-        """insert into documents(tenant_id,direction,kind,party_id,doc_no,status,valid_until,currency,enquiry_id,source_channel,created_by)
-           values (%s,'out','quotation',%s,%s,'draft',%s,%s,%s,%s,%s) returning id""",
-        (tenant_id, party_id, doc_no, today_my() + timedelta(days=30), t["currency"], enq, channel, actor)
+        """insert into documents(tenant_id,direction,kind,party_id,doc_no,status,valid_until,currency,enquiry_id,source_channel,created_by,
+                                 payment_terms,terms_text)
+           values (%s,'out','quotation',%s,%s,'draft',%s,%s,%s,%s,%s,%s,%s) returning id""",
+        (tenant_id, party_id, doc_no, today_my() + timedelta(days=t["quote_validity_days"]), t["currency"], enq, channel, actor,
+         t["quote_payment_terms"], t["quote_terms_text"])
     ).fetchone()["id"]
     for l in quote["lines"]:
         attrs, unmapped = route_attrs(conn, tenant_id, "out", l["attrs"])
@@ -413,19 +419,52 @@ def send_followup(conn, send, doc_id) -> bool:
     return True
 
 
-def send_quote(conn, send, doc_id) -> bool:
-    """Send an approved quote to the customer on the channel the enquiry came in on. Selling prices only."""
+def recipient(p: dict, channel: str) -> str | None:
+    """Where this customer is reached on a channel: email -> parties.email; telegram -> a tg:<id> contact; whatsapp -> any other contact."""
+    if channel == "email":
+        return (p["email"] or "").strip() or None
+    c = (p["contact"] or "").strip()
+    if channel == "telegram":
+        return telegram.chat_of(c)
+    return c if c and not re.match(r"(?i)(tg|telegram):", c) else None  # a tg: contact is never read as a phone number
+
+
+def deliver_quote(conn, svc, doc_id, channel: str, to: str, note: str | None = None) -> None:
+    """Send the customer PDF (selling prices only) on one channel and record a short note of it on the quote. Raises when it fails."""
+    m = quote_doc.load(conn, doc_id)
+    pdf, name = quote_pdf.render_model(m), re.sub(r"[^A-Za-z0-9_-]", "_", m["doc_no"] or "quote") + ".pdf"
+    if channel == "email":
+        if not svc.mail(to, *mailer.quote_mail(m, note), "quote", attachments=[{"filename": name, "content": pdf, "mime": "application/pdf"}]):
+            raise RuntimeError("the email was not accepted (email is off, the provider refused it, or the PDF is over 8 MB)")
+        wid = None
+    else:
+        pn = conn.execute("select wa_phone_number_id from tenants where id=(select tenant_id from documents where id=%s)", (doc_id,)).fetchone()["wa_phone_number_id"]
+        wid = svc.send_document(channel, to, pdf, name, f"Quotation {m['doc_no']}" + (f"\n{note}" if note else ""), pn)
+    _record_message(conn, None, doc_id, "out", channel, f"Quotation {m['doc_no']} sent as a PDF" + (f": {note}" if note else ""), wid)
+
+
+def send_quote(conn, svc, doc_id) -> bool:
+    """Send an approved quote to the customer on the channel the enquiry came in on (text, then the PDF), else by email with the PDF
+    when the customer has an email. Selling prices only. False = nowhere to send it; raises when the text could not be sent."""
     d = _target(conn, doc_id)
     if not d:
-        return False
+        p = conn.execute("select p.email from documents d join parties p on p.id=d.party_id where d.id=%s and d.direction='out'", (doc_id,)).fetchone()
+        if not (p and recipient(p, "email")):
+            return False
+        deliver_quote(conn, svc, doc_id, "email", recipient(p, "email"))
+        return True
     ls = conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
     total = sum((pricing._q(l["qty"] * l["unit_price"] * (1 - (l["discount_pct"] or 0) / Decimal(100))) for l in ls), Decimal(0))
     body = "\n".join(
         [f"Quotation {d['doc_no']}"]
         + [f"{l['line_no']}. {l['description']} x {l['qty']:f} {l['uom']} @ {d['currency']} {l['unit_price']:.2f}" for l in ls]
         + [f"Total: {d['currency']} {total:.2f}"] + ([f"Valid until {d['valid_until']}"] if d["valid_until"] else []))
-    wid = send(d["channel"], d["contact"], body, d["pn"])
+    wid = svc.send(d["channel"], d["contact"], body, d["pn"])
     _record_message(conn, None, doc_id, "out", d["channel"], body, wid)
+    try:  # the text is out; the PDF is a bonus that must not turn a delivered quote into a failed one
+        deliver_quote(conn, svc, doc_id, d["channel"], d["contact"])
+    except Exception as e:
+        log.warning("quote %s: PDF not attached on %s (%s)", d["doc_no"], d["channel"], type(e).__name__)
     return True
 
 

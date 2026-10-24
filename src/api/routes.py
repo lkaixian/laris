@@ -10,14 +10,16 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
 from openpyxl import Workbook
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import pipeline, quote_pdf
+from .. import pipeline, quote_doc, quote_pdf
 from ..errors import ApiError
+from ..safe import safe
 from ..tabular import MAGIC, sniff  # noqa: F401  (rfq.py imports MAGIC from here)
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, require_perm, svc, throttle, write_ctx
 
@@ -134,20 +136,64 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, out)
 
 
-@r.get("/documents/{doc_id}/pdf")
-def document_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    """Quotation PDF for the customer (selling prices only, so staff may download it too)."""
-    d = get_doc(ctx, doc_id)
+def _out_doc(ctx: Ctx, doc_id: UUID, lock=False) -> dict:
+    d = get_doc(ctx, doc_id, lock)
     if d["direction"] != "out":
         raise ApiError(404, "not_found", "only customer quotes have a PDF")
-    doc = ctx.conn.execute("select doc_no, currency, issued_on, created_at, valid_until, payment_terms, terms_text from documents where id=%s",
-                           (doc_id,)).fetchone()
-    lines = ctx.conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    org = ctx.conn.execute("select coalesce(display_name, name) as name, ssm_no, address, bank_details, sst_registered, sst_no from tenants where id=%s",
-                           (ctx.tenant_id,)).fetchone()
-    pdf = quote_pdf.render(org, doc, d["party_name"], lines)
-    return Response(pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{re.sub(r"[^A-Za-z0-9_-]", "_", doc["doc_no"] or "quote")}.pdf"'})
+    return d
+
+
+def _fname(no) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "_", no or "quote")
+
+
+def _channels(p: dict) -> list[dict]:
+    """Per channel: can this customer be reached, and a masked hint of where (never the full address or number)."""
+    out = []
+    for ch in ("email", "whatsapp", "telegram"):
+        to = pipeline.recipient(p, ch)
+        hint = (to[:1] + "***@" + to.rsplit("@", 1)[-1] if "@" in to else "***" + to[-3:]) if to else None
+        out.append({"channel": ch, "to_hint": hint, "available": bool(to), **({} if to else {"reason": "no_email" if ch == "email" else "no_contact"})})
+    return out
+
+
+@r.get("/documents/{doc_id}/preview")
+def document_preview(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    """The quotation exactly as the PDF and the customer exports show it (same model), plus which channels can send it. Selling prices only."""
+    d = _out_doc(ctx, doc_id)
+    p = ctx.conn.execute("select email, contact from parties where id=%s", (d["party_id"],)).fetchone()
+    return reply(ctx, {**quote_doc.load(ctx.conn, doc_id), "channels": _channels(p)})
+
+
+MIMES = {"pdf": "application/pdf", "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "csv": "text/csv; charset=utf-8"}
+
+
+@r.get("/documents/{doc_id}/export")
+def document_export(doc_id: UUID, format: str = Query("pdf"), variant: str = Query("customer"), ctx: Ctx = Depends(read_ctx)):
+    """Quotation as PDF, XLSX or CSV. customer = what the customer sees (any role that can read the quote). internal = adds cost, margin
+    and the stale-cost flag: export_data and view_costs, audited, any status (XLSX or CSV only)."""
+    if format not in MIMES or variant not in ("customer", "internal"):
+        raise ApiError(400, "bad_param", "format is pdf, xlsx or csv; variant is customer or internal")
+    internal = variant == "internal"
+    if internal:
+        require_perm(ctx, "export_data")
+        require_perm(ctx, "view_costs")
+    _out_doc(ctx, doc_id)
+    if internal and format == "pdf":
+        raise ApiError(415, "unsupported_media", "the internal export is XLSX or CSV; the PDF is the customer copy")
+    m = quote_doc.load(ctx.conn, doc_id)
+    cost = quote_doc.costs(ctx.conn, doc_id) if internal else None
+    data = {"pdf": lambda: quote_pdf.render_model(m), "xlsx": lambda: quote_doc.xlsx(m, cost), "csv": lambda: quote_doc.csv_bytes(m, cost)}[format]()
+    if internal:
+        audit(ctx, "documents", doc_id, f"quote exported (internal {format})")
+    return Response(data, media_type=MIMES[format], headers={
+        "Content-Disposition": f'attachment; filename="{_fname(m["doc_no"])}{"-internal" if internal else ""}.{format}"'})
+
+
+@r.get("/documents/{doc_id}/pdf")
+def document_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    """Quotation PDF for the customer (selling prices only, so staff may download it too). Alias of export?format=pdf."""
+    return document_export(doc_id, "pdf", "customer", ctx)
 
 
 class Transition(BaseModel, extra="forbid"):
@@ -155,14 +201,9 @@ class Transition(BaseModel, extra="forbid"):
     reason: str | None = Field(None, max_length=500)
 
 
-@r.post("/documents/{doc_id}/transition")
-def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depends(write_ctx)):
-    if not ctx.owner:  # staff-class moves (parsed, reviewed, read ...) are document work; owner-class ones the DB guard refuses a non-owner anyway
-        require_perm(ctx, "upload_documents")
-    d = get_doc(ctx, doc_id, lock=True)
-    c, to = ctx.conn, body.to
-    if to == d["status"]:  # the DB guard treats same-status as a no-op; we must not re-send / re-stamp
-        raise ApiError(409, "conflict", f"document is already {to}")
+def move(ctx: Ctx, doc_id: UUID, d: dict, to: str, reason: str | None = None):
+    """One status change: /transition and /send both go through here, so sent_at, the audit trail and the DB guard behave the same."""
+    c = ctx.conn
     with guarded():  # the DB guard decides legality and role; we only map its errors to 409 / 403
         if to == "in_cost_book" and d["direction"] == "in":
             if d["status"] == "reviewed":  # receipts shortcut: accept (owner) then promote
@@ -174,17 +215,60 @@ def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depe
                      "accepted": "decided_at=now(), decision_reason=%(r)s",
                      "rejected": "decided_at=now(), decision_reason=%(r)s"}.get(to, "")
             c.execute("update documents set status=%(to)s::doc_status" + (", " + extra if extra else "") + " where id=%(id)s",
-                      {"to": to, "u": ctx.user_id, "r": body.reason, "id": doc_id})
+                      {"to": to, "u": ctx.user_id, "r": reason, "id": doc_id})
             if to == "job_created":
                 c.execute("insert into jobs(tenant_id, quote_id) values (%s, %s)", (ctx.tenant_id, doc_id))
+
+
+@r.post("/documents/{doc_id}/transition")
+def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depends(write_ctx)):
+    if not ctx.owner:  # staff-class moves (parsed, reviewed, read ...) are document work; owner-class ones the DB guard refuses a non-owner anyway
+        require_perm(ctx, "upload_documents")
+    d = get_doc(ctx, doc_id, lock=True)
+    c, to = ctx.conn, body.to
+    if to == d["status"]:  # the DB guard treats same-status as a no-op; we must not re-send / re-stamp
+        raise ApiError(409, "conflict", f"document is already {to}")
+    move(ctx, doc_id, d, to, body.reason)
     out = summary(ctx, get_doc(ctx, doc_id))
     if to == "sent":
         try:  # the customer gets the SELLING price only; a send failure must not undo the owner's decision
-            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request).send, doc_id) else "not_sent"
+            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request), doc_id) else "not_sent"
         except Exception:
             log.exception("could not send quote %s", doc_id)
             out["delivery"] = "failed"  # surfaced so the owner can resend by hand
     return reply(ctx, out)
+
+
+class SendQuote(BaseModel, extra="forbid"):
+    channel: Literal["email", "whatsapp", "telegram"]
+    message: str | None = Field(None, max_length=500)
+
+
+@r.post("/documents/{doc_id}/send")
+def send_quote(doc_id: UUID, body: SendQuote, request: Request, ctx: Ctx = Depends(write_ctx)):
+    """Owner action: send the customer PDF on one channel. From approved it also moves the quote to sent (only once the send worked);
+    from sent / read it is a resend and the status stays."""
+    require_owner(ctx)
+    d = _out_doc(ctx, doc_id, lock=True)
+    if d["status"] not in ("approved", "sent", "read"):
+        raise ApiError(409, "not_sendable", f"quote is {d['status']}; approve it first")
+    p = ctx.conn.execute("select email, contact from parties where id=%s", (d["party_id"],)).fetchone()
+    to = pipeline.recipient(p, body.channel)
+    if not to:
+        raise ApiError(422, "no_email" if body.channel == "email" else "no_contact", f"this customer has no {body.channel} address on file")
+    throttle(f"send:{ctx.tenant_id}", 20, 3600, "Too many quotes sent in an hour. Wait a while.")
+    delivery = {"channel": body.channel, "status": "delivered"}
+    try:
+        pipeline.deliver_quote(ctx.conn, svc(request), doc_id, body.channel, to, body.message)
+    except Exception as e:  # the owner sees a plain reason; the address and provider text stay out of it
+        log.warning("quote %s not sent on %s: %s", doc_id, body.channel, type(e).__name__)
+        delivery = {"channel": body.channel, "status": "failed",
+                    "error": f"the provider refused it (HTTP {e.response.status_code})" if isinstance(e, httpx.HTTPStatusError)
+                    else str(e) if isinstance(e, RuntimeError) else "could not reach the provider"}
+    if delivery["status"] == "delivered" and d["status"] == "approved":
+        move(ctx, doc_id, d, "sent")
+    audit(ctx, "documents", doc_id, f"quote send by {body.channel}: {delivery['status']}")
+    return reply(ctx, {"delivery": delivery, "status": get_doc(ctx, doc_id)["status"]})
 
 
 class LineEdit(BaseModel, extra="forbid"):
@@ -272,7 +356,8 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
         (ctx.tenant_id,)).fetchall())
 
 
-SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no", "display_name", "brand_color", "logo_data_url")
+SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no", "display_name", "brand_color", "logo_data_url",
+            "quote_validity_days", "quote_payment_terms", "quote_terms_text", "quote_prefix", "issuer_email", "issuer_phone")
 SEL = ", ".join("coalesce(display_name, name) as display_name" if k == "display_name" else k for k in SETTINGS)  # name = the fallback
 MAX_LOGO = 200_000  # decoded bytes
 
@@ -310,6 +395,12 @@ class SettingsEdit(BaseModel, extra="forbid"):
     display_name: str | None = Field(None, min_length=1, max_length=120)  # shown name; the legal/key name is not editable
     brand_color: str | None = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
     logo_data_url: str | None = None
+    quote_validity_days: int | None = Field(None, ge=1, le=365)  # null = back to 30
+    quote_payment_terms: str | None = Field(None, max_length=500)
+    quote_terms_text: str | None = Field(None, max_length=2000)
+    quote_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # null = back to QT
+    issuer_email: str | None = Field(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    issuer_phone: str | None = Field(None, max_length=40)
 
 
 @r.post("/settings")
@@ -319,6 +410,9 @@ def edit_settings(body: SettingsEdit, ctx: Ctx = Depends(write_ctx)):
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
+    for k, v in (("quote_validity_days", 30), ("quote_prefix", "QT")):
+        if k in sets and sets[k] is None:  # NOT NULL columns: null puts the default back
+            sets[k] = v
     if sets.get("brand_color"):
         sets["brand_color"] = sets["brand_color"].lower()
     if sets.get("logo_data_url"):
@@ -544,11 +638,6 @@ def ingest_manual(body: ManualDoc, ctx: Ctx = Depends(write_ctx)):
 
 
 # ---- exports (owner: they carry supplier cost)
-def _safe(v):
-    """Neutralise spreadsheet formula injection from supplier-controlled text."""
-    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
-
-
 def _bom_rows(ctx: Ctx, quote_id: UUID):
     q = ctx.conn.execute("select doc_no, status from documents where id=%s and tenant_id=%s and direction='out'",
                          (quote_id, ctx.tenant_id)).fetchone()
@@ -578,7 +667,7 @@ def export_bom(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
     ws.append(["Quote", "Line", "Sold item", "Material", "Qty needed", "UOM", "Supplier", "Source doc",
                "Unit cost", "Amount"])
     for x in rows:
-        ws.append([_safe(v) if isinstance(v, str) else (float(v) if isinstance(v, Decimal) else v) for v in (
+        ws.append([safe(v) if isinstance(v, str) else (float(v) if isinstance(v, Decimal) else v) for v in (
             no, x["line_no"], x["line"], x["item_key"], x["need_qty"], x["uom"], x["supplier"], x["source_doc_no"],
             x["unit_cost"], x["amount"])])
     ws.append(["", "", "", "", "", "", "", "Total", "", float(sum((x["amount"] for x in rows), Decimal(0)))])
@@ -601,6 +690,6 @@ def export_po(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
     w = csv.writer(buf)
     w.writerow(["quote_no", "supplier", "item_key", "uom", "qty", "unit_cost", "amount"])
     for (sup, key, uom, uc), qty in sorted(agg.items()):
-        w.writerow([_safe(no), _safe(sup), _safe(key), _safe(uom), f"{qty:.3f}", f"{uc:.4f}", f"{qty * uc:.4f}"])
+        w.writerow([safe(no), safe(sup), safe(key), safe(uom), f"{qty:.3f}", f"{uc:.4f}", f"{qty * uc:.4f}"])
     return Response(buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="po-{re.sub(r"[^A-Za-z0-9_-]", "_", no or "quote")}.csv"'})

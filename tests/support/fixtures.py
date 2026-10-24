@@ -33,7 +33,10 @@ class FakeSvc(Services):
         super().__init__()
         self.sent, self.media = [], {}
         self.outbox = []  # emails: (to, subject, text, html, category)
-        self.mail = lambda to, subject, text, html=None, category=None: self.outbox.append((to, subject, text, html, category)) or True
+        self.attached = []  # the attachments of each email, parallel to outbox ([] when none)
+        self.docs = []  # PDFs sent on a chat channel: (channel, to, filename, caption, bytes, phone_id)
+        self.mail = lambda to, subject, text, html=None, category=None, attachments=None: (
+            self.outbox.append((to, subject, text, html, category)), self.attached.append(attachments or []), True)[-1]
 
         def handler(req: httpx.Request):
             ai.calls += 1
@@ -46,6 +49,10 @@ class FakeSvc(Services):
         self.sent.append((channel, to, text))
         self.via = getattr(self, "via", []) + [phone_id]
         return f"wamid.{len(self.sent)}"
+
+    def send_document(self, channel, to, data, filename, caption, phone_id=None):
+        self.docs.append((channel, to, filename, caption, data, phone_id))
+        return f"doc.{len(self.docs)}"
 
     def download(self, channel, ref, kind):
         return self.media[ref]

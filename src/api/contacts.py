@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..errors import ApiError
+from ..safe import safe
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_perm, write_ctx
 from .routes import SUMMARY, summary
 
@@ -171,10 +172,6 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, out)
 
 
-def _csv_safe(v):
-    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v  # spreadsheet formula injection
-
-
 @r.get("/export/contacts.csv")
 def export_contacts(ctx: Ctx = Depends(read_ctx)):
     """Download of the whole contact book (names and numbers are personal data, so export_data only)."""
@@ -187,6 +184,6 @@ def export_contacts(ctx: Ctx = Depends(read_ctx)):
     w = csv.writer(buf)
     w.writerow(["type", "name", "chat_number", "email", "contact_person", "ssm_no", "address", "notes"])
     for x in list_contacts(ctx, limit=100000):
-        w.writerow([_csv_safe(v) for v in (x["role"], x["name"], x["contact"], x["email"], x["attention"], x["ssm_no"], x["address"], x["notes"])])
+        w.writerow([safe(v) for v in (x["role"], x["name"], x["contact"], x["email"], x["attention"], x["ssm_no"], x["address"], x["notes"])])
     audit(ctx, "parties", ctx.tenant_id, "contact book exported")
     return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="contacts.csv"'})

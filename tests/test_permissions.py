@@ -27,6 +27,7 @@ SEND = {"to": "parsed"}
 # Minimal VALID request per gated route, so the 403 can only come from the gate and not from a 404 / 422 on the way.
 REQ = {
     ("POST", "/api/documents/{doc_id}/transition"): {"json": SEND},
+    ("POST", "/api/documents/{doc_id}/send"): {"json": {"channel": "email"}},
     ("POST", "/api/documents/{doc_id}/lines/{line_id}"): {"json": {"qty": 1}},
     ("POST", "/api/settings"): {"json": {"brand_color": "#112233"}},
     ("POST", "/api/jobs/{job_id}"): {"json": {"status": "doing"}},

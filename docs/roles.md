@@ -57,6 +57,8 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |
+| `POST /api/documents/{id}/send` | owner (sending a quote to the customer is an owner action) |
+| `GET /api/documents/{id}/export?variant=internal` | `export_data` and `view_costs` (the customer variant and `/preview` need only read access and are scrubbed like `/pdf`) |
 | `POST /api/users`, `POST /api/users/{id}`, `POST/PATCH/DELETE /api/roles...`, `POST /api/invites`, `POST /api/invites/{id}/resend`, `DELETE /api/invites/{id}` | owner |
 | `POST /api/license`, `POST /api/license/request` | owner |
 

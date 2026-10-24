@@ -67,6 +67,16 @@ def send_photo(chat_id, image_bytes, mime, caption, *, client=None, token=None) 
     return f"{res['chat']['id']}:{res['message_id']}"
 
 
+def send_document(chat_id, data: bytes, mime: str, filename: str, caption: str, *, client=None, token=None) -> str:
+    r = (client or httpx.Client(timeout=30)).post(
+        _api("sendDocument", token), data={"chat_id": str(chat_id), "caption": caption[:1024]}, files={"document": (filename, data, mime)})
+    if r.status_code == 403 or (r.status_code == 400 and "chat not found" in r.text.lower()):
+        raise RuntimeError("the customer must open the bot and press Start first")  # no URL: it carries the token
+    _ok(r, "sendDocument")
+    res = r.json()["result"]
+    return f"{res['chat']['id']}:{res['message_id']}"
+
+
 def get_file(file_id, *, client=None, token=None) -> bytes:
     token = token or os.environ["TELEGRAM_BOT_TOKEN"]
     c = client or httpx.Client(timeout=30)

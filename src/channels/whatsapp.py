@@ -113,6 +113,13 @@ def send_image(to, media_id, caption, *, client=None, token=None, phone_id=None)
     return _post({"to": to, "type": "image", "image": {"id": media_id, "caption": caption}}, client, token, phone_id)
 
 
+def send_document(to, data: bytes, mime: str, filename: str, caption: str, *, client=None, token=None, phone_id=None) -> str:
+    """Upload the file, then send it as a document message (shown with its file name and the caption)."""
+    media_id = upload_media(data, mime, client=client, token=token, phone_id=phone_id)
+    return _post({"to": to, "type": "document", "document": {"id": media_id, "filename": filename, "caption": caption[:1024]}},
+                 client, token, phone_id)
+
+
 def upload_media(data: bytes, mime: str, *, client=None, token=None, phone_id=None) -> str:
     """Upload once, send the id to many: -> media id (valid for the same phone number only)."""
     r = _client(client).post(

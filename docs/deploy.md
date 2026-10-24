@@ -137,6 +137,8 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 |---|---|---|
 | `ILMU_API_KEY` | ILMU ASR and extraction | yes |
 | `ILMU_BASE_URL` | override base URL (default `https://api.ilmu.ai/v1`) | no |
+| `ILMU_MODEL` | chat/extraction model name (default `ilmu-mini-v3.3`) | only if your account uses another |
+| `ILMU_ASR_MODEL` | speech model name (default `ilmu-asr-v4.2`) | only if your account uses another |
 | `ILMU_ASR_PATH` | override ASR path (default `/audio/transcriptions`, unverified) | only if the default fails |
 | `WHATSAPP_TOKEN` | WhatsApp Cloud API bearer token | yes if WhatsApp is shown |
 | `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp sender | yes if WhatsApp is shown |

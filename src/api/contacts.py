@@ -6,6 +6,7 @@ import psycopg
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from .. import pipeline
 from ..errors import ApiError
 from ..safe import safe
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_perm, write_ctx
@@ -149,15 +150,17 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
                           where d.tenant_id=%s and l.needs_review and d.status in ('received','parsed','draft')""", (t,)).fetchone()["n"]
     open_quotes = c.execute("select count(*) n from documents where tenant_id=%s and direction='out' and status in ('draft','approved','sent','read')", (t,)).fetchone()["n"]
     jobs = {x["status"]: x["n"] for x in c.execute("select status, count(*) n from jobs where tenant_id=%s group by status", (t,))}
+    due = c.execute("""select count(*) filter (where due_on < %(d)s) overdue, count(*) filter (where due_on = %(d)s) today
+                       from jobs where tenant_id=%(t)s and status <> 'done'""", {"d": pipeline.today_my(), "t": t}).fetchone()
     # plural keys: "supplier" is a staff-scrubbed key name
     out = {"contacts": {k + "s": by_role.get(k, 0) for k in ("customer", "supplier", "contractor")}, "needs_review": review,
            "open_quotes": open_quotes, "jobs": {k: jobs.get(k, 0) for k in ("todo", "doing", "done")},
+           "jobs_overdue": due["overdue"], "jobs_due_today": due["today"],
            "recent_contacts": c.execute(
                """select p.id, p.name, p.role::text as role, max(d.created_at) as last_activity from parties p
                   join documents d on d.party_id = p.id where p.tenant_id=%s group by p.id order by last_activity desc limit 5""", (t,)).fetchall(),
            "recent_documents": [summary(ctx, d) for d in c.execute(SUMMARY + " where d.tenant_id=%s order by d.created_at desc limit 5", (t,)).fetchall()]}
     # customers who answered a sent quote: the owner still records accept or decline
-    from .. import pipeline
     out["customer_replies"] = [{**x, "kind": pipeline.classify_reply(x["text"])} for x in c.execute(
         """select m.document_id, d.doc_no, p.name as customer, left(m.body, 200) as text, m.created_at as at
            from messages m join documents d on d.id = m.document_id join parties p on p.id = d.party_id

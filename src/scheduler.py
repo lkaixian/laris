@@ -1,8 +1,24 @@
-"""Background jobs. run_once() is the testable unit; start() wraps it in APScheduler (app lifespan, SCHEDULER=1)."""
+"""Background jobs. run_once() is the testable unit; start() wraps it in APScheduler (app lifespan, SCHEDULER=1).
+Every step runs per tenant in its own transaction and try/except, so one broken tenant cannot roll back or block the others."""
+import logging
 import os
+from datetime import datetime, time
 
-from . import db
+from . import db, mailer, pipeline
+from . import license as lic
 from .templates import load_template
+
+log = logging.getLogger("laris")
+last_run = {"at": None, "ok": None, "errors": 0, "last_error": None}  # updated by every run_once; read it through status()
+
+
+def status() -> dict:
+    return dict(last_run)
+
+
+def send_mail(*a, **kw) -> bool:
+    """The one place the scheduler sends email (tests replace it or mailer.send). Never raises."""
+    return mailer.send(*a, **kw)
 
 
 def purge_old_chats(c) -> int:
@@ -16,24 +32,76 @@ def purge_old_chats(c) -> int:
                      (days,)).rowcount
 
 
+def expire_quotes(c, tid) -> int:
+    return c.execute("""update documents set status='expired', decision_reason='validity period ended'
+                        where tenant_id=%s and direction='out' and status in ('sent','read') and valid_until < current_date""", (tid,)).rowcount
+
+
+def queue_followups(c, tid, template) -> int:
+    hrs = load_template(template)["followup_hours"]
+    return c.execute(
+        """insert into followups(document_id, due_at, reason)
+           select d.id, now(), 'no reply after ' || %s::text || 'h' from documents d
+           where d.tenant_id=%s and d.direction='out' and d.status in ('sent','read')
+             and d.sent_at < now() - %s * interval '1 hour'
+             and not exists (select 1 from followups f where f.document_id=d.id)""", (hrs, tid, hrs)).rowcount
+
+
+def remind_jobs(c, tid) -> int:
+    """One email per person listing their jobs due today or overdue; a job is reminded at most once per Malaysian calendar day.
+    Recipient: the assignee (verified email), else the active owners with a verified email. Returns the emails sent."""
+    if lic.status(c, tid)["read_only"]:
+        return 0
+    today = pipeline.today_my()
+    jobs = c.execute(
+        """select j.id, j.assignee_id, d.doc_no, p.name as customer, (%s::date - j.due_on) as days_overdue
+           from jobs j join documents d on d.id = j.quote_id join parties p on p.id = d.party_id
+           where j.tenant_id=%s and j.status <> 'done' and j.due_on <= %s
+             and (j.remind_sent_at is null or j.remind_sent_at < %s) order by j.due_on, d.doc_no, j.id""",
+        (today, tid, today, datetime.combine(today, time.min, pipeline.MY))).fetchall()
+    if not jobs:
+        return 0
+    people = {u["id"]: u for u in c.execute(
+        "select id, name, email, role::text as role from users where tenant_id=%s and active and email is not null and email_verified_at is not null", (tid,))}
+    owners = [u for u in people.values() if u["role"] == "owner"]
+    to: dict[str, dict] = {}  # lower-cased email -> {user, jobs}
+    skipped = 0
+    for j in jobs:
+        who = [people[j["assignee_id"]]] if j["assignee_id"] in people else [] if j["assignee_id"] else owners
+        skipped += not who
+        for u in who:
+            to.setdefault(u["email"].lower(), {"user": u, "jobs": []})["jobs"].append(j)
+    base = (os.environ.get("APP_PUBLIC_URL") or "").rstrip("/")
+    sent = 0
+    for e in to.values():
+        if send_mail(e["user"]["email"], *mailer.job_reminder_mail(e["user"]["name"], e["jobs"], f"{base}/#/jobs" if base else None), category="job_reminder"):
+            c.execute("update jobs set remind_sent_at = now() where id = any(%s)", ([j["id"] for j in e["jobs"]],))
+            sent += 1
+    log.info("job reminders: %s email(s) sent, %s job(s) without a recipient", sent, skipped)
+    return sent
+
+
 def run_once() -> dict:
-    """Expire sent quotes past valid_until (allowed transition, owner-level system actor), then queue a
-    follow-up for sent/read quotes with no decision after the template's followup_hours (once per quote)."""
-    with db.tx("owner", "system:scheduler") as c:
-        purged = purge_old_chats(c)
-        expired = c.execute("""update documents set status='expired', decision_reason='validity period ended'
-                               where direction='out' and status in ('sent','read') and valid_until < current_date""").rowcount
-        queued = 0
-        for t in c.execute("select id, trade_template from tenants").fetchall():
-            hrs = load_template(t["trade_template"])["followup_hours"]
-            queued += c.execute(
-                """insert into followups(document_id, due_at, reason)
-                   select d.id, now(), 'no reply after ' || %s::text || 'h' from documents d
-                   where d.tenant_id=%s and d.direction='out' and d.status in ('sent','read')
-                     and d.sent_at < now() - %s * interval '1 hour'
-                     and not exists (select 1 from followups f where f.document_id=d.id)""",
-                (hrs, t["id"], hrs)).rowcount
-    return {"expired": expired, "followups": queued, "purged": purged}
+    """Per tenant: blank old chat text, expire sent quotes past valid_until (allowed transition, owner-level system actor), queue a
+    follow-up for sent/read quotes with no decision after the template's followup_hours (once per quote), and email job reminders."""
+    out, errors, last = {"expired": 0, "followups": 0, "purged": 0, "reminders": 0}, 0, None
+    try:
+        with db.tx("owner", "system:scheduler") as c:
+            tenants = c.execute("select id, trade_template from tenants order by name, id").fetchall()
+    except Exception as e:
+        log.warning("scheduler: could not list tenants: %s", type(e).__name__)
+        tenants, errors, last = [], 1, type(e).__name__
+    for t in tenants:
+        for key, step in (("purged", lambda c: purge_old_chats(c)), ("expired", lambda c: expire_quotes(c, t["id"])),
+                          ("followups", lambda c: queue_followups(c, t["id"], t["trade_template"])), ("reminders", lambda c: remind_jobs(c, t["id"]))):
+            try:
+                with db.tx("owner", "system:scheduler", tenant=str(t["id"])) as c:  # its own transaction, scoped to the tenant
+                    out[key] += step(c)
+            except Exception as e:  # no row data in the log, only the exception type
+                errors, last = errors + 1, type(e).__name__
+                log.warning("scheduler: tenant %s failed: %s", str(t["id"])[:8], type(e).__name__)
+    last_run.update(at=datetime.now(pipeline.MY).isoformat(), ok=not errors, errors=errors, last_error=last)
+    return out
 
 
 def start():

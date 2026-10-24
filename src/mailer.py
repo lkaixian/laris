@@ -77,3 +77,14 @@ def quote_mail(m: dict, note: str | None = None) -> tuple[str, str, str]:
         lines.append(f"Valid until {m['valid_until']}.")
     lines.append("The quotation is attached as a PDF.")
     return _mail(f"Quotation {m['doc_no']} from {org}", lines)
+
+
+def job_reminder_mail(name: str, jobs: list[dict], link: str | None = None) -> tuple[str, str, str]:
+    """(subject, text, html) listing jobs due today or overdue: quote number, customer and days late only, never cost or margin."""
+    def when(n: int) -> str:
+        return "due today" if n == 0 else f"{n} day{'s' if n != 1 else ''} overdue"
+    lines = [f"Hello {name},", f"{len(jobs)} job{'s are' if len(jobs) != 1 else ' is'} due today or overdue:"]
+    lines += [f"{j['doc_no']} for {j['customer']}: {when(j['days_overdue'])}" for j in jobs]
+    if link:
+        lines.append(f"Open the job board: {link}")
+    return _mail(f"Jobs to do: {len(jobs)} due or overdue", lines)

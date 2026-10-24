@@ -216,8 +216,9 @@ def move(ctx: Ctx, doc_id: UUID, d: dict, to: str, reason: str | None = None):
                      "rejected": "decided_at=now(), decision_reason=%(r)s"}.get(to, "")
             c.execute("update documents set status=%(to)s::doc_status" + (", " + extra if extra else "") + " where id=%(id)s",
                       {"to": to, "u": ctx.user_id, "r": reason, "id": doc_id})
-            if to == "job_created":
-                c.execute("insert into jobs(tenant_id, quote_id) values (%s, %s)", (ctx.tenant_id, doc_id))
+            if to == "accepted" and d["direction"] == "out" or to == "job_created":  # the job exists from acceptance; job_created stays a valid owner step
+                c.execute("insert into jobs(tenant_id, quote_id, created_by) values (%s, %s, %s) on conflict (quote_id) do nothing",
+                          (ctx.tenant_id, doc_id, ctx.user_id))
 
 
 @r.post("/documents/{doc_id}/transition")
@@ -425,34 +426,6 @@ def edit_settings(body: SettingsEdit, ctx: Ctx = Depends(write_ctx)):
     mask = lambda d: {k: "[image]" if k == "logo_data_url" and v else v for k, v in d.items()}  # the audit log is append-only: no image bytes in it
     audit(ctx, "tenants", ctx.tenant_id, "settings changed: " + ",".join(sorted(sets)), mask({k: old[k] for k in sets}), mask({k: new[k] for k in sets}))
     return reply(ctx, new)
-
-
-@r.get("/jobs")
-def jobs(ctx: Ctx = Depends(read_ctx)):
-    """Job board: one card per accepted quote (selling side only, so staff see it too)."""
-    return reply(ctx, ctx.conn.execute(
-        """select j.id, j.status, j.created_at, d.id as quote_id, d.doc_no as quote_no, p.name as customer,
-                  (select coalesce(sum(round(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100), 2)), 0)
-                   from document_lines l where l.document_id = d.id and not l.is_header) as total,
-                  (select string_agg(l.description || ' x ' || trim(trailing '.' from trim(trailing '0' from l.qty::text)), '; ' order by l.line_no)
-                   from document_lines l where l.document_id = d.id and not l.is_header) as summary
-           from jobs j join documents d on d.id = j.quote_id join parties p on p.id = d.party_id
-           where j.tenant_id=%s order by j.created_at desc, j.id""", (ctx.tenant_id,)).fetchall())
-
-
-class JobMove(BaseModel, extra="forbid"):
-    status: Literal["todo", "doing", "done"]
-
-
-@r.post("/jobs/{job_id}")
-def move_job(job_id: UUID, body: JobMove, ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "manage_contacts")
-    old = ctx.conn.execute("select status from jobs where id=%s and tenant_id=%s for update", (job_id, ctx.tenant_id)).fetchone()
-    if not old:
-        raise ApiError(404, "not_found", "job not found")
-    if old["status"] != body.status:
-        ctx.conn.execute("update jobs set status=%s where id=%s", (body.status, job_id))  # jobs_audit trigger records it
-    return reply(ctx, {"id": job_id, "status": body.status})
 
 
 @r.get("/followups")

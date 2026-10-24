@@ -328,9 +328,9 @@ def test_exports(env):
 def test_scheduler_followup_then_expiry(env):
     e = env
     q = seed_quote(e)
-    assert scheduler.run_once() == {"expired": 0, "followups": 0, "purged": 0}  # just sent
+    assert scheduler.run_once() == {"expired": 0, "followups": 0, "purged": 0, "reminders": 0}  # just sent
     e.sql("update documents set sent_at = now() - interval '3 days' where id=%s", (q,))
-    assert scheduler.run_once() == {"expired": 0, "followups": 1, "purged": 0}
+    assert scheduler.run_once() == {"expired": 0, "followups": 1, "purged": 0, "reminders": 0}
     assert scheduler.run_once()["followups"] == 0  # once per quote
     e.sql("update documents set valid_until = current_date - 1 where id=%s", (q,))
     assert scheduler.run_once()["expired"] == 1

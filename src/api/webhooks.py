@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
-from .. import db, pipeline
+from .. import availability, db, pipeline
 from .. import license as lic
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -207,6 +207,8 @@ def _handle(conn, s, m):
         text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
+    if (r := availability.answer(conn, tid, text, s.ilmu)) is not None:
+        return r
     if pipeline.classify_reply(text) and (hit := pipeline.record_reply(conn, p["id"], m.channel, text, m.external_id)):
         return f"Noted, thank you. We will confirm {hit['doc_no']} with you shortly."  # the owner records accept or decline
     try:

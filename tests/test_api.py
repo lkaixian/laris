@@ -396,7 +396,7 @@ def test_unknown_sender_is_rate_limited(env, monkeypatch):
     for i in range(12):
         assert wa_post(e, {"entry": [{"changes": [{"value": {"messages": [{"id": f"wamid.spam{i}", "from": "60188887777", "timestamp": "1",
                                                                        "type": "text", "text": {"body": "10 small parts"}}]}}]}]}).status_code == 200
-    assert e.ai.calls - before == 10  # the other two never reached ILMU
+    assert e.ai.calls - before == 20  # 10 allowed x (availability check + extraction); the other two never reached ILMU
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 10
 
 

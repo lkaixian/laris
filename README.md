@@ -25,6 +25,32 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 | Slide Deck | [TO ADD] |
 | Demo Video | [TO ADD] |
 
+## Demo
+
+Try it with the live app and the Telegram bot. All data is synthetic.
+
+| What | Where |
+|---|---|
+| Web app (owner view) | https://laris-malaysia.replit.app |
+| Telegram bot | [@BOT_USERNAME](https://t.me/BOT_USERNAME) — [TO ADD] |
+| Demo login | Ask the team for a demo account (no credentials are kept in this repo) |
+
+**Customer flow (Telegram)**
+1. Open the bot and press **Start**. It replies with a short guide.
+2. Ask: `is there any eSUN filament available` (or a Malay version such as `ada filament esun tak?`). The bot answers from the confirmed catalog.
+3. Reply: `quote 50 kg` (typed, or as a voice note). LARIS drafts a quote request and tells the customer the owner will confirm the price.
+
+**Staff flow (Telegram, linked staff account)**
+1. Send a photo of labelled products with the caption `/catalog`. LARIS reads it, and the products appear as items to review.
+2. Forward a supplier PDF or photo to record its prices.
+
+**Owner flow (web app)**
+1. Open **Catalog photos**, check each product, fill in prices and confirm.
+2. Open the new draft quote, adjust, approve and send it. Export it as PDF, XLSX or CSV.
+3. Open the tracker to see the quote's timeline and follow-up reminders.
+
+The first catalog photo after the GPU has been idle can take a few minutes while the model loads. A recording script for the signage sample data is in [`docs/demo-script.md`](docs/demo-script.md).
+
 ## Overview
 
 ### Problem

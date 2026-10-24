@@ -22,7 +22,7 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 | GitHub Repository | https://github.com/lkaixian/laris |
 | Live Demo | https://laris-malaysia.replit.app |
 | RunPod Endpoint | vLLM GPU pod serving Qwen2.5-VL-7B (private, key required). See the RunPod proof of use |
-| Slide Deck | [TO ADD] |
+| Slide Deck | [PDF](submission/SDC2026_SparkSurge_SlideDeck.pdf) · [PPTX](submission/SDC2026_SparkSurge_SlideDeck.pptx) |
 | Demo Video | https://youtu.be/JVA05hTM_HU |
 
 ## Demo

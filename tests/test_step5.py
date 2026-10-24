@@ -63,7 +63,7 @@ def test_simulate_and_ingest_share_one_allowance(env):
     r = e.c.post("/api/documents/ingest", data={"text": "one more"}, headers=e.S)
     assert r.status_code == 429 and r.json()["error"]["code"] == "slow_down"
     assert e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "x"}, headers=e.S).status_code == 429
-    assert e.c.post("/api/documents/ingest", data={"text": "owner doc"}, headers=e.O).status_code != 429
+    assert e.c.post("/api/documents/ingest", data={"text": "owner doc"}, headers=e.O).status_code == 429  # per business
 
 
 # ---------------------------------------------------------------- 1c. supplier price edits

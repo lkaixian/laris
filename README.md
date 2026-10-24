@@ -32,7 +32,7 @@ Try it with the live app and the Telegram bot. All data is synthetic.
 | What | Where |
 |---|---|
 | Web app (owner view) | https://laris-malaysia.replit.app |
-| Telegram bot | [@BOT_USERNAME](https://t.me/BOT_USERNAME) — [TO ADD] |
+| Telegram bot | [@Gyser3DPrintBot](https://t.me/Gyser3DPrintBot) |
 | Demo login | Ask the team for a demo account (no credentials are kept in this repo) |
 
 **Customer flow (Telegram)**

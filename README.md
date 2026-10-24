@@ -2,310 +2,186 @@
 
 [![ci](https://github.com/lkaixian/laris/actions/workflows/ci.yml/badge.svg)](https://github.com/lkaixian/laris/actions/workflows/ci.yml)
 
-LARIS keeps the supplier prices behind each customer quote up to date, so a quote is not sent on an old cost without the owner knowing.
+LARIS lets a small made-to-order business quote from the chat apps it already uses: customers ask on Telegram (WhatsApp is built, not yet connected), AI reads the request, rules set the price, and the owner approves.
 
-**Team:** [TEAM NAME]
-**Hackathon:** SDC Hackathon 2026
-**Track:** [TRACK]
-**Demo video:** [VIDEO LINK]
-**Live demo (Replit):** [REPLIT URL]
-**Status:** prototype in progress. See [What works today](#what-works-today) before relying on anything here.
+## Team Information
 
----
-
-## Problem
-
-Small businesses that quote per job (contractors, printing and signage, custom fabrication, catering, service jobs) receive supplier quotes in WhatsApp chats, photos and PDFs. Those supplier prices are not linked to the customer quotes the owner sends later. When a supplier raises a price, quotes already out or about to go out can be priced on the old cost, and the owner may not notice until the margin is gone. How often this happens is not yet measured (see below).
-
-Numbers, with source status:
-
-- MSMEs contribute **39.7%** of GDP in 2025 (DOSM, verified).
-- MSMEs provide **48.7%** of national employment in 2025 (DOSM, verified).
-- DOSM counts **1,069,831** MSME establishments in the Economic Census 2023 profile (verified; the page does not state the reference year). Other series give different counts, for example "almost 1.3 million" in a 2025 ministerial statement (medium confidence). The sources differ and are kept separate in `knowledge/03-stats/`.
-- **67%** of SMEs cite rising costs as a key pressure (Airwallex 2026 outlook, reported by The Star; medium confidence; survey sample not checked).
-- Average business payment delay is **61 days** (Experian 2025, via secondary reports; medium confidence). This is cash-flow evidence, not quote evidence.
-- Share of Malaysian SMEs that price per job: **REAL DATA needed**. No published figure found.
-- Margin lost to stale-cost quotes: **REAL DATA needed**. To be measured with owners (interview and timing sessions).
-- Minutes per quote, manual versus LARIS: **REAL DATA needed**. Not yet timed.
-
-Sources and status notes live in `knowledge/03-stats/`.
-
-## Solution
-
-LARIS follows one journey for each supplier quote and each customer enquiry:
-
-1. **Supplier quote in.** A staff member sends a supplier quote as a photo or PDF. LARIS reads the lines and asks the owner to confirm the items that matter.
-2. **Cost book.** Confirmed lines become cost items. Each cost item records its supplier document, line, and date.
-3. **Customer enquiry in.** A customer sends a text or a voice note. An LLM extracts the requested items. The LLM never sets prices.
-4. **Priced by rule.** A rules engine prices the quote from the cost book, applies the owner's margin floor and discount limit, and flags any line whose cost has moved past the alert threshold.
-5. **Owner approves.** Only the owner can approve a quote. Staff do not see margins or supplier costs (design goal, see limitations).
-6. **Track and log.** Sent quotes are tracked. Every status change goes to an audit log. When a newer supplier price affects an open quote, LARIS raises a stale-cost alert.
-
-The idea is margin protection. The tracker is the plumbing.
-
-## Features
-
-| Feature | Status |
+| Field | Details |
 |---|---|
-| Health check endpoint | In repo (`GET /health`) |
-| Pricing engine: cost-based pricing, margin guard, discount guard, stale-cost check, STL weight to grams | In repo, unit tests in `tests/test_pricing.py` |
-| AI output validation: confidence gate, item matching to the catalog, date parsing | In repo, tests in `tests/test_validate.py` |
-| LLM rule that blocks price fields from AI output | In repo (`src/pricing.py`) |
-| Trade templates as YAML (`made_to_order`, `fnb_catering`) | In repo (`config/templates/`) |
-| Database schema with status transitions, audit trigger, promote-to-cost-book function, synthetic seed | In repo (`db/`) |
-| WhatsApp Cloud API helpers: verify challenge, signature check, parse inbound, send text and template | In repo (`src/channels/whatsapp.py`). Routes wired (`/webhooks/whatsapp`), HMAC checked, template fallback outside 24h. Not yet run against Meta |
-| Telegram Bot API helpers: parse update, send, fetch file, long-poll helper | In repo (`src/channels/telegram.py`). Route wired (`/webhooks/telegram`, secret token), `scripts/setup_channels.py` sets the webhook or polls. Not yet run against Telegram |
-| OCR wrapper: PaddleOCR first, Tesseract fallback | In repo (`src/ocr.py`). Not tested on real quotes |
-| ILMU client: speech-to-text, JSON extraction, RunPod fallback | In repo (`src/ilmu.py`). Endpoints not verified |
-| React frontend: tracker, document view, theme toggle, mock mode | In repo (`web/`). Wired to the API (user id from `/api/me`, optional `APP_TOKEN`); mock mode kept for demos |
-| Owner approval and staff view without margins | In repo: DB guard plus staff scrubbing on every response, tested in `tests/test_api.py`. Header identity is still simulated |
-| Supplier quotes as XLSX, DOCX and CSV (as well as PDF and photos), by upload or sent as a chat document | In repo (`src/tabular.py`, `src/pipeline.py`). Read as exact text, no OCR; old .xls/.doc refused |
-| Quote PDF, BOM (xlsx) and PO (csv) exports | In repo (`src/quote_pdf.py`, `src/api/routes.py`) |
-| Follow-up job with APScheduler, suggested chase message, owner sends or skips | In repo (`src/scheduler.py`, `/api/followups`) |
-| Sign-in for several users (scrypt passwords, hashed sessions, owner manages the team), Home dashboard, contact book for customers, suppliers and contractors, one search box, look-up assistant | In repo (`src/auth.py`, `src/api/auth_routes.py`, `src/api/contacts.py`, `src/api/assistant.py`, `web/src/`). Checked by click-through in headless Edge against the live API; not tried with a real ILMU key |
-| Margin report for the last N days, customer erasure, AI call log | In repo (`/api/reports/margin`, `/api/parties/{id}/erase`, `ai_actions`) |
+| Team Name | SPARK SURGE |
+| Team Domain | Domain 2 |
+| SDG Track (1–17) | SDG 8 — Decent Work and Economic Growth (Target 8.3) |
+| Team Leader | Harrish Govind a/l Sethulingam |
+| University | Universiti Tun Hussein Onn Malaysia (UTHM) |
+| Number of Members | 4 |
+
+## Links
+
+| Resource | Link |
+|---|---|
+| GitHub Repository | https://github.com/lkaixian/laris |
+| Live Demo | https://laris-malaysia.replit.app |
+| RunPod Endpoint | vLLM GPU pod serving Qwen2.5-VL-7B (private, key required). See the RunPod proof of use |
+| Slide Deck | [TO ADD] |
+| Demo Video | [TO ADD] |
+
+## Overview
+
+### Problem
+
+Malaysia has about 1.07 million MSMEs, which produce 39.7% of GDP and employ 48.7% of workers (DOSM). Made-to-order trades such as signage, printing and 3D printing run quotations through chats, PDFs, photos and spreadsheets. Replies are slow, quotes are priced on remembered costs, and unanswered quotes are never chased. Average business payment delay is 61 days (Experian 2025), so lost margin and lost jobs hurt small firms most. Sources and confidence notes are in `knowledge/03-stats/`.
+
+### Solution
+
+A customer sends a text or a Manglish voice note. ILMU transcribes it and extracts the items as JSON. A rules engine, never the AI, prices the quote from the supplier cost book and applies the owner's margin floor. The owner approves, LARIS sends and tracks the quote, and reminders chase unanswered ones. Staff can also photograph a shelf or price board: a vision model on a RunPod GPU turns it into catalog items for review, and customers can then ask whether something is available or request a quote for it.
+
+### Key Features
+
+- **Chat enquiries** — text and voice notes on Telegram, extracted to structured items. WhatsApp Cloud API code is in place but untested against Meta.
+- **Rule-based pricing** — cost book, margin guard, discount guard, stale-cost alerts. No AI output sets a price.
+- **Catalog photos** — one photo of labelled products becomes reviewable catalog items (Qwen2.5-VL on RunPod, Tesseract cross-check of every price and SKU).
+- **Availability and quote requests** — customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner.
+- **Supplier price lists** — PDF, photo, XLSX, DOCX and CSV imports; quote export to PDF, XLSX and CSV.
+- **Owner control** — approval step, custom roles, audit log, signed licence, multi-business isolation with row-level security.
+- **Tracker** — sent quotes, timeline, follow-up reminders, customer tracking link.
 
 ## Tech Stack
 
-| Layer | Technology | Status |
-|---|---|---|
-| Backend | Python 3.11, FastAPI 0.115, uvicorn, httpx | In repo |
-| Database | PostgreSQL (Replit PostgreSQL when deployed). PGlite used for schema checks only | Schema in repo. No DB driver code yet |
-| Frontend | React 19, Vite 8, TypeScript, Tailwind CSS 4 | In repo |
-| Channels | WhatsApp Business Cloud API (Graph v21.0), Telegram Bot API | Client code in repo. Routes pending |
-| Speech to text | ILMU `ilmu-asr-v4.2` (primary). RunPod-hosted Whisper as fallback | Client code in repo. Endpoint path unverified |
-| Extraction LLM | ILMU `ilmu-mini-v3.3`, JSON output with few-shot examples | Client code in repo. Quality unmeasured |
-| OCR | PaddleOCR (optional, not in `requirements.txt`), Tesseract via pytesseract (English only for now) | Code in repo. Accuracy unmeasured |
-| Pricing and validation | Python rules, YAML templates | In repo, tested |
-| Scheduler | APScheduler | Planned |
-| Exports and PDF | openpyxl, WeasyPrint | Planned |
-| Hosting | Replit Reserved VM (single process, always on) | Config in repo. Not yet deployed |
-| GPU work | RunPod serverless endpoint | Planned for the sponsor proof |
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
+| Backend | Python, FastAPI, uvicorn, APScheduler |
+| Database | PostgreSQL (row-level security); PGlite for tests |
+| AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR |
+| Channels | Telegram Bot API (live), WhatsApp Business Cloud API (built) |
+| Hosting / Dev | Replit |
 
-## Architecture
-
-Text sketch of the quotation flow. Arrows show data direction. The AI boxes produce items and text only.
-
-```
-IN
-  Supplier quote (photo, PDF)  --+
-  via WhatsApp or Telegram       |
-                                 v
-                     OCR (PaddleOCR | Tesseract)
-                                 |
-                                 v
-                     validate_extraction
-                       - confidence < 0.80 --> needs_review (owner confirms)
-                       - item match to catalog
-                                 |
-                  owner confirms |
-                                 v
-                     cost_items (supplier doc, line, date)
-
-  Customer enquiry (text, voice note)
-                                 |
-  voice note --> ILMU ASR (RunPod Whisper fallback)
-                                 |
-                                 v
-                     ILMU LLM extract_json (items only, no prices)
-                                 |
-                                 v
-  price_quote  <-- cost_items + trade template (rules, no AI)
-       |
-       +--> margin_guard (below-floor lines flagged)
-       |
-       v
-  draft quote  --> owner approves (owner role only, audit row)
-                                 |
-                                 v
-  send to customer (WhatsApp or Telegram) --> tracker (sent, accepted) --> job
-
-  v_stale_alerts: a newer, higher supplier cost --> alert on open quotes (RM margin lost)
-
-OUT
-  quote PDF, BOM/PO xlsx and csv (planned)
-```
-
-Core rule: no AI output sets a price. `src/pricing.py` rejects price-like keys in extraction output.
-
-## What works today
-
-- `GET /health` returns `{"status": "ok"}`. This is the only HTTP route in `src/app.py`.
-- The pricing, validation, template, and channel-parsing modules have unit tests in `tests/`.
-- The database schema, transition rules, and seed can be loaded into PostgreSQL (`db/`).
-- The React app runs in mock mode without a backend.
-
-Nothing else in the sketch above is wired end to end yet. The demo flow depends on work still in progress.
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11 or newer
-- Node.js 20 or newer
-- PostgreSQL 16 for the full local setup (optional for schema checks, see below)
-- Tesseract OCR, if you want the OCR tests to run (`eng` language)
-
-### 1. Backend
-
-```bash
-# macOS / Linux
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-# Windows (PowerShell or cmd)
-py -3.11 -m venv .venv
-.venv\Scripts\activate
-
-pip install -r requirements-dev.txt
-cp .env.example .env            # Windows: copy .env.example .env
-```
-
-The app reads environment variables with `os.environ`. No `.env` loader is installed, so export the variables in your shell or your IDE run configuration. Leave the keys empty for mock and offline work. Never commit `.env`.
-
-Run the API:
-
-```bash
-uvicorn src.app:app --reload --port 8000
-curl http://localhost:8000/health
-```
-
-Run the tests:
-
-```bash
-python -m pytest tests
-```
-
-### 2. Database (optional locally)
-
-With a local PostgreSQL 16 server:
-
-```bash
-createdb laris
-export DATABASE_URL=postgresql://localhost/laris
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 \
-  -f db/schema.sql -f db/transitions.sql -f db/functions.sql
-# Optional synthetic demo data (run after the three files above):
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f db/seed_made_to_order.sql
-```
-
-Without a server, `tests/schema_check.mjs` runs the same SQL in PGlite (Postgres compiled to WebAssembly, in-process). It checks the schema only. It is not a running database for the API.
-
-```bash
-npm install
-node tests/schema_check.mjs
-```
-
-### 3. Frontend
-
-```bash
-cd web
-npm ci
-npm run dev:mock     # mock mode: no backend needed, sample data
-npm run dev          # real mode: proxies /api to http://localhost:8000
-```
-
-Real mode will show errors for any `/api` route that does not exist yet.
-
-### 4. Replit
-
-See `docs/deploy.md` for the Replit Reserved VM setup, Secrets list, webhook setup, and smoke tests. The `.replit` file runs `run.sh`, which installs requirements, bootstraps the database once, and starts uvicorn on port 5000.
-
-## Secrets and API Keys
-
-Put every value below in Replit **Secrets** (and in the deployment's secrets too: a deployment does not always inherit the workspace ones). Locally, export them in your shell; the app does not load `.env`. Never commit real values. `.env.example` lists the same names.
-
-**Minimum to run the demo (nothing else needed):** `DATABASE_URL` (Replit PostgreSQL sets it), `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD` for the first sign-in (delete both afterwards), `TRUST_PROXY=1` on Replit, and `SECRET_KEY`.
-
-| Service | Secret | Needed for | Where to get it |
-|---|---|---|---|
-| Database | `DATABASE_URL` | everything | Replit PostgreSQL (the deployment has its own production database) |
-| Database | `DATABASE_URL_OWNER` (optional) | schema changes when the app runs as the least-privilege role | see `docs/deploy.md` |
-| App | `SECRET_KEY` | hashing the emailed one-time codes | any long random string |
-| App | `TRUST_PROXY=1` | correct client address behind Replit's proxy (login throttling) | set it on Replit only |
-| Telegram | `TELEGRAM_BOT_TOKEN` | the bot sends and receives | @BotFather, `/newbot` |
-| Telegram | `TELEGRAM_WEBHOOK_SECRET` | the webhook refuses requests without it | any long random string you make up |
-| WhatsApp (Meta) | `WHATSAPP_TOKEN` | sending (use a permanent system-user token) | Meta for Developers, WhatsApp, API Setup |
-| WhatsApp (Meta) | `WHATSAPP_PHONE_NUMBER_ID` | which number sends | same page |
-| WhatsApp (Meta) | `WHATSAPP_VERIFY_TOKEN` | webhook handshake | any random string you make up |
-| WhatsApp (Meta) | `WHATSAPP_APP_SECRET` | checks webhook signatures | App settings, Basic |
-| WhatsApp (Meta) | `WHATSAPP_RFQ_TEMPLATE`, `WHATSAPP_FOLLOWUP_TEMPLATE` | first message outside the 24-hour window | names of templates Meta has approved |
-| RunPod | `RUNPOD_API_KEY` | every RunPod call | RunPod console, Settings, API keys |
-| RunPod | `RUNPOD_VISION_URL` | catalog photos; ends in `/openai/v1` | `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` after you create the endpoint |
-| RunPod | `RUNPOD_VISION_MODEL` (optional) | model name, default `Qwen/Qwen2.5-VL-7B-Instruct` | |
-| RunPod | `RUNPOD_ENDPOINT_URL` (optional) | speech-to-text fallback endpoint | a second endpoint |
-| ILMU | `ILMU_API_KEY` | reading supplier price replies and typed quotes | your ILMU account (endpoint path still unverified) |
-| Mailtrap | `MAILTRAP_API_TOKEN` | sign-up and password-reset emails (unset = email is off) | Mailtrap, API tokens |
-| Mailtrap | `MAILTRAP_INBOX_ID` | set = sandbox inbox (nothing is delivered) | Email Testing, your inbox |
-| Mailtrap | `MAILTRAP_SENDER_EMAIL`, `MAILTRAP_SENDER_NAME` | the From address | your own |
-| Licence | `LICENSE_PUBLIC_KEY` | turns licence checking on (unset = off) | run `python scripts/issue_license.py keygen` once on your own machine |
-| Licence | `LICENSE_ISSUER_EMAIL` | where licence purchase requests are emailed | your own |
-
-Demo-only switches, never on a real deployment: `DEMO_MODE`, `APP_TOKEN`, `SIGNUP_DEV_ECHO`, `SEED`.
-
-The licence **private** key stays on your own machine (`LICENSE_PRIVATE_KEY_FILE` is read only by `scripts/issue_license.py`). Do not put it in Secrets or in the repo.
-
-The RunPod endpoint itself is a billed resource: create it in the RunPod console (serverless, vLLM worker, 24 GB GPU) before `RUNPOD_VISION_URL` can work. See `docs/deploy.md`.
+The full model and library list with licences is in `submission/SDC2026_SparkSurge_TechDeclaration.pdf` and `docs/tech-and-tools-declaration.md`.
 
 ## Project Structure
 
 ```
 .
-├── src/
-│   ├── app.py            FastAPI app (currently /health only)
-│   ├── pricing.py        Rules pricing, margin and discount guards, stale-cost check
-│   ├── validate.py       Extraction validation and catalog matching
-│   ├── ocr.py            OCR wrapper (PaddleOCR, then Tesseract)
-│   ├── ilmu.py           ILMU ASR and LLM client, RunPod fallback
-│   ├── templates.py      Trade template loader
-│   └── channels/         WhatsApp and Telegram helpers
-├── config/templates/     Trade templates (YAML)
-├── db/                   Schema, transitions, functions, synthetic seed
-├── web/                  React + Vite + Tailwind frontend
-├── tests/                pytest tests and PGlite schema checks
-├── docs/                 API contract and deployment guide
-├── knowledge/            Research notes, sources, decisions
-├── submission/           Hackathon proof templates
-├── .replit               Replit run and deployment config
-├── replit.nix            Replit system packages
-├── run.sh                Replit entrypoint (install, bootstrap, start)
+├── src/                  # FastAPI app, pricing, pipeline, ILMU, vision, channels
+├── web/                  # React + Vite frontend
+├── db/                   # Schema, migrations, roles, synthetic seed
+├── config/templates/     # Trade templates (YAML)
+├── scripts/              # Channel setup, licence tools, checks
+├── tests/                # pytest suite and PGlite schema/role checks
+├── docs/                 # Deployment, API, roles, licensing, build log
+├── knowledge/            # Research notes, sources, decisions
+├── submission/           # Hackathon submission documents
+├── .replit, replit.nix, run.sh   # Replit run and deploy configuration
+├── .env.example          # Environment variable names (no values)
 ├── requirements.txt
-└── .env.example
+├── LICENSE
+└── README.md
 ```
 
-## Honest Limitations
+## Architecture
 
-- **No real customer or supplier data has been tested.** All demo data is synthetic and invented.
-- **OCR accuracy is unmeasured** on real supplier quotes, especially thermal receipts and phone photos.
-- **Speech-to-text is unverified.** The ILMU transcription path is not confirmed, and Manglish accuracy has not been measured.
-- **Authentication is simulated.** The API design uses `X-Role` and `X-User` headers. This is not secure and must not be used with real data.
-- **Role rules are not enforced end to end yet.** The design keeps margins and supplier costs out of staff responses. Verify this with tests once the routes exist. Database row-level security is not enabled.
-- **Channels are not wired.** WhatsApp and Telegram helpers exist, but the webhook routes do not. The Telegram webhook does not check a secret token yet.
-- **One trade template is meant to be end to end.** The second template is configuration only.
-- **No PDF, export, scheduler, or follow-up job yet.** These are planned.
-- **Pricing is a model, not a validated method.** The margin rules and templates have not been tested with a real SME.
-- **Not a tax or e-Invoice tool.** SST and e-Invoice (MyInvois) are out of scope.
-- **Single process on Replit.** No failover. The scheduler and webhooks depend on that one process being up.
-- **Money** is stored as strings with 2 to 4 decimals. Currency is MYR only.
-- **Replit and RunPod costs** are not yet measured for the demo period.
+```
+Customer / staff (Telegram or WhatsApp)
+        │  text · voice note · photo · document
+        ▼
+Replit  FastAPI webhooks ──► ILMU (speech-to-text, item extraction)
+        │                └─► RunPod vLLM (catalog photos) + Tesseract
+        ▼
+Rules engine + PostgreSQL cost book  ──► draft quote
+        ▼
+Owner approves in the web app ──► quote sent to chat, tracked, exported
+```
 
-## Privacy and PDPA Note
+Core rule: AI output never sets a price. `src/pricing.py` rejects price-like keys from extraction.
 
-- The hackathon build uses **synthetic data only**. No real customer records, phone numbers, voice notes, or supplier documents are in the repo or the demo.
-- In real use, chats, voice notes, customer names and phone numbers are personal data under the Personal Data Protection Act 2010 as amended in 2024. The SME would be the controller. LARIS would act as a processor, which the amended Act makes directly liable for security. This is our reading of secondary sources, not legal advice.
-- Vendors that would receive personal data: Meta (WhatsApp Cloud API), Telegram (Bot API), ILMU (speech-to-text and extraction), RunPod (fallback speech-to-text), and Replit (hosting; data region not confirmed). Each needs a processing agreement and a cross-border review before real use.
-- Secondary sources say the amended Act requires a data protection officer for controllers and processors, and a breach notice to the Commissioner within 72 hours. Neither is set up for this prototype. [DPO NAME TBD]
-- Minimisation in place: chat text is blanked after `RETENTION_DAYS`, customers can be erased on request, contact details are masked before text reaches the model. See `docs/privacy-and-breach-runbook.md`.
-- A PDP public consultation paper on AI and personal data (No. 1/2026, dated 5 Oct 2026) is not law yet. Track it before any pilot.
+## How to Run
+
+### Option 1 — Run on Replit (recommended)
+
+1. Import this repository into Replit.
+2. Open **Secrets** and add the variables from `.env.example`. The minimum is `DATABASE_URL`, `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD`. For Telegram add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_TENANT_ID`. For catalog photos add `RUNPOD_API_KEY` and `RUNPOD_VISION_URL`.
+3. Click **Run**. `.replit` starts `run.sh`, which installs dependencies, builds the web app, prepares the database and starts the server on port 5000.
+
+Full Replit, webhook and licence setup: `docs/deploy.md`.
+
+### Option 2 — Run locally
+
+```bash
+git clone https://github.com/lkaixian/laris.git && cd laris
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+export DATABASE_URL=postgresql://localhost/laris        # a PostgreSQL 16 database
+cd web && npm ci && npm run build && cd ..
+uvicorn src.app:app --port 8000
+```
+
+The app reads environment variables directly and does not load `.env`. Leave API keys unset for offline work.
+
+### Run Tests
+
+```bash
+python -m pytest -q
+npm ci && node tests/schema_check.mjs && node tests/db_check.mjs && node tests/roles_check.mjs
+```
+
+About 500 tests run on every push in GitHub Actions.
+
+## How We Use Replit (Required)
+
+- **Hosting:** the app runs as a Replit deployment at the Live Demo link, with a Replit PostgreSQL database.
+- **Secrets:** all keys live in Replit Secrets, never in the code.
+- **Development:** coded in the workspace and on GitHub; the Telegram webhook points at the deployment.
+
+Proof of use: `submission/SDC2026_SparkSurge_REPLIT_PROOF_OF_USE.pdf`
+
+## How We Use RunPod (Required)
+
+- **Workload:** vision inference for catalog photos runs on a RunPod GPU, serving `Qwen/Qwen2.5-VL-7B-Instruct` with vLLM.
+- **Integration:** the app calls the pod's OpenAI-compatible API using `RUNPOD_VISION_URL` and `RUNPOD_API_KEY`.
+- **Cost control:** the pod is stopped when not in use.
+
+```bash
+curl https://<pod-id>-8000.proxy.runpod.net/v1/models -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
+
+## Challenges & Learnings
+
+- A vLLM template sized for a 48 GB GPU ran out of memory on a 24 GB card; lowering the context length or moving to a larger GPU fixed it.
+- The vision model only reports a price when OCR also finds the same digits, so many catalog items arrive without prices and need an owner to fill them in.
+- Telegram, licence and database settings differ between the Replit workspace and the deployment, which cost time to debug.
+- Honest limits: no stock tracking (replies say "listed", not "in stock"); quotes for catalog items need the owner to confirm bulk pricing; WhatsApp is untested against Meta; ILMU speech and extraction prompts are not yet validated on real Manglish audio; OCR accuracy on real receipts is unmeasured; all data is synthetic; single-process deployment with no failover; the PDPA obligations in `docs/privacy-and-breach-runbook.md` are not yet in place for real customers.
+
+## Future Improvements
+
+- [ ] Connect WhatsApp through Meta and verify the webhook
+- [ ] Per-size prices and quantity tiers on catalog items
+- [ ] Time real owners on manual versus LARIS quotes to measure minutes saved
+- [ ] Stock levels so availability replies can say "in stock"
 
 ## Team
 
 | Name | Role | GitHub |
 |---|---|---|
-| [TEAM MEMBER 1] | [ROLE] | [@handle] |
-| [TEAM MEMBER 2] | [ROLE] | [@handle] |
-| [TEAM MEMBER 3] | [ROLE] | [@handle] |
+| Harrish Govind a/l Sethulingam | Team Leader | [TO ADD] |
+| [TO ADD] | [TO ADD] | [TO ADD] |
+| [TO ADD] | [TO ADD] | [TO ADD] |
+| [TO ADD] | [TO ADD] | [TO ADD] |
+
+## Submission Checklist
+
+- [x] Team name, domain and SDG track filled in
+- [ ] Slide deck link added
+- [ ] Demo video link added
+- [x] Replit used, with proof of use in `submission/`
+- [x] RunPod used, with proof of use in `submission/`
+- [ ] Preliminary submission (`SDC2026_SparkSurge_Preliminary.pdf`) added to `submission/`
+- [x] Technology declaration in `submission/`
+- [x] Submission files renamed with the team name
+- [ ] "How to Run" steps verified on a clean machine
+- [x] No API keys or secrets committed to the repository
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).

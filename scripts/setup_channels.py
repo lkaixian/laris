@@ -27,6 +27,7 @@ def main(a):
         if not a[1].startswith("https://"):
             sys.exit("Telegram only accepts https URLs")
         print(telegram.set_webhook(a[1], os.environ["TELEGRAM_WEBHOOK_SECRET"]))
+        print(telegram.set_commands())  # the Menu button
     elif cmd == "telegram-info":
         i = telegram.webhook_info()
         print({k: i.get(k) for k in ("url", "pending_update_count", "last_error_date", "last_error_message")})

@@ -1028,3 +1028,13 @@ def test_app_token_demo_is_single_tenant(env, monkeypatch):
     u2 = e.sql("insert into users(tenant_id, name, role) values (%s,'Zed','owner') returning id", (t2,))[0]["id"]
     assert e.c.get("/api/me", headers={**A, "X-Role": "owner", "X-User": e.owner}).status_code == 200
     assert e.c.get("/api/me", headers={**A, "X-Role": "owner", "X-User": str(u2)}).status_code == 401
+
+
+def test_telegram_start_replies_with_help_and_records_nothing(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", TG_SECRET)
+    n = e.sql("select count(*) n from enquiries")[0]["n"]
+    upd = {"update_id": 9, "message": {"message_id": 9, "date": 1700000000, "chat": {"id": 5151}, "text": "/start"}}
+    assert e.c.post("/webhooks/telegram", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": TG_SECRET}).status_code == 200
+    assert e.svc.sent[-1][:2] == ("telegram", "5151") and "how much" in e.svc.sent[-1][2]
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == n

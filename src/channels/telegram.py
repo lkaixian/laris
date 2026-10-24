@@ -104,6 +104,17 @@ def set_webhook(url, secret, *, client=None, token=None) -> dict:
     return r.json()
 
 
+COMMANDS = [{"command": "start", "description": "How to use this bot"}, {"command": "help", "description": "What you can send"},
+            {"command": "catalog", "description": "Staff: caption a product photo with this"}]
+
+
+def set_commands(*, client=None, token=None) -> dict:
+    """The blue Menu button next to the message box."""
+    r = (client or httpx.Client(timeout=20)).post(_api("setMyCommands", token), json={"commands": COMMANDS})
+    _ok(r, "setMyCommands")
+    return r.json()
+
+
 def webhook_info(*, client=None, token=None) -> dict:
     r = (client or httpx.Client(timeout=20)).get(_api("getWebhookInfo", token))
     _ok(r, "getWebhookInfo")

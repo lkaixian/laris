@@ -338,6 +338,19 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if (/^\/(signup|password\/(forgot|reset))/.test(p)) { const r = mockPublic(method, p, body); if (r !== undefined) return r }
   if (p.startsWith('/license')) { const r = mockLicense(method, p, owner, body); if (r !== undefined) return r }
   if (method !== 'GET' && licBlocked() && !p.startsWith('/me')) throw new ApiError(402, 'license_required', 'Your licence is missing or expired, so changes are not allowed.')
+  if (method === 'GET' && p === '/system/health') {  // ?health=ok|info|warn|critical|fail (default warn)
+    need()
+    const k = Q.get('health') ?? 'warn'
+    if (k === 'fail') throw new ApiError(500, 'internal', 'Internal error')
+    const all = [
+      { level: 'critical', code: 'database_backup_missing', message: 'No database backup has run in 7 days.', fix: 'Run scripts/backup.sh or schedule it, then check again.' },
+      { level: 'warn', code: 'email_off', message: 'Email is not set up, so sign-up codes and invitations are not sent.', fix: 'Set MAILTRAP_API_TOKEN in the server environment and restart.' },
+      { level: 'info', code: 'whatsapp_unmapped', message: 'WhatsApp is not connected.', fix: 'Open Settings, Channels and enter your WhatsApp phone number ID.' },
+    ]
+    const rank = ['info', 'warn', 'critical']
+    const items = k === 'ok' ? [] : all.filter(i => rank.indexOf(i.level) <= rank.indexOf(k))
+    return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items }
+  }
   if (p === '/me') {
     const r = roleOf(role)!
     return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: permsOf(r), name: who,

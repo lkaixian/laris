@@ -110,7 +110,7 @@ let lastPerms = 0
 const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
 // Pages that need a permission. Team, Roles and Settings are owner-class only (docs/roles.md, "Owner only, not assignable").
 const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings'].includes(route) ? owner : !NEED[route] || can(NEED[route])
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status'].includes(route) ? owner : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
@@ -177,7 +177,7 @@ const licence402 = (e: unknown) => { if (e instanceof ApiError && e.status === 4
 
 
 // ---- request core: one place for timeout, retry, the error envelope ({error:{code,message,request_id,fields?}} + X-Request-Id) and the 5xx toast.
-export interface ReqOpts { timeoutMs?: number; signal?: AbortSignal }
+export interface ReqOpts { timeoutMs?: number; signal?: AbortSignal; quiet?: boolean }
 const sleep = (ms: number, s?: AbortSignal) => new Promise<void>((res, rej) => { const t = setTimeout(res, ms); s?.addEventListener('abort', () => { clearTimeout(t); rej(s.reason) }, { once: true }) })
 const mockQ = (k: string) => new URLSearchParams(location.search).get(k)  // mock-only test switches (docs/ux-refactor.md)
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)

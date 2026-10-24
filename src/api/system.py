@@ -3,7 +3,7 @@ import os
 
 from fastapi import APIRouter, Depends
 
-from .. import scheduler
+from .. import health, scheduler
 from .deps import Ctx, read_ctx, reply, require_owner
 
 r = APIRouter(prefix="/api")
@@ -15,3 +15,10 @@ def scheduler_status(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
     st = scheduler.status()
     return reply(ctx, {"enabled": os.environ.get("SCHEDULER") == "1", "last_run": st["at"], "ok": st["ok"], "errors": st["errors"], "last_error": st["last_error"]})
+
+
+@r.get("/system/health")
+def health_status(ctx: Ctx = Depends(read_ctx)):
+    """Owner-only list of things that need attention (setup gaps, risks), worst first."""
+    require_owner(ctx)
+    return reply(ctx, health.report(ctx))

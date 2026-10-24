@@ -40,6 +40,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'team', label: 'Team', icon: 'team' },
     { key: 'roles', label: 'Roles', icon: 'roles' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
+    { key: 'status', label: 'System status', icon: 'warn' },
     { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
   ] },
 ]

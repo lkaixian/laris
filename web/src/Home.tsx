@@ -39,7 +39,7 @@ function GetStarted({ d, owner }: { d: Dash; owner: boolean }) {
   if (hidden || (owner && (settings.loading || users.loading))) return null
   const quoteHref = can('upload_documents') ? '#/tracker/upload' : canOpen('ask', owner) ? '#/ask' : ''
   const steps: { text: string; hint: string; href: string; done: boolean }[] = [
-    { text: 'Add a supplier', hint: 'Suppliers are who you buy from and ask for prices.', href: '#/contacts/new', done: d.contacts.suppliers > 0 },
+    ...(can('edit_supplier_contacts') ? [{ text: 'Add a supplier', hint: 'Suppliers are who you buy from and ask for prices.', href: '#/contacts/new', done: d.contacts.suppliers > 0 }] : []),
     ...(quoteHref ? [{ text: 'Upload or ask for a quote', hint: 'Upload a supplier quote, or photograph an item and ask suppliers.', href: quoteHref, done: d.recent_documents.length > 0 || d.open_quotes > 0 }] : []),
     ...(owner ? [
       { text: 'Set your organisation details', hint: 'Address and registration numbers are printed on your quotes.', href: '#/settings', done: !!(settings.data?.address || settings.data?.ssm_no || settings.data?.bank_details) },
@@ -85,7 +85,7 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
         {can('upload_documents') && <Quick href="#/tracker/upload" icon="upload" primary>Upload quote</Quick>}
         {canOpen('ask', owner) && <Quick href="#/ask" icon="ask">Ask suppliers</Quick>}
         {canUpload(me) && <Quick href="#/catalog" icon="camera">Catalog photo</Quick>}
-        <Quick href="#/contacts/new" icon="plus">New contact</Quick>
+        {can('manage_contacts') && <Quick href="#/contacts/new" icon="plus">New contact</Quick>}
       </div>
       <Async s={s} empty={false} rows={4} shape="cards">
         {d && <>
@@ -96,8 +96,8 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
               <Stat title="Documents to review" value={d.needs_review} href="#/tracker/review" warn={d.needs_review > 0} />
               <Stat title="Open quotes" value={d.open_quotes} href="#/tracker/open" />
               {owner && <Stat title="Quotes hit by a cost rise" value={d.stale_quotes ?? 0} href="#/alerts" warn={(d.stale_quotes ?? 0) > 0}
-                hint={d.stale_quotes ? `Margin down ${rm(String(Math.abs(Number(d.stale_margin_lost))))}` : undefined} />}
-              {owner && <Stat title="Waiting for a reply" value={d.followups_pending ?? 0} href="#/alerts/followups" warn={(d.followups_pending ?? 0) > 0} />}
+                hint={d.stale_quotes ? `Margin down ${rm(String(Math.abs(Number(d.stale_margin_lost) || 0)))}` : undefined} />}
+              {can('manage_followups') && <Stat title="Waiting for a reply" value={d.followups_pending ?? 0} href="#/followups" warn={(d.followups_pending ?? 0) > 0} />}
             </div>
           </section>
 
@@ -143,7 +143,7 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             <section aria-labelledby="rc">
               <h2 id="rc" className="mb-2 text-lg font-semibold">Recently active contacts</h2>
-              {d.recent_contacts.length === 0 ? <EmptyState title="No activity yet." hint="Contacts show up here once you exchange documents with them." action={{ label: 'Add a contact', href: '#/contacts/new' }} /> : (
+              {d.recent_contacts.length === 0 ? <EmptyState title="No activity yet." hint="Contacts show up here once you exchange documents with them." action={can('manage_contacts') ? { label: 'Add a contact', href: '#/contacts/new' } : undefined} /> : (
                 <ul className="divide-y divide-soft rounded-ui border border-soft bg-surface">
                   {d.recent_contacts.map(c => (
                     <li key={c.id}><a className="row" href={`#/contact/${c.id}`}>

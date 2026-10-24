@@ -46,6 +46,7 @@
 
 @layer components {
   .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:cursor-wait aria-disabled:opacity-50; }
+  .btn[data-locked] { @apply cursor-not-allowed; }
   /* --brand, --brand-hover, --on-brand are set from the organisation colour (applyBrand in ui.tsx); unset keeps the accent. */
   .btn-primary { border-color: var(--brand, var(--accent)); background-color: var(--brand, var(--accent)); color: var(--on-brand, var(--on-accent)); }
   .btn-primary:hover { border-color: var(--brand-hover, var(--accent-hover)); background-color: var(--brand-hover, var(--accent-hover)); }

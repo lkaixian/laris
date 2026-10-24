@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Ref } from 'react'
-import { api, can, download, MOCK } from './api'
+import { api, can, download, MOCK, needs, why } from './api'
 import type { DocSummary } from './api'
 import { useWriteGate } from './Licence'
 import { Async, EmptyState, PageHeader, Status, TableRegion, msg, rm, useFetch } from './ui'
@@ -24,20 +24,25 @@ const empty = { role: 'customer' as Kind, name: '', contact: '', email: '', atte
 type Form = typeof empty
 const clean = (f: Partial<Form>) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, typeof v === 'string' ? v.trim() || null : v]))
 
-function Fields({ f, set, kind, kindRef }: { f: Form; set: (f: Form) => void; kind: boolean; kindRef?: Ref<HTMLSelectElement> }) {
-  const t = (k: keyof Form, name: string, extra = '') => (
+// lock: the person may not change a supplier's name or number (needs edit_supplier_contacts). Those two fields show as read-only text with the reason.
+function Fields({ f, set, kind, kindRef, lock }: { f: Form; set: (f: Form) => void; kind: boolean; kindRef?: Ref<HTMLSelectElement>; lock?: boolean }) {
+  const t = (k: keyof Form, name: string, extra = '', locked = false) => (
     <label className={`flex flex-col gap-1 text-sm font-semibold ${extra}`}>{name}
-      <input className="input font-normal" value={f[k]} onChange={e => set({ ...f, [k]: e.target.value })} /></label>
+      <input className="input font-normal read-only:bg-soft" value={f[k]} onChange={e => set({ ...f, [k]: e.target.value })} {...(locked ? { readOnly: true, title: why('edit_supplier_contacts'), 'aria-describedby': 'sup-lock' } : {})} /></label>
   )
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {kind && (
         <label className="flex flex-col gap-1 text-sm font-semibold">Type
-          <select ref={kindRef} className="input font-normal" value={f.role} onChange={e => set({ ...f, role: e.target.value as Kind })}>
-            {(Object.keys(KIND_ONE) as Kind[]).map(k => <option key={k} value={k}>{KIND_ONE[k]}</option>)}</select></label>
+          <select ref={kindRef} className="input font-normal" value={f.role} aria-describedby={can('edit_supplier_contacts') ? undefined : 'kind-why'} onChange={e => set({ ...f, role: e.target.value as Kind })}>
+            {(Object.keys(KIND_ONE) as Kind[]).map(k => k === 'supplier' && !can('edit_supplier_contacts')
+              ? <option key={k} value={k} disabled>{KIND_ONE[k]} (needs permission)</option>
+              : <option key={k} value={k}>{KIND_ONE[k]}</option>)}</select>
+          {!can('edit_supplier_contacts') && <span id="kind-why" className="text-xs font-normal text-muted">{why('edit_supplier_contacts')} to add a supplier.</span>}</label>
       )}
-      {t('name', 'Name')}
-      {t('contact', 'WhatsApp or Telegram number')}
+      {lock && <p id="sup-lock" className="text-sm text-muted sm:col-span-2">{why('edit_supplier_contacts')} to change a supplier&apos;s name or number. The other details can be changed.</p>}
+      {t('name', 'Name', '', lock)}
+      {t('contact', 'WhatsApp or Telegram number', '', lock)}
       {t('email', 'Email')}
       {t('attention', 'Person to contact')}
       {t('ssm_no', 'SSM number (company registration)')}
@@ -61,7 +66,7 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
   const [applied, setApplied] = useState(initialQuery || saved.q)
   useEffect(() => { const t = setTimeout(() => setApplied(q), 250); return () => clearTimeout(t) }, [q])
   const s = useFetch<Contact[]>(`/contacts?q=${encodeURIComponent(applied)}${kind ? `&role=${kind}` : ''}`)
-  const [adding, setAdding] = useState(arg === 'new')
+  const [adding, setAdding] = useState(arg === 'new' && can('manage_contacts'))
   const [f, setF] = useState<Form>(empty)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -84,7 +89,7 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       <PageHeader title="Contacts" description="Customers, suppliers and contractors in one place. Chat numbers saved here are how LARIS recognises who is writing."
         actions={<>
           {can('export_data') && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
-          <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...gate(() => setAdding(!adding))}>Add contact</button>
+          <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...(can('manage_contacts') ? gate(() => setAdding(!adding)) : needs('manage_contacts'))}>Add contact</button>
         </>} />
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-semibold">Search contacts
@@ -105,7 +110,7 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       <p role="status" className="sr-only">{s.data ? `${n} ${n === 1 ? 'contact' : 'contacts'} found` : ''}</p>
       <Async s={s} rows={6} empty={!n} emptyText={filtered ? 'No contact matches.' : 'No contacts yet.'}
         emptyHint={filtered ? 'Try fewer words or another type.' : 'Add your first supplier or customer. Saved chat numbers let LARIS recognise who is writing.'}
-        emptyAction={filtered ? { label: 'Clear search', onClick: () => { setQ(''); setApplied(''); setKind('') } } : { label: 'Add the first contact', onClick: () => setAdding(true) }}>
+        emptyAction={filtered ? { label: 'Clear search', onClick: () => { setQ(''); setApplied(''); setKind('') } } : can('manage_contacts') ? { label: 'Add the first contact', onClick: () => setAdding(true) } : undefined}>
         <ul className="grid gap-2 md:grid-cols-2">
           {s.data?.map(c => (
             <li key={c.id}>
@@ -146,7 +151,9 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
     if (busy) return
     if (!f.name.trim()) return setErr('A contact needs a name.')
     setErr(''); setBusy(true)
-    const { role: _role, ...body } = clean(f) as Form
+    const { role: _role, ...body0 } = clean(f) as Form
+    const body: Partial<Form> = { ...body0 }
+    if (c?.role === 'supplier' && !can('edit_supplier_contacts')) { delete body.name; delete body.contact }  // not ours to change: the server would answer 403
     try { await api('POST', `/contacts/${id}`, body); setEditing(false); toast('Contact saved.'); s.reload() } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   const row = (k: string, v: string | null) => v ? <div><dt className="text-sm text-muted">{k}</dt><dd>{v}</dd></div> : null
@@ -158,10 +165,10 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
           <PageHeader back={{ href: '#/contacts', label: 'Back to contacts' }} title={c.name}
             meta={<><span className="badge">{KIND_ONE[c.role]}</span>
               <span className="text-muted">{c.documents} {c.documents === 1 ? 'document' : 'documents'}{owner && c.value && Number(c.value) > 0 ? ` · ${rm(c.value)} in total` : ''}</span></>}
-            actions={!editing && <button type="button" className="btn" onClick={start}>Edit {c.name}</button>} />
+            actions={!editing && <button type="button" className="btn" {...needs('manage_contacts', start)}>Edit {c.name}</button>} />
           {editing ? (
             <form className="card mt-3 grid gap-3" onSubmit={e => { e.preventDefault(); save() }} aria-label="Edit contact">
-              <Fields f={f} set={setF} kind={false} />
+              <Fields f={f} set={setF} kind={false} lock={c.role === 'supplier' && !can('edit_supplier_contacts')} />
               {err && <p role="alert" className="text-sm text-warn">{err}</p>}
               <div className="flex gap-2"><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save changes'}</button>
                 <button type="button" className="btn" onClick={() => setEditing(false)}>Cancel</button></div>

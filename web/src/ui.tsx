@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, ApiError } from './api'
+import { api, ApiError, DENIED } from './api'
 import type { Me } from './api'
 import { Icon } from './icons'
 
 // ---------- helpers ----------
-export const rm = (s: string | null) => (s === null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+export const rm = (s: string | null | undefined) => (s == null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 export const label = (s: string) => s.replace(/_/g, ' ')
-const errText = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+const errText = (e: unknown) => (e instanceof ApiError && e.status === 403 && (e.code === 'permission_required' || e.code === 'owner_only') ? DENIED : e instanceof Error ? e.message : 'Something went wrong.')
 // Text for putting an error in front of the user; marks it shown so api.ts does not also raise the global error toast for it.
 export const msg = (e: unknown) => { if (e instanceof ApiError) e.shown = true; return errText(e) }
 export const REVIEWABLE = ['received', 'parsed'] // 'in' statuses where the API still allows line edits (src/api/routes.py)
@@ -40,8 +40,7 @@ export function useAction() {
     setBusy(true); setErr(undefined)
     try { await fn() } catch (e) {
       const ai = e instanceof ApiError && e.code === 'ilmu_unavailable'
-      const denied = e instanceof ApiError && e.code === 'permission_required'
-      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : denied ? 'Your role does not allow this. Ask the owner to change your role.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
+      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
       if (e instanceof ApiError) e.shown = true
     } finally { setBusy(false) }
   }

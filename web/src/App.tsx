@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, can, canOpen, ApiError } from './api'
+import { api, download, resolveMe, getRole, setRole, MOCK, NEXT, authConfig, getToken, getAccount, can, canOpen, needs, why, ApiError } from './api'
 import type { License } from './api'
 import Login from './Login'
 import { Register, Forgot } from './Signup'
@@ -12,6 +12,7 @@ import { ToastProvider, useToast } from './Toast'
 import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
 import { RolesView } from './Roles'
+import { ChannelsCard } from './Channels'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
@@ -106,6 +107,7 @@ function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: bool
   const [formErr, setFormErr] = useState('')
   const a = useAction()
   const submit = () => {
+    if (!can('manage_contacts')) return
     if (!text.trim()) return setFormErr('Type the customer enquiry first.')
     setFormErr('')
     a.run(async () => {
@@ -126,7 +128,8 @@ function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: bool
           <textarea id="enquiry-text" className="input min-h-24 py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
         </label>
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
-        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Pricing the enquiry...' : 'Create draft quote from enquiry'}</button></div>
+        {!can('manage_contacts') && <p id="sim-why" className="text-sm text-muted">{why('manage_contacts')} to create a draft quote from an enquiry.</p>}
+        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined} {...(can('manage_contacts') ? {} : { ...needs('manage_contacts'), 'aria-describedby': 'sim-why' })}>{a.busy ? 'Pricing the enquiry...' : 'Create draft quote from enquiry'}</button></div>
       </form>
       <ActionError err={a.err} onRetry={submit} label="Retry pricing the enquiry" />
     </details>
@@ -202,8 +205,12 @@ function cell(f: Field, v: unknown): ReactNode {
 }
 
 function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: (n: number) => void }) {
+  // `edit` = the document is still reviewable; the permission only decides whether the inputs are there (the server stays the authority).
+  const editable = edit && can('upload_documents')
+  const priceEdit = editable && can('view_costs') && l.unit_price !== null
   const [key, setKey] = useState(l.item_key ?? '')
   const [qty, setQty] = useState(l.qty ? String(Number(l.qty)) : '')
+  const [price, setPrice] = useState(l.unit_price !== null ? String(Number(l.unit_price)) : '')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const errId = `line-err-${l.id}`
@@ -212,7 +219,8 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
     if (busy) return
     setBusy(true); setErr('')
     try {
-      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty })
+      const changed = priceEdit && price !== '' && Number(price) !== Number(l.unit_price)
+      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty, ...(changed ? { unit_price: price } : {}) })
       onSaved(l.line_no)
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
@@ -228,15 +236,17 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
         {err && <p id={errId} role="alert" className="text-xs text-warn">{err}</p>}
       </td>
       <td>
-        {edit ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} {...bad} /> : l.item_key ?? <span className="text-muted">Not set</span>}
+        {editable ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} {...bad} /> : l.item_key ?? <span className="text-muted">Not set</span>}
       </td>
       <td>
-        {edit ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} {...bad} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
+        {editable ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} {...bad} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
       </td>
       <td>{l.uom}</td>
-      <td>{showPrice ? rm(l.unit_price) : <span className="text-muted">Hidden for staff</span>}</td>
+      <td>{!showPrice ? <span className="text-muted">Hidden for staff</span>
+        : priceEdit ? <input className="input w-28" type="number" min="0" step="any" inputMode="decimal" aria-label={`Unit cost for line ${l.line_no}`} value={price} onChange={e => setPrice(e.target.value)} {...bad} />
+        : rm(l.unit_price)}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
-      {edit && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? 'Saving...' : `Save line ${l.line_no}`}</button></td>}
+      {editable && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? 'Saving...' : `Save line ${l.line_no}`}</button></td>}
     </tr>
   )
 }
@@ -296,7 +306,8 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
             <div className="min-w-0 lg:order-1">
             <h2 className="mb-1 text-lg font-semibold">Lines</h2>
-            {edit && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. The item key is a short code that links the line to your cost book, for example acrylic_3mm_sheet. Lines marked Needs review are unclear on the source document.</p>}
+            {edit && !can('upload_documents') && <p className="mb-2 text-sm text-muted">{why('upload_documents')} to edit these lines. You can read them here.</p>}
+            {edit && can('upload_documents') && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. The item key is a short code that links the line to your cost book, for example acrylic_3mm_sheet. Lines marked Needs review are unclear on the source document.</p>}
             {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
             {d.lines.length === 0 ? <p className="card text-muted">This document has no lines.</p> : (
               <TableRegion label="Lines">
@@ -306,7 +317,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                     <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col">Qty</th><th scope="col">Unit</th>
                     <th scope="col">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
-                    {edit && <th scope="col">Action</th>}
+                    {edit && can('upload_documents') && <th scope="col">Action</th>}
                   </tr></thead>
                   <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { toast(`Line ${n} saved.`); s.reload() }} />)}</tbody>
                 </table>
@@ -326,7 +337,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                   </label>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {actions.filter(a => !a.owner || owner).map(a => (
-                      <button key={a.to} aria-disabled={!!busy || undefined} onClick={() => move(a.to)} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{busy === a.to ? 'Working...' : a.label}</button>
+                      <button key={a.to} aria-disabled={!!busy || undefined} {...(a.owner ? { onClick: () => move(a.to) } : needs('upload_documents', () => move(a.to)))} className={`btn ${a.primary ? 'btn-primary' : ''} ${a.danger ? 'btn-danger' : ''}`}>{busy === a.to ? 'Working...' : a.label}</button>
                     ))}
                   </div>
                 </>
@@ -382,15 +393,15 @@ function Report() {
   return (
     <section className="mb-8" aria-labelledby="wk">
       <h2 id="wk" className="mb-2 text-base font-semibold">Last 7 days</h2>
-      <Async s={s} empty={!r || r.quotes === 0} emptyText="No quotes were created in the last 7 days.">
+      <Async s={s} empty={!r || !r.quotes} emptyText="No quotes were created in the last 7 days.">
         {r && <>
           <dl className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {([['Quotes', String(r.quotes)], ['Quoted', rm(r.revenue)], ['Margin', `${rm(r.margin)}${r.margin_pct !== null ? ` (${r.margin_pct}%)` : ''}`],
-               ['Won / lost', `${r.won} / ${r.lost}`]] as const).map(([k, v]) => (
+            {([['Quotes', String(r.quotes ?? 0)], ['Quoted', rm(r.revenue)], ['Margin', `${rm(r.margin)}${r.margin_pct != null ? ` (${r.margin_pct}%)` : ''}`],
+               ['Won / lost', `${r.won ?? 0} / ${r.lost ?? 0}`]] as const).map(([k, v]) => (
               <div key={k} className="card"><dt className="text-sm text-muted">{k}</dt><dd className="text-lg font-semibold">{v}</dd></div>
             ))}
           </dl>
-          {r.lowest_margin.length > 0 && <p className="mt-2 text-sm">Thinnest margin: {r.lowest_margin.map((q, i) => (
+          {(r.lowest_margin?.length ?? 0) > 0 && <p className="mt-2 text-sm">Thinnest margin: {r.lowest_margin!.map((q, i) => (
             <span key={q.quote_id}>{i > 0 && ', '}<a className="link" href={`#/doc/${q.quote_id}`}>{q.quote_no}</a> ({q.margin_pct ?? 'n/a'}%)</span>))}</p>}
         </>}
       </Async>
@@ -414,6 +425,7 @@ function JobsView() {
   return (
     <>
       <PageHeader title="Jobs" description={'Created when a customer accepts a quote ("Sign and create job" on the quote).'} />
+      {!can('manage_contacts') && <p className="mb-2 text-sm text-muted">{why('manage_contacts')} to move jobs. You can see the board.</p>}
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <Async s={s} rows={3} shape="cards" empty={!s.data?.length} emptyText="No jobs yet." emptyHint="A job appears when a customer accepts a quote and it is signed." emptyAction={{ label: 'Open the tracker', href: '#/tracker/open' }}>
         <div className="grid gap-4 md:grid-cols-3">
@@ -430,7 +442,7 @@ function JobsView() {
                       <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {JOB_COLS.filter(c => c[0] !== st).map(([to, label]) => (
-                          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} onClick={() => move(j, to)}>{busy === `${j.id}:${to}` ? 'Moving...' : `Move ${j.quote_no} to ${label}`}</button>
+                          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} {...needs('manage_contacts', () => move(j, to))}>{busy === `${j.id}:${to}` ? 'Moving...' : `Move ${j.quote_no} to ${label}`}</button>
                         ))}
                       </div>
                     </li>
@@ -592,12 +604,13 @@ function SettingsView({ owner }: { owner: boolean }) {
           </form>
         )}
       </Async>
+      <ChannelsCard />
     </>
   )
 }
 
 function Followups() {
-  const s = useFetch<Followup[]>('/followups')
+  const s = useFetch<Followup[]>(can('manage_followups') ? '/followups' : null)  // no permission: no request (the page is not reachable then anyway)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')  // "<id>:<action>" while that call runs
   const toast = useToast()
@@ -608,9 +621,8 @@ function Followups() {
     catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   return (
-    <section id="followups" className="mt-10 scroll-mt-20 border-t border-soft pt-6" aria-labelledby="fu">
-      <h2 id="fu" className="text-base font-semibold">Quotes waiting for a reply</h2>
-      <p className="mb-2 text-sm text-muted">No answer after the follow-up window. Read the message, then send it or skip. Nothing is sent without you.</p>
+    <section id="followups" aria-label="Quotes waiting for a reply">
+      <PageHeader title="Follow-ups" description="Quotes with no answer after the follow-up window. Read the message, then send it or skip. Nothing is sent without you." />
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <Async s={s} rows={2} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up." emptyHint="When a customer has not answered after the follow-up window, the quote shows up here.">
         <ul className="grid gap-2 md:grid-cols-2">
@@ -671,15 +683,14 @@ function Proposals() {
   )
 }
 
-function AlertsView({ arg }: { arg?: string }) {
+function AlertsView() {
   const s = useFetch<Alert[]>('/alerts/stale-costs')
-  useEffect(() => { if (arg === 'followups') requestAnimationFrame(() => document.getElementById('followups')?.scrollIntoView({ block: 'start' })) }, [arg])
   const n = s.data?.length ?? 0
-  const lost = (s.data ?? []).reduce((a, x) => a + Number(x.margin_delta), 0)
+  const lost = (s.data ?? []).reduce((a, x) => a + (Number(x.margin_delta) || 0), 0)
   return (
     <>
       <PageHeader title="Stale-cost alerts" description="Quotes still open whose supplier cost has risen since pricing. Nothing is re-priced automatically." />
-      {can('view_reports') && <Report />}
+      {can('view_reports') && can('view_costs') && <Report />}
       <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
       <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost." emptyHint="You will see a quote here if a supplier raises a price after you quoted.">
         <ul className="grid gap-2">
@@ -688,14 +699,13 @@ function AlertsView({ arg }: { arg?: string }) {
               <div className="min-w-0 flex-1 basis-64">
               <p className="font-semibold"><a className="link" href={`#/doc/${a.quote_id}`}>{a.quote_no}</a> <span className="font-normal">for {a.customer}</span></p>
               <p className="mt-1 text-sm">{a.item_key}: cost {rm(a.old_cost)} to {rm(a.current_cost)}</p>
-              <p className="mt-2 flex flex-wrap items-center gap-2"><span className="badge badge-warn">Margin down {rm(String(Math.abs(Number(a.margin_delta))))}</span><Status v={a.status} /></p>
+              <p className="mt-2 flex flex-wrap items-center gap-2"><span className="badge badge-warn">Margin down {rm(String(Math.abs(Number(a.margin_delta) || 0)))}</span><Status v={a.status} /></p>
               </div>
               <a className="btn" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
             </li>
           ))}
         </ul>
       </Async>
-      <Followups />
       <Proposals />
     </>
   )
@@ -752,7 +762,8 @@ function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => <><PageHeader title="Page not found" /><EmptyState title="That page does not exist." action={{ label: 'Open the tracker', href: '#/tracker' }} /></>
 const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }> = {
   home: { title: 'Home', render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
-  alerts: { title: 'Stale-cost alerts', render: c => <AlertsView arg={c.arg} /> },
+  alerts: { title: 'Stale-cost alerts', render: () => <AlertsView /> },
+  followups: { title: 'Follow-ups', render: () => <Followups /> },
   tracker: { title: 'Quote tracker', render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },
   contacts: { title: 'Contacts', render: c => <ContactsView owner={can('view_costs')} arg={c.arg} /> },
   contact: { title: 'Contact', render: c => c.arg ? <ContactDetail id={c.arg} owner={can('view_costs')} /> : <NotFound /> },
@@ -854,12 +865,14 @@ function AppShell() {
   }, [role, tries, gate])
   const owner = role === 'owner'
   const [, page, arg] = hash.split('/')
-  const route = (page || 'home').split('?')[0]  // '#/invite?token=...' is route 'invite'
+  const route0 = (page || 'home').split('?')[0]  // '#/invite?token=...' is route 'invite'
+  const route = route0 === 'alerts' && arg === 'followups' ? 'followups' : route0  // the old #/alerts/followups link opens the Follow-ups page
   useEffect(() => applyBrand(me?.org), [me?.org])
   // Branding saved on the Settings page: re-read /me without blanking the page.
   useEffect(() => {
     const h = () => resolveMe(role).then(setMe, () => undefined)
-    addEventListener('laris:branding', h); return () => removeEventListener('laris:branding', h)
+    addEventListener('laris:branding', h); addEventListener('laris:perms', h)  // a 403 may mean the role changed: re-read /me (permissions)
+    return () => { removeEventListener('laris:branding', h); removeEventListener('laris:perms', h) }
   }, [role])
   // On navigation: back to a list from a document restores its scroll position, any other route change starts at the top; focus goes to the page heading.
   const firstNav = useRef(true)

@@ -40,9 +40,10 @@ export interface Field {
 }
 export interface Followup { id: string; document_id: string; doc_no: string; customer: string; status: Status; due_at: string; reason: string; suggested_text: string | null }
 export interface MarginReport {
-  days: number; quotes: number; revenue: string; cost: string; margin: string; margin_pct: string | number | null
-  won: number; lost: number; stale_quotes: number; stale_margin_lost: string
-  lowest_margin: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
+  // cost, margin, margin_pct, stale_quotes, stale_margin_lost and lowest_margin are scrubbed without view_costs: treat them as maybe missing
+  days: number; quotes: number; revenue: string; cost?: string; margin?: string; margin_pct?: string | number | null
+  won: number; lost: number; stale_quotes?: number; stale_margin_lost?: string
+  lowest_margin?: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
 }
 export interface Job { id: string; status: 'todo' | 'doing' | 'done'; quote_id: string; quote_no: string; customer: string; total: string; summary: string | null }
 export interface Settings { display_name?: string | null; brand_color?: string | null; logo_data_url?: string | null; min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null }
@@ -86,8 +87,23 @@ export async function resolveMe(r: Role): Promise<Me> {
 // Permissions of the signed-in person, from GET /api/me. UI only: the server answers 403 permission_required either way.
 let perms: string[] = []
 export const can = (k: string) => perms.includes(k)
+// The ONE map of permission key -> label (same wording as the server catalog, GET /api/roles). Add a key here when you gate a control on it.
+export const PERM_LABEL: Record<string, string> = {
+  view_costs: 'See costs and prices', view_reports: 'See the margin report', edit_supplier_contacts: 'Edit supplier contacts', manage_contacts: 'Manage contacts',
+  upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
+  export_data: 'Export data', view_audit: 'See the activity log',
+}
+export const why = (k: string) => `Needs the “${PERM_LABEL[k] ?? k}” permission`
+// Spread on a button: `<button {...needs('manage_contacts', onClick)}>`. Without the permission it is aria-disabled, explains why in its title and does nothing.
+// Courtesy only: the server answers 403 either way.
+export const needs = (k: string, onClick?: () => void) => can(k) ? { onClick } : { 'aria-disabled': true as const, title: why(k), 'data-locked': true as const }
+export const DENIED = 'You do not have permission to do that. Ask the owner.'
+const isDenied = (e: unknown) => e instanceof ApiError && e.status === 403 && (e.code === 'permission_required' || e.code === 'owner_only')
+// A 403 may mean the role changed since /me was read: ask the shell to re-read it, at most once every 10 s.
+let lastPerms = 0
+const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
 // Pages that need a permission. Team, Roles and Settings are owner-class only (docs/roles.md, "Owner only, not assignable").
-const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers' }
+const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
 export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings'].includes(route) ? owner : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
@@ -234,7 +250,7 @@ export const publicApi = <T,>(method: 'GET' | 'POST', path: string, body?: unkno
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 const call = <T,>(method: Method, path: string, r: Role, body: unknown, withUser: boolean, opts?: ReqOpts): Promise<T> =>
-  request<T>(method, path, { ...opts, body, auth: true, user: withUser, role: r }).catch(e => { licence402(e); throw e })
+  request<T>(method, path, { ...opts, body, auth: true, user: withUser, role: r }).catch(e => { licence402(e); denied403(e); throw e })
 
 // File download (PDF, xlsx, csv): same identity headers as api(), result saved through a temporary link.
 export async function download(path: string, filename: string, opts?: ReqOpts): Promise<void> {

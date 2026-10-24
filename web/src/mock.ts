@@ -54,6 +54,16 @@ const docs: Record<string, DocDetail> = {
   },
 }
 
+const newIn2 = (supplier: string): DocDetail => ({
+  doc: D('in-2', 'in', 'SAMPLE-A-002', { ...supA, name: supplier }, 'parsed', 140, ago(3), { cost_is_stale: false, needs_review: true }),
+  lines: [
+    L('i2l1', 1, 'SAMPLE acrylic 3mm sheet', 1, 'sheet', 140, { item_key: 'acrylic_3mm_sheet', ocr_confidence: '0.970' }),
+    L('i2l2', 2, 'SAMPLE vinyl roll (quantity unclear on the photo)', null, 'm', 8, { needs_review: true, ocr_confidence: '0.580', attrs_unmapped: { thickness_mm: '3' } }),
+  ],
+  messages: [],
+})
+// ?seed=1 starts with the supplier quote SAMPLE-A-002 already uploaded (status parsed), so line editing can be seen without uploading first.
+if (new URLSearchParams(location.search).get('seed') === '1') docs['in-2'] = newIn2(supA.name)
 const audit: AuditEvent[] = []
 const log = (actor: string, entity_id: string, event: string) => audit.push({ id: audit.length + 1, at: new Date().toISOString(), actor, entity: 'document', entity_id, event })
 log('SAMPLE Staff', 'in-1', 'SAMPLE-A-001: uploaded')
@@ -152,6 +162,12 @@ const roles = [
   { id: 'r-owner', key: 'owner', name: 'Owner', class: 'owner', is_system: true, permissions: CATALOG.map(p => p.key) },
   { id: 'r-staff', key: 'staff', name: 'Staff', class: 'staff', is_system: true, permissions: CATALOG.filter(p => p.default).map(p => p.key) },
 ]
+// Test switches (query before the hash): ?perms=none gives the staff role no permissions at all, ?deny=1 makes every gated write answer 403 permission_required
+// even though /me lists the permissions (shows the 403 handling), ?jobs=1 adds one sample job, ?tenants=one hides the channels warning, ?wa=1 starts with WhatsApp mapped.
+const Q = new URLSearchParams(location.search)
+const permsOf = (r: { key: string; permissions: string[] }) => (Q.get('perms') === 'none' && r.key !== 'owner' ? [] : r.permissions)
+const channels = { wa: Q.get('wa') === '1' ? '60123456789' : null as string | null }
+const jobs = Q.get('jobs') === '1' ? [{ id: 'job-1', status: 'todo', quote_id: 'out-1', quote_no: 'SAMPLE-QT-0001', customer: cust.name, total: money(2400), summary: '40 signboards 60x30' }] : []
 const members = [
   { id: 'sample-owner', name: 'SAMPLE Owner', username: 'owner', role: 'owner', role_id: 'r-owner', role_key: 'owner', role_name: 'Owner', active: true, has_password: true, sessions: 1 },
   { id: 'sample-staff', name: 'SAMPLE Staff', username: 'staff', role: 'staff', role_id: 'r-staff', role_key: 'staff', role_name: 'Staff', active: true, has_password: true, sessions: 0 },
@@ -272,13 +288,15 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   const who = owner ? 'SAMPLE Owner' : 'SAMPLE Staff'
   const need = () => { if (!owner) throw new ApiError(403, 'owner_only', 'owner role required') }
   let m: RegExpMatchArray | null
+  // Server-side permission check for a write route: 403 permission_required without the key (or always with ?deny=1).
+  const perm = (k: string) => { if (Q.get('deny') === '1' || !permsOf(roleOf(role)!).includes(k)) throw new ApiError(403, 'permission_required', `missing permission: ${k}`) }
   if (p.startsWith('/invites')) { const r = mockInvites(method, p, owner, body); if (r !== undefined) return r }
   if (/^\/(signup|password\/(forgot|reset))/.test(p)) { const r = mockPublic(method, p, body); if (r !== undefined) return r }
   if (p.startsWith('/license')) { const r = mockLicense(method, p, owner, body); if (r !== undefined) return r }
   if (method !== 'GET' && licBlocked() && !p.startsWith('/me')) throw new ApiError(402, 'license_required', 'Your licence is missing or expired, so changes are not allowed.')
   if (p === '/me') {
     const r = roleOf(role)!
-    return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: r.permissions, name: who,
+    return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: permsOf(r), name: who,
       org: { name: branding.display_name || 'SAMPLE Signage Works (synthetic)', brand_color: branding.brand_color, logo_url: branding.logo_data_url } }
   }
   if (p === '/me/password' && method === 'POST') return { ok: true }
@@ -304,18 +322,12 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     down(text)
     if (Object.values(docs).some(d => d.doc.doc_no === 'SAMPLE-A-002')) throw new ApiError(409, 'duplicate', 'document SAMPLE-A-002 already recorded for this supplier')
     const supplier = String(body.get('supplier') || supA.name)
-    docs['in-2'] = {
-      doc: D('in-2', 'in', 'SAMPLE-A-002', { ...supA, name: supplier }, 'parsed', 140, ago(3), { cost_is_stale: false, needs_review: true }),
-      lines: [
-        L('i2l1', 1, 'SAMPLE acrylic 3mm sheet', 1, 'sheet', 140, { item_key: 'acrylic_3mm_sheet', ocr_confidence: '0.970' }),
-        L('i2l2', 2, 'SAMPLE vinyl roll (quantity unclear on the photo)', null, 'm', 8, { needs_review: true, ocr_confidence: '0.580', attrs_unmapped: { thickness_mm: '3' } }),
-      ],
-      messages: [],
-    }
+    docs['in-2'] = newIn2(supplier)
     log(who, 'in-2', 'SAMPLE-A-002: uploaded')
     return docs['in-2'].doc
   }
   if (p === '/enquiries/simulate' && method === 'POST') {
+    perm('manage_contacts')
     down(body.text)
     const qty = Number((String(body.text).match(/\d+/) ?? [])[0])
     if (!qty) throw new ApiError(422, 'no_items', 'could not find any items in the enquiry')
@@ -341,7 +353,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (!d) throw new ApiError(404, 'not_found', 'Document not found.')
     const a = (NEXT[d.doc.direction][d.doc.status] ?? []).find(x => x.to === body.to)
     if (!a) throw new ApiError(409, 'conflict', `Cannot move from ${d.doc.status} to ${body.to}.`)
-    if (a.owner) need()
+    if (a.owner) need(); else perm('upload_documents')
     log(who, d.doc.id, `${d.doc.doc_no}: ${d.doc.status} to ${body.to}${body.reason ? ` (${body.reason})` : ''}`)
     d.doc.status = body.to
     d.doc.updated_at = new Date().toISOString()
@@ -353,12 +365,14 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return d.doc
   }
   if ((m = p.match(/^\/documents\/([^/]+)\/lines\/([^/]+)$/)) && method === 'POST') {
+    perm('upload_documents'); if (body.unit_price !== undefined) perm('view_costs')
     const d = docs[m[1]]; const l = d?.lines.find(x => x.id === m![2])
     if (!l) throw new ApiError(404, 'not_found', 'Line not found.')
     if (d.doc.direction === 'out') throw new ApiError(403, 'rules_only', 'out lines are rules-engine output; only the owner may clear needs_review')
     if (!REVIEWABLE.includes(d.doc.status)) throw new ApiError(409, 'locked', `document is ${d.doc.status}; lines can only be edited while received/parsed`)
     if (body.item_key !== undefined) l.item_key = body.item_key
     if (body.qty !== undefined) l.qty = money(Number(body.qty))
+    if (body.unit_price !== undefined) l.unit_price = money(Number(body.unit_price))
     l.needs_review = body.needs_review ?? (l.qty === null || !l.item_key)
     d.doc.flags.needs_review = d.lines.some(x => x.needs_review)
     log(who, d.doc.id, `${d.doc.doc_no}: line ${l.line_no} edited`)
@@ -407,6 +421,10 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     const c = contacts().find(x => x.id === m![1])
     if (!c) throw new ApiError(404, 'not_found', 'contact not found')
     return { ...c, sst_no: null, recent_documents: Object.values(docs).map(d => d.doc).filter(d => d.party.name === c.name) }
+  }
+  if (p.startsWith('/contacts')) {
+    perm('manage_contacts')
+    if (body?.role === 'supplier' || (p !== '/contacts' && (body?.name !== undefined || body?.contact !== undefined) && contacts().find(c => c.id === p.split('/')[2])?.role === 'supplier')) perm('edit_supplier_contacts')
   }
   if (p.startsWith('/contacts')) throw new ApiError(409, 'mock', 'Mock mode does not save contacts.')
   if (p === '/users' && method === 'GET') { need(); return members }
@@ -458,7 +476,24 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body.permissions !== undefined) r.permissions = body.permissions
     return { ...r, users: members.filter(x => x.role_id === r.id).length }
   }
-  if (p === '/jobs') return []  // mock quotes never reach job_created
+  if (p === '/jobs') return jobs  // mock quotes never reach job_created (?jobs=1 adds one sample job)
+  if ((m = p.match(/^\/jobs\/([^/]+)$/)) && method === 'POST') {
+    perm('manage_contacts')
+    const j = jobs.find(x => x.id === m![1]); if (!j) throw new ApiError(404, 'not_found', 'Job not found.')
+    j.status = body.status
+    return j
+  }
+  if (p === '/settings/channels') {
+    need()
+    if (method === 'POST') {
+      const v = body?.wa_phone_number_id
+      if (v !== null && !/^\d{5,32}$/.test(String(v))) throw new ApiError(422, 'invalid', 'wa_phone_number_id must be 5 to 32 digits')
+      if (v === '99999999') throw new ApiError(409, 'number_in_use', 'that number is connected to another business')
+      channels.wa = v
+    }
+    return { wa_phone_number_id: channels.wa, whatsapp_mapped: channels.wa !== null, telegram_mapped: false, tenants_total_hint: Q.get('tenants') !== 'one' }
+  }
+  if (p === '/followups' && Q.get('perms') === 'none' && role !== 'owner') throw new ApiError(403, 'permission_required', 'missing permission: manage_followups')
   if (p === '/followups') return []  // mock data has no quote old enough to chase
   if (p === '/field-proposals') { need(); return proposals.filter(x => x.status === 'pending') }
   if ((m = p.match(/^\/field-proposals\/([^/]+)\/decide$/)) && method === 'POST') {

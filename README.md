@@ -190,11 +190,11 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 
 | Name | Role | GitHub |
 |---|---|---|
-| Harrish Govind a/l Sethulingam | Team Leader | [TO ADD] |
+| Harrish Govind a/l Sethulingam | Team Leader | - |
 | Larm Kai Xian | Full-stack developer | [@lkaixian](https://github.com/lkaixian) |
-| Kevinraj Gaunder a/l Selvaraju | Researcher / Tester | [TO ADD] |
-| Teoh Yeong Boon | Store and quotation dataset synthesizer | [TO ADD] |
-| Muhammad Aqil bin Abdul Malik | Deck designer / Tester | [TO ADD] |
+| Kevinraj Gaunder a/l Selvaraju | Researcher / Tester | - |
+| Teoh Yeong Boon | Store and quotation dataset synthesizer | - |
+| Muhammad Aqil bin Abdul Malik | Deck designer / Tester | - |
 
 ## Submission Checklist
 

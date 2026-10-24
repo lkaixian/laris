@@ -12,6 +12,8 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 MAGIC = ((b"%PDF", "application/pdf"), (b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "image/png"),
          (b"RIFF", "image/webp"), (b"PK\x03\x04", "zip"))  # the client-sent content type is not trusted: sniff
 MAX_UNZIPPED = 50_000_000
+MAX_MEMBER = 25_000_000  # one member alone, so a single bomb cannot hide inside the total
+MAX_SCAN = 20_000  # rows read from a sheet, blank ones too: a spoofed <dimension> would otherwise make us walk millions
 MAX_ROWS, MAX_COLS = 2000, 40
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -40,7 +42,8 @@ def _csv_rows(data: bytes) -> list[list[str]]:
 
 
 def _guard(z: zipfile.ZipFile) -> None:
-    if sum(i.file_size for i in z.infolist()) > MAX_UNZIPPED:
+    infos = z.infolist()
+    if len(infos) > 2000 or sum(i.file_size for i in infos) > MAX_UNZIPPED or any(i.file_size > MAX_MEMBER for i in infos):
         raise ValueError("file expands to more than 50 MB")
 
 
@@ -83,12 +86,16 @@ def _cell(v) -> str:
 
 
 def _capped(sheets: list[tuple[str | None, list]]) -> str:
-    out, n, cut = [], 0, False
+    out, n, cut, scanned = [], 0, False, 0
     for name, rows in sheets:
         if name is not None:
             out.append(f"## sheet: {name}")
         for row in rows:
-            cells = [_cell(c) for c in row]
+            scanned += 1
+            if scanned > MAX_SCAN:
+                cut = True
+                break
+            cells = [_cell(c) for c in row[:MAX_COLS + 1]]
             if not any(cells):
                 continue
             if n >= MAX_ROWS:

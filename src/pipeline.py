@@ -72,7 +72,7 @@ def next_quote_no(conn, tenant_id, prefix="QT") -> str:
     return f"{prefix}-{year}-{n + 1:04d}"
 
 
-PII = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"                       # email
+PII = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}"                       # email
                  r"|(?<!\d)(?:\+?60|0)1\d[ -]?\d{3,4}[ -]?\d{4}(?!\d)"       # Malaysian mobile
                  r"|(?<!\d)\d{6}-?\d{2}-?\d{4}(?!\d)")                       # NRIC
 

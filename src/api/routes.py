@@ -533,7 +533,7 @@ class Enquiry(BaseModel, extra="forbid"):
 @r.post("/enquiries/simulate")
 def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
     require_perm(ctx, "manage_contacts")
-    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # each one costs a model call
+    throttle(f"ai:{ctx.tenant_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # each one costs a model call
     cust = pipeline.party(ctx.conn, ctx.tenant_id, "customer", body.customer or "Walk-in customer (simulated)")
     res = pipeline.handle_enquiry(ctx.conn, ctx.tenant_id, cust, body.channel, body.text, actor=ctx.user_id,
                                   ilmu_client=svc(request).ilmu)
@@ -541,12 +541,12 @@ def simulate(body: Enquiry, request: Request, ctx: Ctx = Depends(write_ctx)):
 
 
 @r.post("/documents/ingest")
-def ingest(request: Request, file: UploadFile | None = File(None), text: str | None = Form(None),
+def ingest(request: Request, file: UploadFile | None = File(None), text: str | None = Form(None, max_length=100_000),
            supplier: str | None = Form(None), kind: Literal["quotation", "receipt", "invoice"] = Form("quotation"),
            ctx: Ctx = Depends(write_ctx)):
     """Extra (not in the contract): upload a supplier PDF/photo/XLSX/DOCX/CSV or paste its text."""
     require_perm(ctx, "upload_documents")
-    throttle(f"ai:{ctx.user_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # shared with simulate: both cost a model call
+    throttle(f"ai:{ctx.tenant_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")  # shared with simulate: both cost a model call
     data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
     if not data and not text:
         raise ApiError(422, "empty", "send a file or text")

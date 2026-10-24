@@ -79,7 +79,7 @@ def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | 
         require_perm(ctx, "upload_documents")
         if miss := vision.missing_env():
             raise ApiError(503, "vision_not_configured", "vision not configured: set " + ", ".join(miss))
-        throttle(f"listing:{ctx.user_id}", 10, 600, "Too many catalog photos in 10 minutes. Wait a while.")  # each one is a GPU call
+        throttle(f"listing:{ctx.tenant_id}", 10, 600, "Too many catalog photos in 10 minutes. Wait a while.")  # each one is a GPU call
         data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
         mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
         if mime not in IMAGES:

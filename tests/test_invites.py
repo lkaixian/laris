@@ -265,6 +265,26 @@ def test_seat_limit_at_create_and_at_accept(env, O, monkeypatch):
     assert net
 
 
+def test_accept_takes_the_tenant_row_lock(env, O, monkeypatch):
+    """PGlite has one connection, so real concurrent accepts are untested; this proves the lock statement runs on the accept path."""
+    e = env
+    seen = []
+    real = db.tx
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy(*a, **k):
+        with real(*a, **k) as c:
+            ex = c.execute
+            c.execute = lambda q, *p, **kw: (seen.append(q), ex(q, *p, **kw))[1]
+            yield c
+    monkeypatch.setattr(db, "tx", spy)
+    invite(e, O)
+    assert accept(e, tok(e)).status_code == 201
+    assert any("from tenants where id=%s for update" in str(q) for q in seen)
+
+
 def test_username_taken_weak_password_and_email_taken_keep_the_invite_usable(env, O):
     e = env
     invite(e, O)

@@ -90,14 +90,14 @@ def test_unknown_routes_json_404_and_405(tmp_path):
     assert TestClient(app).post("/api/nope", content=b"{}").json()["error"]["code"] == "not_found"  # the real app
 
 
-def test_access_log_masks_webhook_secret():
+def test_access_log_drops_query_strings():
     rec = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
                             ("1.2.3.4:5", "GET", "/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=SEKRET&hub.challenge=7", "1.1", 200), None)
-    assert logsetup.MaskWebhookQuery().filter(rec)
-    assert "SEKRET" not in rec.getMessage() and "hub.verify_token=***" in rec.getMessage() and "hub.challenge=7" in rec.getMessage()
+    assert logsetup.MaskQuery().filter(rec)
+    assert "SEKRET" not in rec.getMessage() and "/webhooks/whatsapp?***" in rec.getMessage()
     other = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s "%s %s" %d', ("c", "GET", "/api/x?token=1", 200), None)
-    logsetup.MaskWebhookQuery().filter(other)
-    assert "token=1" in other.getMessage()
+    logsetup.MaskQuery().filter(other)
+    assert "token=1" not in other.getMessage() and "/api/x?***" in other.getMessage()
 
 
 def test_log_format_has_request_id():

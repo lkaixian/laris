@@ -153,6 +153,7 @@ def accept(body: Accept, request: Request):
         tid, email = inv["tenant_id"], inv["email"]
         ctx = Ctx(c, "owner", None, tid, "")
         lic.gate("/api/invites/accept", ctx)
+        c.execute("select 1 from tenants where id=%s for update", (tid,))  # serialise seat checks per business: two simultaneous adds cannot both pass
         lic.check_seat(ctx)
         role = c.execute("select key, class from roles where id=%s", (inv["role_id"],)).fetchone()
         if c.execute("select 1 from users where tenant_id=%s and lower(email)=%s", (tid, email)).fetchone():

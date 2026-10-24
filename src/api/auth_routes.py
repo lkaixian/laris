@@ -147,6 +147,7 @@ class NewUser(BaseModel, extra="forbid"):
 @r.post("/users")
 def create_user(body: NewUser, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
+    ctx.conn.execute("select 1 from tenants where id=%s for update", (ctx.tenant_id,))  # serialise seat checks per business
     lic.check_seat(ctx)
     if why := auth.weak_password(body.password, body.username):
         raise ApiError(422, "weak_password", why)
@@ -183,6 +184,7 @@ def edit_user(uid: UUID, body: EditUser, ctx: Ctx = Depends(write_ctx)):
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     if sets.get("active") and not u["active"]:
+        c.execute("select 1 from tenants where id=%s for update", (ctx.tenant_id,))
         lic.check_seat(ctx)  # reactivating takes a seat too
     if sets.keys() & {"role", "role_id"}:
         sets["role_id"] = pick_role(ctx, sets.pop("role_id", None), sets.pop("role", None))["id"]  # users.role follows it, by trigger

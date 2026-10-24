@@ -122,7 +122,7 @@ def bootstrap_owner(conn) -> str:
         return "skipped: an account already has a password (remove the BOOTSTRAP_OWNER_* secrets)"
     if len(pw) < auth.MIN_PASSWORD or (why := auth.weak_password(pw, user)):
         return "refused: the bootstrap password is too short or too common"
-    o = conn.execute("select id from users where role='owner' and active order by tenant_id, name, id limit 1").fetchone()
+    o = conn.execute("select id from users where role='owner' and active order by created_at, id limit 1").fetchone()
     if not o:
         return "refused: no active owner exists"
     conn.execute("update users set username=%s, password_hash=%s where id=%s", (user, auth.hash_password(pw), o["id"]))

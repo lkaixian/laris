@@ -20,6 +20,8 @@ for(const t of [o,b])await db.exec(`insert into invites(tenant_id,email,role_id,
 await db.exec("set role laris_app");
 await db.exec("select set_config('laris.tenant','*',false)");
 ok(await n("select count(*)::int c from documents")>0,'system scope (*) can read and write normal tables');
+ok(await n("select count(*)::int c from doc_transitions")>0,'the app role can still read the shared transition rules');
+for(const q of ["insert into doc_transitions select * from doc_transitions limit 1","update doc_transitions set needs_role='staff'","delete from doc_transitions","truncate doc_transitions"])await refuses('the app role cannot write doc_transitions: '+q.split(' ')[0],q);
 await db.exec(`select set_config('laris.tenant','${o}',false)`);
 ok(await n("select count(*)::int c from documents")>0,'a tenant sees its own documents');
 ok(await n("select count(*)::int c from parties where name='Other Customer'")===0,'a tenant cannot see another tenant parties');

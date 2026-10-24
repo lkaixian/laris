@@ -41,7 +41,7 @@ def _post(client, url, **kw):
 
 def transcribe(audio_bytes: bytes, mime: str = "audio/ogg", *, client=None, language: str | None = None) -> str:
     ext = mime.split("/")[-1].split(";")[0] or "ogg"
-    data = {"model": ASR_MODEL, **({"language": language} if language else {})}
+    data = {"model": os.environ.get("ILMU_ASR_MODEL") or ASR_MODEL, **({"language": language} if language else {})}
     j = _post(
         client, _base() + os.environ.get("ILMU_ASR_PATH", ASR_PATH),
         data=data, files={"file": (f"audio.{ext}", audio_bytes, mime)},
@@ -62,7 +62,7 @@ def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None) -> d
     err = None
     for _ in range(2):
         j = _post(client, _base() + "/chat/completions", json={
-            "model": LLM_MODEL, "messages": msgs, "temperature": 0,
+            "model": os.environ.get("ILMU_MODEL") or LLM_MODEL, "messages": msgs, "temperature": 0,
             "response_format": {"type": "json_object"},
         })
         content = ""

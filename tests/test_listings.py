@@ -201,10 +201,10 @@ def test_not_configured_503_names_only(env, monkeypatch):
     assert "RUNPOD_VISION_URL, RUNPOD_API_KEY" in up(env).json()["error"]["message"]
 
 
-def test_rate_limit_10_per_user(lenv):
+def test_rate_limit_10_per_business(lenv):
     e = lenv
     assert [up(e).status_code for _ in range(10)] == [201] * 10
-    assert up(e).status_code == 429 and up(e, who=e.O).status_code == 201  # per user
+    assert up(e).status_code == 429 and up(e, who=e.O).status_code == 429  # per business: a second user shares it
 
 
 def test_injected_text_is_stored_as_plain_text_and_never_acted_on(lenv):

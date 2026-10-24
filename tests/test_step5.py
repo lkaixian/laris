@@ -45,13 +45,13 @@ def test_staff_cannot_edit_supplier_name_or_number_and_contact_changes_are_audit
 
 
 # ---------------------------------------------------------------- 1b. per-user limits
-def test_rfq_is_limited_per_user(env):
+def test_rfq_is_limited_per_business(env):
     e = env
     ask = lambda who: e.c.post("/api/rfq", headers=who, files={"image": ("i.jpg", JPEG, "image/jpeg")},
                                data={"description": "x", "supplier_ids": ["00000000-0000-0000-0000-000000000001"]})
     codes = [ask(e.S).status_code for _ in range(11)]
     assert 429 not in codes[:10] and codes[10] == 429
-    assert ask(e.O).status_code != 429  # another user has their own allowance
+    assert ask(e.O).status_code == 429  # per business: another user shares the allowance
     assert ask(e.S).json()["error"]["code"] == "slow_down"
 
 

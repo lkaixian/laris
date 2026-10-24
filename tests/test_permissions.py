@@ -175,3 +175,15 @@ def test_a_role_with_no_permissions_sees_no_cost_or_margin_anywhere(env, monkeyp
     assert a["items"] == [] and "only the owner" in a["reply"]
     f = e.c.post("/api/assistant", json={"message": "which quotes need a follow up"}, headers=who).json()
     assert f["items"] == []
+
+
+def test_scheduler_status_is_a_read_route_for_owners_only(env, monkeypatch):
+    e = env
+    monkeypatch.delenv("SCHEDULER", raising=False)
+    r = e.c.get("/api/system/scheduler", headers=e.O)
+    assert r.status_code == 200 and r.json().keys() == {"enabled", "last_run", "ok", "errors", "last_error"} and r.json()["enabled"] is False
+    monkeypatch.setenv("SCHEDULER", "1")
+    assert e.c.get("/api/system/scheduler", headers=e.O).json()["enabled"] is True
+    for who in (e.S, member(e, role(e, "Nothing", []))):
+        r = e.c.get("/api/system/scheduler", headers=who)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "owner_only"

@@ -89,6 +89,16 @@ def test_link_uses_app_public_url_not_the_host_header(env, O, monkeypatch):
     assert "https://laris.example.com/#/invite?token=" in e.svc.outbox[-1][2] and "evil.test" not in e.svc.outbox[-1][2]
 
 
+def test_without_app_public_url_only_a_plain_host_builds_the_link(env, O):
+    e = env
+    assert e.c.post("/api/invites", json={"email": "a@example.com", "role": "staff"}, headers={**O, "Host": "laris.example.com:8443"}).status_code == 201
+    assert "http://laris.example.com:8443/#/invite?token=" in e.svc.outbox[-1][2]
+    for bad in ("evil.test/x", "user@evil.test", "evil.test#", "a b"):
+        r = e.c.post("/api/invites", json={"email": "b@example.com", "role": "staff"}, headers={**O, "Host": bad})
+        assert r.status_code == 409 and r.json()["error"]["code"] == "public_url_missing", bad
+    assert len(e.svc.outbox) == 1 and e.sql("select count(*) n from invites where email='b@example.com'")[0]["n"] == 0  # nothing half-created
+
+
 def test_role_by_id_custom_role_and_validation(env, O):
     e = env
     rid = str(e.sql("insert into roles(tenant_id,key,name,class,permissions) select id,'packer','Packer','staff','{}' from tenants returning id")[0]["id"])

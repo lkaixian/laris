@@ -2,6 +2,7 @@
 Nothing here prices anything: a price is only shown if OCR also saw it, and only to roles that may see supplier costs."""
 import io
 import logging
+from contextlib import contextmanager
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -25,21 +26,25 @@ IMAGES = ("image/jpeg", "image/png", "image/webp")
 COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key"
 
 
-def create_listing(conn, tenant_id, user_id, data: bytes, mime: str, *, party_id=None, note=None, channel="upload",
-                   http=None, ocr=None) -> dict:
-    """Read the photo, store it with one cropped picture per product. Used by the API and by the chat '/catalog' path.
-    Raises vision.VisionError. The items are all 'needs_review'."""
+def describe(data: bytes, *, http=None, ocr=None) -> dict:
+    """Validate and read the photo (the model call: seconds). Touches NO database: call it with no transaction open, so no row is locked meanwhile.
+    Used by the API upload and the chat '/catalog' path. Raises ApiError or vision.VisionError. -> input for store()."""
     if len(data) > MAX_IMAGE:  # both entry points (API upload, chat /catalog) end here: the provider's size and mime are not trusted
         raise ApiError(413, "too_large", "photo over 8 MB")
     mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
     if mime not in IMAGES or (mime == "image/webp" and data[8:12] != b"WEBP"):
         raise ApiError(415, "unsupported_media", "send a JPEG, PNG or WebP photo")
     items = vision.describe_listing(data, mime, client=http, **({"ocr": ocr} if ocr else {}))
-    pics = vision.crops(data, items)
+    return {"data": data, "mime": mime, "items": items, "pics": vision.crops(data, items)}
+
+
+def store(conn, tenant_id, user_id, d: dict, *, party_id=None, note=None, channel="upload") -> dict:
+    """Store what describe() read, with one cropped picture per product. The items are all 'needs_review'."""
+    items, data = d["items"], d["data"]
     lid = conn.execute("""insert into listings(tenant_id,created_by,party_id,note,source_channel,image,image_mime)
                           values (%s,%s,%s,%s,%s,%s,%s) returning id""",
-                       (tenant_id, user_id, party_id, note, channel, data, mime)).fetchone()["id"]
-    for n, (it, pic) in enumerate(zip(items, pics)):
+                       (tenant_id, user_id, party_id, note, channel, data, d["mime"])).fetchone()["id"]
+    for n, (it, pic) in enumerate(zip(items, d["pics"])):
         conn.execute("""insert into listing_items(listing_id,tenant_id,position,description,labels,sku,sizes,price,currency,bbox,crop,status,reasons)
                         values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'needs_review',%s)""",
                      (lid, tenant_id, n, it["description"], Jsonb(it["labels"]), it["sku"], Jsonb(it["sizes"]), it["price"], it["currency"],
@@ -62,27 +67,34 @@ def _items(ctx: Ctx, lid) -> list[dict]:
         f"select {COLS} from listing_items where listing_id=%s and tenant_id=%s order by position", (lid, ctx.tenant_id)).fetchall()]
 
 
+open_write = contextmanager(write_ctx)  # the same identity, licence gate and tenant scoping as Depends(write_ctx), but a short transaction we close ourselves
+
+
 @r.post("/listings")
 def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | None = Form(None),
-           note: str | None = Form(None, max_length=300), ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "upload_documents")
-    if miss := vision.missing_env():
-        raise ApiError(503, "vision_not_configured", "vision not configured: set " + ", ".join(miss))
-    throttle(f"listing:{ctx.user_id}", 10, 600, "Too many catalog photos in 10 minutes. Wait a while.")  # each one is a GPU call
-    data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
-    mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
-    if mime not in IMAGES:
-        raise ApiError(415, "unsupported_media", "send a JPEG, PNG or WebP photo")
-    if supplier_id and not ctx.conn.execute("select 1 from parties where id=%s and tenant_id=%s and role='supplier'",
-                                            (supplier_id, ctx.tenant_id)).fetchone():
-        raise ApiError(422, "bad_supplier", "supplier_id is not a supplier of yours")
+           note: str | None = Form(None, max_length=300)):
+    """No Depends(write_ctx): its transaction would stay open for the whole model call. Check inside one short transaction, read the photo
+    with none open, then store in a second one."""
+    with open_write(request) as ctx:
+        require_perm(ctx, "upload_documents")
+        if miss := vision.missing_env():
+            raise ApiError(503, "vision_not_configured", "vision not configured: set " + ", ".join(miss))
+        throttle(f"listing:{ctx.user_id}", 10, 600, "Too many catalog photos in 10 minutes. Wait a while.")  # each one is a GPU call
+        data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
+        mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
+        if mime not in IMAGES:
+            raise ApiError(415, "unsupported_media", "send a JPEG, PNG or WebP photo")
+        if supplier_id and not ctx.conn.execute("select 1 from parties where id=%s and tenant_id=%s and role='supplier'",
+                                                (supplier_id, ctx.tenant_id)).fetchone():
+            raise ApiError(422, "bad_supplier", "supplier_id is not a supplier of yours")
     s = svc(request)
     try:
-        res = create_listing(ctx.conn, ctx.tenant_id, ctx.user_id, data, mime, party_id=supplier_id, note=(note or "").strip() or None,
-                             http=getattr(s, "vision", None), ocr=s.ocr)
+        d = describe(data, http=getattr(s, "vision", None), ocr=s.ocr)
     except vision.VisionError as e:
         raise ApiError(502, "vision_unavailable", f"{e}; try again, or key the products in by hand")
-    return reply(ctx, {**res, "items": _items(ctx, res["listing_id"])}, 201)
+    with open_write(request) as ctx:
+        res = store(ctx.conn, ctx.tenant_id, ctx.user_id, d, party_id=supplier_id, note=(note or "").strip() or None)
+        return reply(ctx, {**res, "items": _items(ctx, res["listing_id"])}, 201)
 
 
 @r.get("/listings")

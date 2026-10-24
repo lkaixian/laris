@@ -8,11 +8,17 @@ import threading
 import time
 from datetime import datetime, timezone
 
+import psycopg
+
+from . import db
+
 log = logging.getLogger("laris")
 HOSTS = ("pool.ntp.org", "time.google.com")
 TIMEOUT = 2.0  # per host, and the longest a request ever waits for a refresh
 TTL = 6 * 3600  # a good answer is reused this long
 RETRY = 300  # after a failed attempt, wait this long before the next one
+MAX_SKEW = 2 * 86400  # an NTP answer further than this from the system clock is treated as forged or broken, not as the time
+WRITE_EVERY = 60  # the watermark row is written at most once a minute
 ROLLBACK_SLACK = 300  # seconds the system clock may sit below the watermark before it counts as a rollback
 EPOCH = 2208988800  # seconds between 1900 (NTP) and 1970 (unix)
 _S = {"ntp": None, "mono": 0.0, "tried": None, "thread": None}
@@ -62,6 +68,9 @@ def _fetch():
     except Exception as e:  # a broken fetch must never take the thread (or a request) down
         log.warning("ntp lookup failed: %s", type(e).__name__)
         t = None
+    if t is not None and abs(t - system_time()) > MAX_SKEW:  # otherwise one forged reply would ratchet the watermark, and every licence, into expiry
+        log.warning("ntp time ignored: it is %.1f days away from the system clock", (t - system_time()) / 86400)
+        t = None
     with _LOCK:
         _S["tried"] = time.monotonic()
         if t is not None:
@@ -90,22 +99,41 @@ def reset():
         _S.update(ntp=None, mono=0.0, tried=None, thread=None)
 
 
+def _upsert(c, now, ntp, behind):
+    c.execute("""insert into license_clock(watermark, last_ntp_ok, rollback_flag) values (to_timestamp(%(now)s), to_timestamp(%(ntp)s::float8), %(back)s)
+                 on conflict (id) do update set watermark = greatest(license_clock.watermark, excluded.watermark),
+                     last_ntp_ok = coalesce(excluded.last_ntp_ok, license_clock.last_ntp_ok),
+                     rollback_flag = license_clock.rollback_flag or excluded.rollback_flag""", {"now": now, "ntp": ntp, "back": behind})
+
+
+def _store(conn, now, ntp, behind):
+    """Write the watermark in its OWN connection and transaction: it commits at once and holds no lock, whatever the request's `conn` is doing.
+    (`conn` is unused here; tests replace this with an in-transaction write because PGlite serves one connection at a time.)"""
+    with db.tx("staff", "system:clock", timeout=5) as c:
+        _upsert(c, now, ntp, behind)
+
+
 def trusted_now(conn) -> dict:
-    """{now (unix), source 'ntp'|'system', unverified, rollback, trusted_at}. NTP ok: its time. Otherwise the system clock.
+    """{now (unix), source 'ntp'|'system', unverified, behind, rollback, trusted_at}. NTP ok: its time. Otherwise the system clock.
     Either way never below the stored watermark (the highest time ever seen, which only moves forward: db/license.sql guards it).
-    unverified: NTP unreachable longer than LICENSE_OFFLINE_GRACE_DAYS, or the system clock is currently behind the watermark with no NTP."""
+    unverified: NTP unreachable longer than LICENSE_OFFLINE_GRACE_DAYS, or the system clock is currently behind the watermark with no NTP.
+    behind: the system clock is below the watermark (a rollback), as opposed to merely being offline for long.
+    `conn` only READS (no lock: a slow request must not block the licence check of other tenants); the watermark is written in its
+    own short transaction, and only when the time moved on by WRITE_EVERY seconds or a rollback is seen for the first time."""
     ntp = _ntp_now()
     seen = ntp if ntp is not None else system_time()
-    row = conn.execute("select extract(epoch from watermark)::float8 wm from license_clock").fetchone()
+    row = conn.execute("""select extract(epoch from watermark)::float8 wm, extract(epoch from coalesce(last_ntp_ok, first_seen))::float8 ref, rollback_flag
+                          from license_clock""").fetchone()
     wm = row["wm"] if row else None
     behind = wm is not None and seen < wm - ROLLBACK_SLACK
     now = max(seen, wm) if wm is not None else seen
-    row = conn.execute("""insert into license_clock(watermark, last_ntp_ok, rollback_flag) values (to_timestamp(%(now)s), to_timestamp(%(ntp)s::float8), %(back)s)
-                          on conflict (id) do update set watermark = greatest(license_clock.watermark, excluded.watermark),
-                              last_ntp_ok = coalesce(excluded.last_ntp_ok, license_clock.last_ntp_ok),
-                              rollback_flag = license_clock.rollback_flag or excluded.rollback_flag
-                          returning extract(epoch from coalesce(last_ntp_ok, first_seen))::float8 ref, rollback_flag""",
-                       {"now": now, "ntp": ntp, "back": behind}).fetchone()
-    unverified = now - row["ref"] > grace_days() * 86400 or (behind and ntp is None)
-    return {"now": now, "source": "ntp" if ntp is not None else "system", "unverified": unverified, "rollback": row["rollback_flag"],
+    ref = ntp if ntp is not None else row["ref"] if row else now
+    flag = bool(row and row["rollback_flag"]) or behind
+    if not row or now - wm >= WRITE_EVERY or (ntp is not None and ntp - row["ref"] >= WRITE_EVERY) or (flag and not row["rollback_flag"]):
+        try:
+            _store(conn, now, ntp, behind)
+        except psycopg.Error as e:  # the answer below does not depend on it; the next call tries again
+            log.warning("licence clock write failed: %s", type(e).__name__)
+    unverified = now - ref > grace_days() * 86400 or (behind and ntp is None)
+    return {"now": now, "source": "ntp" if ntp is not None else "system", "unverified": unverified, "behind": behind, "rollback": flag,
             "trusted_at": datetime.fromtimestamp(now, timezone.utc).isoformat()}

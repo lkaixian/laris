@@ -5,6 +5,7 @@ import os
 import secrets
 import time
 from collections import deque
+from urllib.parse import urlparse
 
 N, R, P = 2 ** 16, 8, 1  # stored in each hash string ("scrypt$N$R$P$salt$hash"), so older, weaker hashes keep verifying
 MAXMEM = 128 * 1024 * 1024  # scrypt at N=2**16, r=8 needs 64 MiB; OpenSSL's default cap is 32 MiB
@@ -134,10 +135,16 @@ def cleared(key: str):
     _ACCT.pop(key, None)
 
 
+def _local() -> bool:
+    """A plain local run: database on this machine, not a Replit deployment, no shared APP_TOKEN."""
+    host = urlparse(os.environ.get("DATABASE_URL", "")).hostname or ""
+    return host in ("localhost", "127.0.0.1", "::1", "") and not ((os.environ.get("REPLIT_DEPLOYMENT") or os.environ.get("REPL_DEPLOYMENT")) or os.environ.get("APP_TOKEN"))
+
+
 def header_mode_allowed(conn) -> bool:
     """Header-only demo mode (X-Role / X-User, no sign-in): the single decision for /api/auth/config and every /api call.
-    Never once any account has a password or REQUIRE_USER_TOKEN=1. Otherwise only when DEMO_MODE=1, or on a plain local run
-    (no APP_TOKEN, not a Replit deployment)."""
+    Never once any account has a password or REQUIRE_USER_TOKEN=1. Otherwise only when DEMO_MODE=1, or on a clearly local run
+    (database on this machine, no APP_TOKEN, not a Replit deployment): a fresh remote install is not open until the first signup."""
     if os.environ.get("REQUIRE_USER_TOKEN") == "1" or conn.execute("select 1 from users where password_hash is not null limit 1").fetchone():
         return False
-    return os.environ.get("DEMO_MODE") == "1" or not (os.environ.get("APP_TOKEN") or os.environ.get("REPL_DEPLOYMENT"))
+    return os.environ.get("DEMO_MODE") == "1" or _local()

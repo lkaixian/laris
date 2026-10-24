@@ -181,8 +181,8 @@ def _log_ai(conn, tenant_id, action, input_ref, payload, confidence=None):
 
 
 def _record_message(conn, enquiry_id, doc_id, direction, channel, body, external_id):
-    conn.execute("""insert into messages(enquiry_id,document_id,direction,channel,body,external_id)
-                    values (%s,%s,%s,%s,%s,%s)""", (enquiry_id, doc_id, direction, channel, body, external_id))
+    return conn.execute("""insert into messages(enquiry_id,document_id,direction,channel,body,external_id)
+                           values (%s,%s,%s,%s,%s,%s) returning id""", (enquiry_id, doc_id, direction, channel, body, external_id)).fetchone()["id"]
 
 
 # ---------------------------------------------------------------- (a) supplier document in

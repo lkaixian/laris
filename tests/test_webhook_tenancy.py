@@ -242,7 +242,7 @@ def test_catalog_caps_the_photo_at_8_mb(lenv, monkeypatch):
     assert _catalog(e, monkeypatch, big).status_code == 200
     assert e.sql("select count(*) n from listings")[0]["n"] == 0 and e.vis.calls == 0
     with pytest.raises(ApiError) as x:
-        listings.create_listing(None, None, None, big, "image/jpeg")
+        listings.describe(big)
     assert (x.value.status, x.value.code) == (413, "too_large")
     with pytest.raises(ApiError):
-        listings.create_listing(None, None, None, b"GIF89a", "image/jpeg")
+        listings.describe(b"GIF89a")

@@ -1,6 +1,7 @@
 """Signed licence, trusted time, enforcement, purchase request and the issuer's script (docs/licensing.md). A test keypair is injected; no network."""
 import base64
 import json
+import logging
 import struct
 import sys
 import time
@@ -19,6 +20,7 @@ from test_rfq import other_tenant
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import issue_license as script  # noqa: E402
 
+REAL_STORE = clock._store  # tests/support/fixtures.py swaps in an in-transaction writer for the env fixture
 KEY = Ed25519PrivateKey.generate()
 PUB = base64.b64encode(KEY.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
 DAY = 86400
@@ -183,6 +185,62 @@ def test_clock_cache_and_failure_backoff(env, monkeypatch):
     assert tclock(e)["source"] == "system"
 
 
+class Rec:
+    """A connection wrapper that remembers every statement it was asked to run."""
+    def __init__(self, c): self.c, self.sql = c, []
+    def execute(self, q, *a):
+        self.sql.append(q.lower())
+        return self.c.execute(q, *a)
+
+
+def test_clock_read_takes_no_lock_and_writes_through_its_own_connection(env, monkeypatch):
+    e, n = env, Net().adopt(monkeypatch)
+    n.ntp = time.time()
+    stored = []
+    monkeypatch.setattr(clock, "_store", lambda conn, *a: stored.append(a))  # swallow the write: the request connection must not be what writes
+    with db.tx() as c:
+        rec = Rec(c)
+        clock.trusted_now(rec)
+    assert len(stored) == 1 and rec.sql and all(q.lstrip().startswith("select") and "for update" not in q and "for share" not in q for q in rec.sql)
+    assert e.sql("select count(*) n from license_clock")[0]["n"] == 0
+    REAL_STORE(None, *stored[0])  # the production writer: its own connection, commits at once (no request transaction is open here)
+    assert row(e)["w"] == pytest.approx(stored[0][0], abs=1)
+
+
+def test_clock_watermark_write_threshold(env, monkeypatch):
+    e, n = env, Net().adopt(monkeypatch)
+    base = time.time()
+    n.ntp = base
+    tclock(e)
+    w0 = row(e)["w"]
+    writes = []
+    put = clock._store
+    monkeypatch.setattr(clock, "_store", lambda *a: (writes.append(1), put(*a))[1])
+    for step, written in ((30, 0), (59, 0), (61, 1)):
+        clock.reset()
+        n.ntp = base + step
+        before = len(writes)
+        assert tclock(e)["now"] == pytest.approx(base + step, abs=1)
+        assert len(writes) - before == written, step  # only once 60 s have passed since the stored time
+    assert w0 == pytest.approx(base, abs=1) and row(e)["w"] == pytest.approx(base + 61, abs=1)
+
+
+def test_forged_ntp_far_from_the_system_clock_is_ignored(env, monkeypatch, caplog):
+    e, n = env, Net().adopt(monkeypatch)
+    tclock(e)
+    w0 = row(e)["w"]
+    clock.reset()
+    n.ntp = time.time() + 30 * DAY  # a forged reply: it would put every licence 30 days further
+    with caplog.at_level(logging.WARNING, logger="laris"):
+        c = tclock(e)
+        tclock(e)  # not asked again for 5 minutes, so not warned about again
+    assert c["source"] == "system" and c["now"] < time.time() + 60 and row(e)["w"] == pytest.approx(w0, abs=70)
+    assert caplog.text.count("ntp time ignored") == 1 and "30.0 days" in caplog.text
+    clock.reset()
+    n.ntp = time.time() + 1.5 * DAY  # inside the limit it is still believed
+    assert tclock(e)["source"] == "ntp"
+
+
 def test_sntp_parse():
     sent = bytes([0x1B]) + bytes(39) + struct.pack("!II", 12345, 678)
     def reply(li=0, mode=4, stratum=2, sec=3_900_000_000, echo=sent[40:48]):
@@ -217,6 +275,32 @@ def test_activation_rules(env, on):
     assert ev and t not in json.dumps(ev) and t.split(".")[2] not in json.dumps(ev)  # the token is never logged
     s = status(e, e.S)  # staff see the status, never the key
     assert s["status"] == "active" and "key" not in s and t not in json.dumps(s)
+
+
+def test_activation_works_offline_with_a_sane_clock_but_not_after_a_rollback(env, on):
+    e = env
+    verified_owner(e)
+    tclock(e)  # NTP ok now: the watermark is set
+    on.ntp = None
+    clock.reset()
+    on.sys = time.time() - 10 * DAY  # the system clock is behind the watermark: a rollback
+    r = activate(e, token())
+    assert r.status_code == 409 and r.json()["error"]["code"] == "clock_unverified"
+    on.sys = None
+    clock.reset()
+    e.sql("update license_clock set last_ntp_ok = now() - interval '9 days'")  # UDP/123 has been blocked for longer than the grace period
+    r = activate(e, token())
+    assert r.status_code == 200 and r.json()["status"] == "clock_unverified" and r.json()["read_only"] is True  # stored; read-only until NTP answers
+    assert e.sql("select license_id from tenants where license_token is not null")
+    on.ntp = time.time()
+    clock.reset()
+    lic.invalidate()
+    assert status(e)["status"] == "active"
+    expired = token(now=int(time.time()) - 400 * DAY, days=365)
+    on.ntp = None
+    clock.reset()
+    r = activate(e, expired)  # an expired key is still refused while offline
+    assert r.status_code == 422 and "expired" in r.json()["error"]["message"]
 
 
 def test_unverified_email_and_licence_reuse(env, on):

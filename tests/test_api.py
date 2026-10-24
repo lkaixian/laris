@@ -703,7 +703,7 @@ def test_whatsapp_number_decides_the_tenant(env, monkeypatch):
     assert e.svc.via[-1] == "PN2"  # tenant 2 has no cost book: it must NOT borrow tenant 1's costs
     assert other and "could not process" in other[0][2]
     assert send("PN9", "wamid.c") == []  # a number nobody owns is ignored once numbers are mapped
-    assert e.sql("select count(*) n from enquiries")[0]["n"] == 1
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 2  # the enquiry of PN1 and the raw message tenant 2 could not process (kept for its owner)
 
 
 # ---------------------------------------------------------------- per-user API tokens

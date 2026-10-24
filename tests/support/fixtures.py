@@ -7,7 +7,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from src import db
+from src import clock, db
 from src.api import deps, webhooks
 from src.api.deps import Services
 from src.app import app
@@ -124,6 +124,7 @@ def env(pg_url, monkeypatch):
             c.execute("set local role laris_app")
             yield c
     monkeypatch.setattr(db, "tx", as_app)
+    monkeypatch.setattr(clock, "_store", lambda conn, *a: clock._upsert(conn, *a))  # PGlite serves one connection at a time: no second one while a request transaction is open
     ai = AI()
     ai.payload, ai.fail, ai.calls = {}, False, 0
     svc = FakeSvc(ai)

@@ -21,7 +21,7 @@ from . import logsetup
 logsetup.setup()  # before the modules below log anything
 
 from . import db, scheduler
-from .api import assistant, auth_routes, channel_settings, contacts, invites, jobs, license_routes, listings, rfq, roles, routes, signup, track, webhooks
+from .api import assistant, auth_routes, channel_settings, contacts, invites, jobs, license_routes, listings, rfq, roles, routes, signup, system, track, webhooks
 from .api.deps import JR, Services
 from .errors import ApiError
 
@@ -41,7 +41,11 @@ async def lifespan(app):
                 log.warning("bootstrap owner: %s", note)  # never logs the password
     else:
         log.error("DATABASE_URL is not set: the API cannot serve database requests")
+    if (os.environ.get("REPLIT_DEPLOYMENT") or os.environ.get("REPL_DEPLOYMENT")) and os.environ.get("TRUST_PROXY") != "1":
+        log.warning("TRUST_PROXY is not 1 on a deployment: every client shares the proxy's address, so login and signup throttles lock everyone out together")
     sch = scheduler.start() if os.environ.get("SCHEDULER") == "1" else None
+    if not sch:
+        log.warning("SCHEDULER is not 1: follow-ups, expiry, retention and job reminders will not run")
     yield
     if sch:
         sch.shutdown(wait=False)
@@ -60,6 +64,7 @@ app.include_router(license_routes.r)
 app.include_router(routes.r)
 app.include_router(jobs.r)
 app.include_router(track.r)
+app.include_router(system.r)
 app.include_router(contacts.r)
 app.include_router(rfq.r)
 app.include_router(listings.r)

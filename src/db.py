@@ -25,35 +25,33 @@ def tx(role="staff", actor="", tenant="*", timeout=15):
         yield conn
 
 
+SCHEMA_LOCK = 7412340001  # pg_advisory_lock key: two instances starting together apply the schema one after the other
+
+
 def apply_schema(seed: bool | None = None) -> None:
-    """Idempotent: schema/transitions/functions only on an empty DB, tiers/views/rls/rfq/rbac always (CREATE OR REPLACE)."""
+    """Idempotent: schema/transitions/functions only on an empty DB (one transaction: all or nothing), tiers/views/rls/rfq/rbac always (CREATE OR REPLACE)."""
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
     with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None, connect_timeout=15) as c:
+        c.execute("select pg_advisory_lock(%s)", (SCHEMA_LOCK,))  # held until this connection closes; the check below runs after the wait
         c.execute("select set_config('laris.tenant', '*', false)")  # FORCE RLS applies to the owner: seeding crosses tenants on purpose
+
+        def run(*files):
+            for f in files:
+                try:
+                    c.execute((DB_DIR / f).read_text(encoding="utf-8"))
+                except psycopg.Error as e:
+                    raise RuntimeError(f"applying {f} failed: {e.diag.message_primary or e}") from e
+
         if not c.execute("select to_regclass('public.tenants')").fetchone()[0]:
-            for f in ("schema.sql", "transitions.sql", "functions.sql"):
-                c.execute((DB_DIR / f).read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "tiers.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "views.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "auth.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "rls.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "rfq.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "listings.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "rbac.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "license.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "signup.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "multi.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "invites.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "channels.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "quotes.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "jobs.sql").read_text(encoding="utf-8"))
-        c.execute((DB_DIR / "track.sql").read_text(encoding="utf-8"))
-        if (os.environ.get("SEED") == "1" if seed is None else seed) and \
-                not c.execute("select 1 from tenants limit 1").fetchone():
-            c.execute((DB_DIR / "seed_made_to_order.sql").read_text(encoding="utf-8"))
+            with c.transaction():  # a failure in the second or third file must not leave the first one installed
+                run("schema.sql", "transitions.sql", "functions.sql")
+        run("tiers.sql", "views.sql", "auth.sql", "rls.sql", "rfq.sql", "listings.sql", "rbac.sql", "license.sql", "signup.sql", "multi.sql",
+            "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "track.sql")
+        if (os.environ.get("SEED") == "1" if seed is None else seed) and                 not c.execute("select 1 from tenants limit 1").fetchone():
+            run("seed_made_to_order.sql")
         if owner:  # new tables and views need their grants for laris_app
-            c.execute((DB_DIR / "roles.sql").read_text(encoding="utf-8"))
+            run("roles.sql")
         # trade-template fields become the tenant's starting registry (owner can still add via proposals)
         for t in c.execute("select id, trade_template from tenants").fetchall():
             seed_tenant_fields(c, t[0], t[1])
@@ -94,13 +92,21 @@ def rls_status(conn) -> tuple[bool, bool]:
 
 
 def check_rls(conn) -> None:
-    """Startup check: warn when tenant isolation is off; refuse to start if REQUIRE_RLS=1."""
+    """Startup check: warn when tenant isolation is off; refuse to start if REQUIRE_RLS=1, or on a Replit deployment / with more than one
+    tenant unless ALLOW_RLS_BYPASS=1 (explicit opt-out)."""
     log, (bypass, owns) = logging.getLogger("laris"), rls_status(conn)
     if bypass:
         msg = "tenant isolation OFF: connected as a role that bypasses row level security; use db/roles.sql laris_app"
         if os.environ.get("REQUIRE_RLS") == "1":
             raise RuntimeError(msg + " (REQUIRE_RLS=1)")
-        log.warning(msg)
+        n = conn.execute("select count(*) n from (select 1 from tenants limit 2) t").fetchone()
+        if (os.environ.get("REPLIT_DEPLOYMENT") or os.environ.get("REPL_DEPLOYMENT")) or (n["n"] if isinstance(n, dict) else n[0]) > 1:
+            if os.environ.get("ALLOW_RLS_BYPASS") != "1":
+                raise RuntimeError(msg + ". Refusing to start a deployment or a multi-tenant database like this: connect as laris_app, "
+                                   "or set ALLOW_RLS_BYPASS=1 to accept the risk")
+            log.error("ALLOW_RLS_BYPASS=1: running WITHOUT tenant isolation on a deployment or multi-tenant database; one bug leaks across businesses")
+        else:
+            log.warning(msg)
     if owns:
         log.warning("connected role owns audit_log, so it can disable the audit and guard triggers; use db/roles.sql laris_app")
 

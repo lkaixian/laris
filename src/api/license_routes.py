@@ -55,7 +55,9 @@ def activate(body: Activate, ctx: Ctx = Depends(write_ctx)):
     clk = clock.trusted_now(ctx.conn)
     if p["expires_at"] <= clk["now"]:
         _bad("expired")
-    if clk["unverified"]:
+    # Offline too long (UDP/123 blocked) is not a reason to refuse a valid key: the expiry above is judged against max(system clock, watermark),
+    # so a clock that is not behind the watermark cannot make a key look valid for longer. The status stays clock_unverified (read-only) until NTP answers.
+    if clk["unverified"] and clk["behind"]:
         raise ApiError(409, "clock_unverified", "The server cannot confirm today's date. Connect it to the internet and try again.")
     used = ctx.conn.execute("select count(*) n from users where tenant_id=%s and active", (ctx.tenant_id,)).fetchone()["n"]
     if p["seats"] < used:

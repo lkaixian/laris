@@ -67,6 +67,8 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 
 Reads: without `view_costs` every response is scrubbed (tracker, documents, contacts, dashboard, search, margin report, RFQ replies); `GET /api/followups` needs `manage_followups`.
 
+`GET /api/system/scheduler` (read only): owner only (403 `owner_only`), asserted in `tests/test_permissions.py`.
+
 On-track tracker (read only, so no row in the write table): `GET /api/documents/{id}/timeline` needs `view_audit`, and shows supplier chat text only with `view_costs`. `GET /api/track` is open to every role but scrubs: a supplier document's total needs `view_costs`, an ask-supplier price needs `view_replies_prices` (without it only waiting / answered is visible), a catalog item's price needs `view_costs`; its `stats` block needs `view_audit`. `dashboard.track` holds counts only.
 
 ## Accepted risk: catalog photos and crops

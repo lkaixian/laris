@@ -9,6 +9,7 @@ import os
 import re
 import time
 from collections import defaultdict, deque
+from typing import NamedTuple
 
 import psycopg
 from fastapi import APIRouter, Request
@@ -108,11 +109,40 @@ def _hold(conn, tid, p, m):
     """Licence blocks processing: keep only the raw message (as a new enquiry) so the owner can see it. No model, no reply."""
     pid = p["id"] or pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender)
     enq = conn.execute("insert into enquiries(tenant_id,party_id,channel,status) values (%s,%s,%s,'new') returning id", (tid, pid, m.channel)).fetchone()["id"]
-    pipeline._record_message(conn, enq, None, "in", m.channel, (m.text or f"[{m.media_kind}]")[:2000], m.external_id)
+    return pipeline._record_message(conn, enq, None, "in", m.channel, (m.text or f"[{m.media_kind}]")[:2000], m.external_id)
+
+
+def _trace(conn, m, what: str):
+    """A message we could not process leaves a durable trace OUTSIDE the failed savepoint: an audit row (no text, no number) and the raw
+    message as a new enquiry, so the owner can see that something arrived. Never raises."""
+    try:
+        with conn.transaction():
+            tid, _ = resolve_tenant(conn, m, "".join(ch for ch in m.sender if ch.isdigit()))
+            if tid is None:
+                return
+            mid = tid  # the audit row needs an entity id: the stored message, else the business
+            try:
+                with conn.transaction():
+                    mid = _hold(conn, tid, {"id": None}, m)
+            except Exception:
+                log.exception("inbound %s: could not keep the raw message", _h(m.external_id))
+            conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:webhook','messages',%s,%s)",
+                         (tid, mid, f"inbound failed: {what}"))
+    except Exception:
+        log.exception("inbound %s: could not record the failure", _h(m.external_id))
+
+
+class Catalog(NamedTuple):
+    """A '/catalog' photo that passed every check: read by the model with no transaction open, then stored in a new one."""
+    tid: object
+    actor: object
+    party_id: object
+    data: bytes
+    m: object
 
 
 def _handle(conn, s, m):
-    """-> reply text or None. Raises ApiError (caller rolls back to the savepoint)."""
+    """-> reply text, None, or a Catalog to finish later. Raises ApiError (caller rolls back to the savepoint)."""
     if m.external_id and conn.execute("""select 1 from messages where channel=%s and external_id=%s
                                          union all select 1 from rfq_replies where external_id=%s""",
                                       (m.channel, m.external_id, m.external_id)).fetchone():
@@ -152,13 +182,8 @@ def _handle(conn, s, m):
             return "Thanks, we have your reply."
         if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
             throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
-            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
-            try:
-                res = listings.create_listing(conn, tid, actor, data, mime, party_id=p["id"], note=m.text.strip()[:300], channel=m.channel,
-                                              http=getattr(s, "vision", None), ocr=s.ocr)
-            except VisionError as e:
-                raise ApiError(502, "vision_unavailable", str(e))
-            return f"Received your catalog photo: {res['item_count']} product(s) are queued for review."
+            data, _ = s.download(m.channel, m.media_ref, m.media_kind)
+            return Catalog(tid, actor, p["id"], data, m)  # the model runs after this transaction has closed (see _catalog)
         if m.media_kind in ("image", "document"):
             data, mime = s.download(m.channel, m.media_ref, m.media_kind)
             if m.media_kind == "document":  # sheets/Word/CSV arrive as documents; Telegram gives no mime
@@ -188,8 +213,26 @@ def _handle(conn, s, m):
     return f"Thanks, we received your enquiry ({res['doc_no']}). We will send your quote shortly."
 
 
+def _catalog(s, j: Catalog) -> str | None:
+    """Phase two of a '/catalog' photo: the model call holds no transaction or lock, the store is a short one of its own."""
+    try:
+        d = listings.describe(j.data, http=getattr(s, "vision", None), ocr=s.ocr)
+        with db.tx("staff", "system:webhook") as conn:
+            res = listings.store(conn, j.tid, j.actor, d, party_id=j.party_id, note=j.m.text.strip()[:300], channel=j.m.channel)
+        return f"Received your catalog photo: {res['item_count']} product(s) are queued for review."
+    except Exception as e:
+        what = e.code if isinstance(e, ApiError) else "vision_unavailable" if isinstance(e, VisionError) else type(e).__name__
+        if isinstance(e, (ApiError, VisionError)):
+            log.warning("inbound %s catalog photo rejected: %s", _h(j.m.external_id), what)
+        else:
+            log.exception("inbound %s failed", _h(j.m.external_id))
+        with db.tx("staff", "system:webhook") as conn:
+            _trace(conn, j.m, what)
+        return SORRY
+
+
 def _process(s, msgs, statuses=()):
-    replies = []
+    replies, later = [], []
     with db.tx("staff", "system:webhook") as conn:
         for wamid, st, at in statuses:
             if st == "read":  # sent -> read is the only status move; read_at is set either way
@@ -204,14 +247,21 @@ def _process(s, msgs, statuses=()):
             except ApiError as e:
                 log.warning("inbound %s rejected: %s", _h(m.external_id), e.message)
                 text = SORRY
+                _trace(conn, m, e.code)
             except psycopg.errors.UniqueViolation:  # a replay that raced past the duplicate check: the first copy won
                 log.info("inbound %s is a duplicate", _h(m.external_id))
                 text = None
-            except Exception:
+            except Exception as e:
                 log.exception("inbound %s failed", _h(m.external_id))
                 text = None
-            if text:
+                _trace(conn, m, type(e).__name__)
+            if isinstance(text, Catalog):
+                later.append(text)
+            elif text:
                 replies.append((m.channel, m.sender, text, m.to))
+    for j in later:  # the committed transaction above is closed: the model call below holds no lock
+        if text := _catalog(s, j):
+            replies.append((j.m.channel, j.m.sender, text, j.m.to))
     for ch, to, text, via in replies:  # after commit; a send failure never loses the stored document
         try:
             s.send(ch, to, text, via)  # answer from the number the customer wrote to

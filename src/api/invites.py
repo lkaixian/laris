@@ -2,6 +2,7 @@
 The token (32 random bytes, url-safe) travels in the URL fragment of the link and is stored only as SHA-256. Invites last 7 days."""
 import logging
 import os
+import re
 import secrets
 from uuid import UUID
 
@@ -23,14 +24,29 @@ INVALID = (404, "invite_invalid", "This invitation is no longer valid")  # one a
 SHOW = """select i.id, i.email, r.key as role_key, r.name as role_name,
           case when i.status = 'pending' and i.expires_at <= now() then 'expired' else i.status end as status, i.created_at, i.expires_at"""
 FROM = " from invites i join roles r on r.id = i.role_id"
+HOST = re.compile(r"[A-Za-z0-9.-]+(:\d+)?")
+_WARNED: list = []  # the one-time warning
 
 
 def _one(c, iid):
     return c.execute(SHOW + FROM + " where i.id=%s", (iid,)).fetchone()
 
 
+def _base(request: Request) -> str:
+    """The link's origin: APP_PUBLIC_URL. Unset: the Host header, but only a plain host[:port] (no path, userinfo or odd characters), with a one-time warning."""
+    if env := (os.environ.get("APP_PUBLIC_URL") or "").rstrip("/"):
+        return env
+    host = request.headers.get("host", "")
+    if not HOST.fullmatch(host):
+        raise ApiError(409, "public_url_missing", "The server has no public address configured (APP_PUBLIC_URL), so it cannot build the invitation link.")
+    if not _WARNED:
+        _WARNED.append(1)
+        log.warning("APP_PUBLIC_URL is not set: invitation links use the request's Host header; set APP_PUBLIC_URL")
+    return f"{request.url.scheme}://{host}"
+
+
 def _mail(ctx: Ctx, request: Request, bg: BackgroundTasks, to: str, role_name: str, token: str):
-    base = (os.environ.get("APP_PUBLIC_URL") or str(request.base_url)).rstrip("/")  # env first: the Host header is caller-controlled
+    base = _base(request)
     biz = ctx.conn.execute("select coalesce(display_name, name) n from tenants where id=%s", (ctx.tenant_id,)).fetchone()["n"]
     if not mailer.enabled():
         log.warning("invite created but email is off (MAILTRAP_API_TOKEN unset): nobody receives the link")

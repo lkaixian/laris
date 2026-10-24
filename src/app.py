@@ -92,7 +92,7 @@ async def _cap_body(request, call_next):
         cl = request.headers.get("content-length")
         if "chunked" in request.headers.get("transfer-encoding", "").lower() or cl is None:
             return _err(411, "length_required", "send a Content-Length (chunked bodies are not accepted)")
-        if not cl.isdigit() or int(cl) > (routes.MAX_UPLOAD + 100_000 if p.startswith("/api/") else webhooks.MAX_BODY):
+        if not (cl.isascii() and cl.isdigit()) or len(cl) > 12 or int(cl) > (routes.MAX_UPLOAD + 100_000 if p.startswith("/api/") else webhooks.MAX_BODY):
             return _err(413, "too_large", "request body too large")
     return await call_next(request)
 

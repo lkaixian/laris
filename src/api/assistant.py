@@ -156,7 +156,7 @@ class Ask(BaseModel, extra="forbid"):
 
 @r.post("/assistant")
 def assistant(body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
-    throttle(str(ctx.user_id), LIMIT, WINDOW, "Too many questions in a minute. Wait a moment.", _HITS)
+    throttle(f"assistant:{ctx.tenant_id}", LIMIT, WINDOW, "Too many questions in a minute. Wait a moment.", _HITS)
     source = "model"
     try:
         out = ilmu.extract_json(pipeline.redact(body.message), SCHEMA, client=svc(request).ilmu)

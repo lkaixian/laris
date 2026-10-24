@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import threading
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -146,6 +147,10 @@ def _price_keys(p: Decimal) -> set[str]:
     return {re.sub(r"\D", "", f"{p.normalize():f}")} | ({re.sub(r"\D", "", f"{two:f}")} if two == p else set())
 
 
+MAX_CROP_OCR = 12  # OCR passes on crops per photo; past this the whole-image text alone decides
+_SLOTS = threading.BoundedSemaphore(int(os.environ.get("VISION_CONCURRENCY", "2")))
+
+
 def _verify(items, im, ocr) -> None:
     """The model never scores itself: a sku/price it returns must be printed in the OCR text, else it is nulled."""
     try:
@@ -154,11 +159,13 @@ def _verify(items, im, ocr) -> None:
         for it in items:
             it["reasons"].append("no_ocr_check")
         return
+    crops_left = MAX_CROP_OCR
     for it in items:
         if not (it["sku"] or it["price"]):
             continue
         seen = whole
-        if (it["sku"] and _key(it["sku"]) not in seen) or (it["price"] and not _price_keys(it["price"]) & seen):
+        if crops_left > 0 and ((it["sku"] and _key(it["sku"]) not in seen) or (it["price"] and not _price_keys(it["price"]) & seen)):
+            crops_left -= 1
             try:
                 seen = whole | _tokens(ocr.ocr_image(_crop(im, it["bbox"])))
             except Exception:
@@ -184,6 +191,8 @@ def describe_listing(image_bytes: bytes, mime: str, *, client=None, base_url=Non
             "messages": [{"role": "user", "content": [
                 {"type": "text", "text": PROMPT},
                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(_jpeg(im)).decode()}}]}]}
+    if not _SLOTS.acquire(timeout=60):  # each call can hold a GPU worker for minutes: queue a few, refuse the rest
+        raise VisionError("the vision service is busy, try again in a minute")
     err, c = "no answer", client or httpx.Client(timeout=httpx.Timeout(150, connect=15))  # a cold RunPod worker takes minutes
     try:
         for _ in range(2):  # one retry: 5xx / timeout / invalid JSON
@@ -205,6 +214,7 @@ def describe_listing(image_bytes: bytes, mime: str, *, client=None, base_url=Non
             _verify(items, im, ocr)
             return items
     finally:
+        _SLOTS.release()
         if client is None:
             c.close()
     raise VisionError(err)

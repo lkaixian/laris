@@ -40,7 +40,7 @@ def ask(request: Request, image: UploadFile = File(...), description: str = Form
         note: str = Form(DEFAULT_NOTE, max_length=300), circle: str | None = Form(None),
         supplier_ids: list[UUID] = Form(...), ctx: Ctx = Depends(write_ctx)):
     require_perm(ctx, "ask_suppliers")
-    throttle(f"rfq:{ctx.user_id}", 10, 600, "Too many supplier requests in 10 minutes. Wait a while.")  # each one messages suppliers
+    throttle(f"rfq:{ctx.tenant_id}", 10, 600, "Too many supplier requests in 10 minutes. Wait a while.")  # each one messages suppliers
     data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
     mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)
     if mime not in IMAGES:

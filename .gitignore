@@ -24,3 +24,6 @@ LARIS Logo.zip
 LARIS Logo/
 .shot-*.png
 backups/
+
+# local pitch material (deck, scripts, videos); not part of the repo
+pitch/

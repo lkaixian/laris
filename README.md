@@ -33,7 +33,7 @@ Try it with the live app and the Telegram bot. All data is synthetic.
 |---|---|
 | Web app (owner view) | https://laris-malaysia.replit.app |
 | Telegram bot | [@Gyser3DPrintBot](https://t.me/Gyser3DPrintBot) |
-| Demo login | Ask the team for a demo account (no credentials are kept in this repo) |
+| Demo login | `lkaixian91@gmail.com` / `sparksurge` (demo account, synthetic data only, may be reset) |
 
 **Customer flow (Telegram)**
 1. Open the bot and press **Start**. It replies with a short guide.

@@ -172,6 +172,8 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
     if "manage_followups" in ctx.perms:
         out["followups_pending"] = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
                                                 where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (t,)).fetchone()["n"]
+    from .track import dashboard_track  # local: track imports this module
+    out["track"] = dashboard_track(ctx)  # None when it fails
     return reply(ctx, out)
 
 

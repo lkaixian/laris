@@ -52,7 +52,8 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/listings/{id}/items/{iid}/ask`, `POST /api/rfq` | `ask_suppliers` |
 | `POST /api/rfq/{id}/replies/{rid}/accept` | owner |
 | `POST /api/enquiries/simulate` | `manage_contacts` |
-| `POST /api/jobs/{id}` | `manage_contacts` |
+| `POST /api/jobs/{id}` | `manage_contacts` (status, due date, assignee, priority, notes) |
+| `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
@@ -65,6 +66,8 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 `OPEN` (no permission needed): own account and public pages (`login`, `logout`, `signup`, `signup/verify`, `signup/resend`, `password/forgot`, `password/reset`, `invites/preview`, `invites/accept`, `me/password`, `me/sessions/revoke-others`, `me/sessions/{sid}`) and `POST /api/assistant`, which only answers questions with the caller's own scrubbed read access (its follow-up answer needs `manage_followups`, its cost and margin answers `view_costs`).
 
 Reads: without `view_costs` every response is scrubbed (tracker, documents, contacts, dashboard, search, margin report, RFQ replies); `GET /api/followups` needs `manage_followups`.
+
+On-track tracker (read only, so no row in the write table): `GET /api/documents/{id}/timeline` needs `view_audit`, and shows supplier chat text only with `view_costs`. `GET /api/track` is open to every role but scrubs: a supplier document's total needs `view_costs`, an ask-supplier price needs `view_replies_prices` (without it only waiting / answered is visible), a catalog item's price needs `view_costs`; its `stats` block needs `view_audit`. `dashboard.track` holds counts only.
 
 ## Accepted risk: catalog photos and crops
 

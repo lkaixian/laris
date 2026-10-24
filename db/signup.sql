@@ -3,6 +3,7 @@
 -- A signup is inactive until email_verified_at is set; the login query only accepts active users.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email text CHECK (length(email) <= 254);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();  -- the scheduler drops signups never verified after 7 days
 
 -- One-time codes, stored only as an HMAC (src/api/signup.py). attempts counts wrong guesses; 5 kill the code.
 CREATE TABLE IF NOT EXISTS email_codes (

@@ -56,14 +56,15 @@ def _mail(subject: str, lines: list[str]) -> tuple[str, str, str]:
     return subject, "\n\n".join(lines), "".join(f"<p>{escape(x)}</p>" for x in lines)
 
 
-def verification_mail(code: str, name: str) -> tuple[str, str, str]:
-    """(subject, text, html) for send(to, *verification_mail(...))."""
-    return _mail("Your LARIS verification code", [f"Hello {name},", f"Your LARIS verification code is {code}. It expires in 10 minutes.",
+def verification_mail(code: str) -> tuple[str, str, str]:
+    """(subject, text, html) for send(to, *verification_mail(...)). The greeting is fixed: it goes to an address nobody has proven yet,
+    so no user-supplied text (name, business) is echoed."""
+    return _mail("Your LARIS verification code", ["Hello,", f"Your LARIS verification code is {code}. It expires in 10 minutes.",
                                                   "If you did not sign up, ignore this email."])
 
 
-def reset_mail(code: str, name: str) -> tuple[str, str, str]:
-    return _mail("Your LARIS password reset code", [f"Hello {name},", f"Your LARIS password reset code is {code}. It expires in 10 minutes.",
+def reset_mail(code: str) -> tuple[str, str, str]:
+    return _mail("Your LARIS password reset code", ["Hello,", f"Your LARIS password reset code is {code}. It expires in 10 minutes.",
                                                     "If you did not ask for it, ignore this email; your password has not changed."])
 
 

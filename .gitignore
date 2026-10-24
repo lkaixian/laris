@@ -6,6 +6,11 @@ venv/
 
 # Environment
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+!src/license_public.key
 
 # OS / Editor
 .DS_Store

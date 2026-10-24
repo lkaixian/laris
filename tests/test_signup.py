@@ -115,7 +115,10 @@ def test_wrong_code_five_times_then_dead(env):
     assert not e.sql("select active from users where email='ann@example.com'")[0]["active"]
     assert same(verify(e, wrong(code), email="nobody@example.com"), verify(e, wrong(code)))  # unknown email: same answer
     e.c.post("/api/signup/resend", json={"email": "ann@example.com"})
-    assert verify(e, last_code(e)).status_code == 200  # a new code works
+    assert verify(e, last_code(e)).status_code == 400  # a new code does not reset the guesses: the budget is per account
+    e.sql("update email_codes set created_at = now() - interval '2 hours'")
+    e.c.post("/api/signup/resend", json={"email": "ann@example.com"})
+    assert verify(e, last_code(e)).status_code == 200  # an hour on, the budget is back
 
 
 def test_expired_code(env):
@@ -524,5 +527,5 @@ def test_mailer_sandbox_url_payload_and_off(monkeypatch, caplog):
 
 
 def test_mail_templates_escape_html():
-    _, text, html = mailer.verification_mail("123456", "<script>x</script>")
-    assert "123456" in text and "<script>" not in html and "&lt;script&gt;" in html
+    _, text, html = mailer.verification_mail("123456")
+    assert "123456" in text and "<script>" not in html and html.startswith("<p>Hello,</p>")

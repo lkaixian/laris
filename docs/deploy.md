@@ -44,6 +44,12 @@ Header-only demo mode (the `X-Role` and `X-User` headers decide who you are, no 
 | `SIGNUP_DEV_ECHO` = `1` | **Local demos only, never on a real deployment.** While email is off, signup/resend/forgot also return the code as `dev_code`. Ignored when `MAILTRAP_API_TOKEN` is set |
 | `SECRET_KEY` | optional key for the code HMAC (see above) |
 
+Limits: per email 3 signups an hour, 3 resends or 3 reset requests per 15 minutes and 10 codes a day in all (in memory, a restart clears them). Wrong guesses are counted per account over the last hour across all its codes, so asking for a new code does not give 5 fresh tries; after 5 the account waits for the hour. Mails use a fixed greeting ("Hello,"), never a name typed by the user. `SIGNUP_DEV_ECHO` is ignored whenever `REPLIT_DEPLOYMENT` or `REPL_DEPLOYMENT` is set.
+
+Retention (the scheduler, every run, all businesses; needs `SCHEDULER=1`): `email_codes` used or expired more than 1 day ago are deleted; `invites` accepted, revoked or expired more than 30 days ago are deleted; signups never verified after 7 days are deleted with their otherwise empty business; `rfq_replies.message_text` is set to null after 180 days (the row and its price stay); `listings.image` and `listing_items.crop` are emptied after 90 days (the rows stay; the photo URLs then answer 404). Chat text still follows `RETENTION_DAYS`. `users.created_at` (added in `db/signup.sql`) dates a signup; existing users count from the first start after the upgrade. `laris_app` already holds the needed grants (`db/roles.sql` grants all tables).
+
+CI runs `pip-audit -r requirements.txt` and fails on any known vulnerability. There is no hash-pinned `requirements.lock` yet: `pip-tools` was not available when this was written; generate one with `pip-compile --generate-hashes requirements.txt -o requirements.lock`.
+
 Notes: one email may have an account in several businesses (`db/multi.sql` replaces the old global unique index on the email with one per tenant; applied on every start, safe to repeat). Sign-in with such an email asks which business (409 `choose_business`) when the password fits several; a password reset by emailed code changes the password of ALL accounts with that email. Signing up never says whether an email is taken. Signup and code limits are in memory like the sign-in lockout (a restart clears them). Any signup stores a password, so header-only demo mode (see above) switches off once somebody has signed up, as it does for any account with a password.
 
 ## Invite people by email

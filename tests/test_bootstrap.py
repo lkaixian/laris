@@ -45,3 +45,14 @@ def test_login_works_after_bootstrap(env, monkeypatch):
     r = e.c.post("/api/login", json={"username": "boss", "password": "correct horse 1"})
     assert r.status_code == 200
     assert e.c.get("/api/me", headers={"X-Role": "owner"}).status_code == 401  # demo mode is closed now
+
+
+def test_bootstrap_picks_the_oldest_owner(env, monkeypatch):
+    e = env
+    e.sql("update users set username=null, password_hash=null")
+    e.sql("update users set created_at = now() + interval '1 day' where role='owner'")
+    e.sql("insert into users(tenant_id,name,role,created_at) select tenant_id,'Oldest','owner',now() - interval '1 day' from users limit 1")
+    monkeypatch.setenv("BOOTSTRAP_OWNER_USERNAME", "boss")
+    monkeypatch.setenv("BOOTSTRAP_OWNER_PASSWORD", "correct horse 1")
+    run(e)
+    assert e.sql("select name from users where username='boss'")[0]["name"] == "Oldest"

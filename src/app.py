@@ -207,7 +207,7 @@ def ready():
                 if c.execute("select to_regclass('public.tenants') t").fetchone()["t"] is None:
                     reason = "schema_missing"
         except Exception as e:
-            reason, why = "db_unreachable", f" ({type(e).__name__}: {(str(e).splitlines() or [''])[0]})"
+            reason, why = "db_unreachable", f" ({type(e).__name__})"
     if reason:
         log.warning("not ready: %s%s", reason, why)
         return JR({"status": "not_ready", "reason": reason}, status_code=503)

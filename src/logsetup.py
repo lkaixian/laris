@@ -1,12 +1,11 @@
-"""Logging: one line format with the request id, and no webhook secrets in uvicorn's access log. setup() is idempotent."""
+"""Logging: one line format with the request id; no query strings in uvicorn's access log and no exception messages in tracebacks. setup() is idempotent."""
 import logging
 import os
-import re
+import traceback
 from contextvars import ContextVar
 
 request_id: ContextVar[str] = ContextVar("request_id", default="-")
 FORMAT = "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s"
-SECRET_QS = re.compile(r"((?:verify_token|token|secret|signature)=)[^&\s\"]*", re.I)
 
 
 class RequestIdFilter(logging.Filter):
@@ -15,13 +14,24 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
-class MaskWebhookQuery(logging.Filter):
-    """uvicorn.access args are (client, method, path?query, http_version, status): hide secrets in a /webhooks query string."""
+class MaskQuery(logging.Filter):
+    """uvicorn.access args are (client, method, path?query, http_version, status): drop the query string everywhere (tokens, search text)."""
 
     def filter(self, record):
         a = record.args
-        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and a[2].startswith("/webhooks/"):
-            record.args = (*a[:2], SECRET_QS.sub(r"\1***", a[2]), *a[3:])
+        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and "?" in a[2]:
+            record.args = (*a[:2], a[2].split("?", 1)[0] + "?***", *a[3:])
+        return True
+
+
+class ScrubTraceback(logging.Filter):
+    """Keep the stack frames of a logged exception but not its message: driver errors quote row values (emails, phones)."""
+
+    def filter(self, record):
+        if record.exc_info and record.exc_info[1] is not None:
+            e = record.exc_info[1]
+            record.exc_text = "".join(traceback.format_tb(e.__traceback__)) + type(e).__name__
+            record.exc_info = None
         return True
 
 
@@ -35,4 +45,5 @@ def setup() -> None:
     logging.basicConfig(level=lvl if isinstance(logging.getLevelName(lvl), int) else "INFO", format=FORMAT)  # no-op when handlers exist
     for h in logging.getLogger().handlers:
         _add(h, RequestIdFilter)
-    _add(logging.getLogger("uvicorn.access"), MaskWebhookQuery)
+        _add(h, ScrubTraceback)
+    _add(logging.getLogger("uvicorn.access"), MaskQuery)

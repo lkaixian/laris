@@ -154,3 +154,12 @@ def test_whatsapp_send_uses_the_tenants_own_number(monkeypatch):
     s = Services(); s.http = httpx.Client(transport=httpx.MockTransport(h))
     s.send("whatsapp", "6012", "a", "TENANT1"); s.send("whatsapp", "6012", "b")
     assert urls[0].endswith("/TENANT1/messages") and urls[1].endswith("/SHARED/messages")
+
+
+def test_telegram_set_commands_registers_the_menu():
+    seen = []
+    def h(req):
+        seen.append((req.url.path, json.loads(req.content)))
+        return httpx.Response(200, json={"ok": True, "result": True})
+    telegram.set_commands(client=httpx.Client(transport=httpx.MockTransport(h)), token="1:T")
+    assert seen[0][0].endswith("/setMyCommands") and {c["command"] for c in seen[0][1]["commands"]} == {"start", "help", "catalog"}

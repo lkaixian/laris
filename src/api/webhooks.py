@@ -34,6 +34,9 @@ _HITS = defaultdict(deque)
 SENDER_LIMIT = 30  # messages per (business, sender) per 10 minutes on the supplier and staff paths
 MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
 CATALOG = re.compile(r"\s*/?catalog\b", re.I)
+HELP_CMD = re.compile(r"\s*/(start|help)(@\w+)?\s*$", re.I)
+HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 kg PLA, how much?\", and we will send you a quote.\n"
+        "Staff: forward a supplier PDF or photo to record its prices, or send a product photo with the caption /catalog.")
 SORRY = "Sorry, we could not process that message. Our team will follow up."
 
 
@@ -154,6 +157,8 @@ def _handle(conn, s, m):
     if tid is None:  # fail closed: no reply, no processing, no number or text in the log; 200 so the provider does not retry
         log.warning("inbound from %s dropped: %s", _h(digits), why)
         return None
+    if m.text and not m.media_kind and HELP_CMD.match(m.text):  # /start and /help: no record, no model call
+        return HELP
     args = {"ch": m.channel, "d": digits, "s": m.sender, "scope": tid}  # from here every lookup is this business only
     u = conn.execute(STAFF_Q + " limit 1", args).fetchone()
     p = None

@@ -54,6 +54,36 @@ const docs: Record<string, DocDetail> = {
   },
 }
 
+// ?approved=1 adds an approved quote with a section header, three lines (one discounted) and messages by email and by an unknown channel. ?sst=1 adds an SST line to previews.
+if (new URLSearchParams(location.search).get('approved') === '1') docs['out-2'] = {
+  doc: D('out-2', 'out', 'QT-2026-0002', cust, 'approved', 1650, ago(1)),
+  lines: [
+    L('o2h', 1, 'Shopfront signage', null, '', null, { is_header: true, section: 'Shopfront signage' }),
+    L('o2l1', 2, 'SAMPLE acrylic signboard 60x30, gloss', 20, 'pcs', 60, { item_key: 'signboard_60x30' }),
+    L('o2l2', 3, 'SAMPLE vinyl lettering, per metre', 15, 'm', 20, { discount_pct: '10.0000' }),
+    L('o2l3', 4, 'SAMPLE installation (one visit)', 1, 'job', 150),
+  ],
+  messages: [{ direction: 'out', channel: 'email', body: 'SAMPLE message: quotation QT-2026-0002 attached.', at: new Date().toISOString() }, { direction: 'in', channel: 'carrier_pigeon', body: 'SAMPLE unknown channel message.', at: new Date().toISOString() }],
+}
+const mockPreview = (d: DocDetail) => {
+  const q = new URLSearchParams(location.search)
+  const lines = d.lines.map(l => ({ no: l.line_no, description: l.description, qty: l.qty, uom: l.uom, unit_price: l.unit_price, discount_pct: l.discount_pct, is_header: l.is_header, section: l.section,
+    amount: l.is_header ? null : money(Number(l.qty) * Number(l.unit_price) * (1 - Number(l.discount_pct ?? 0) / 100)) }))
+  const sub = lines.reduce((a, l) => a + Number(l.amount ?? 0), 0), tax = q.get('sst') === '1' ? sub * 0.08 : null
+  const noEmail = q.get('noemail') === '1'
+  return {
+    doc_no: d.doc.doc_no, status: d.doc.status, customer: { name: d.doc.party.name, attention: 'Ms Aisyah', address: '12 Jalan Contoh\n50000 Kuala Lumpur', email: noEmail ? null : 'hello@cafe.example' },
+    issued_on: d.doc.issued_on ?? ago(0), valid_until: d.doc.valid_until, currency: 'MYR', lines, subtotal: money(sub), tax_total: tax === null ? null : money(tax), total: money(sub + (tax ?? 0)),
+    payment_terms: setting.quote_payment_terms ?? '50% deposit, balance on delivery.', terms_text: setting.quote_terms_text ?? 'Prices in MYR. Artwork approval needed before production.',
+    issuer: { name: branding.display_name || 'SAMPLE Signage Works (synthetic)', address: setting.address ?? '1 Jalan Sampel, 40000 Shah Alam', ssm_no: setting.ssm_no ?? '202401000001', sst_no: setting.sst_registered ? setting.sst_no : null,
+      email: setting.issuer_email, phone: setting.issuer_phone, logo_url: branding.logo_data_url, brand_color: branding.brand_color, bank_details: setting.bank_details ?? 'SAMPLE Bank 1234-5678-90' },
+    channels: [
+      { channel: 'email', to_hint: noEmail ? null : 'h***@cafe.example', available: !noEmail, ...(noEmail ? { reason: 'no_email' } : {}) },
+      { channel: 'whatsapp', to_hint: '+60 12-***-4567', available: true },
+      { channel: 'telegram', to_hint: null, available: false, reason: 'no_contact' },
+    ],
+  }
+}
 const newIn2 = (supplier: string): DocDetail => ({
   doc: D('in-2', 'in', 'SAMPLE-A-002', { ...supA, name: supplier }, 'parsed', 140, ago(3), { cost_is_stale: false, needs_review: true }),
   lines: [
@@ -181,7 +211,21 @@ const checkRole = (name: string, perms: unknown) => {
 }
 const roleOf = (key: string) => roles.find(r => r.key === key)
 const branding = { display_name: null as string | null, brand_color: null as string | null, logo_data_url: null as string | null }
-const setting = { min_margin_pct: '25.00', ssm_no: null as string | null, address: null as string | null, bank_details: null as string | null, sst_registered: false, sst_no: null as string | null }
+const setting = { min_margin_pct: '25.00', ssm_no: null as string | null, address: null as string | null, bank_details: null as string | null, sst_registered: false, sst_no: null as string | null,
+  quote_validity_days: 30 as number | null, quote_prefix: 'QT' as string | null, quote_payment_terms: null as string | null, quote_terms_text: null as string | null, issuer_email: null as string | null, issuer_phone: null as string | null }
+// Quote settings validation like the server (422 with fields[]).
+function checkQuoteSettings(b: any) {
+  const bad = (field: string, message: string) => { const e = new ApiError(422, 'invalid', message); e.fields = [{ field, message }]; return e }
+  const v = b.quote_validity_days
+  if (v != null && !(Number.isInteger(v) && v >= 1 && v <= 365)) throw bad('quote_validity_days', 'must be a whole number from 1 to 365')
+  if (b.quote_prefix != null && !/^[A-Z0-9-]{1,8}$/.test(b.quote_prefix)) throw bad('quote_prefix', 'must be 1 to 8 capital letters, digits or dashes')
+  if (b.quote_payment_terms != null && String(b.quote_payment_terms).length > 500) throw bad('quote_payment_terms', 'at most 500 characters')
+  if (b.quote_terms_text != null && String(b.quote_terms_text).length > 2000) throw bad('quote_terms_text', 'at most 2000 characters')
+  if (b.issuer_email != null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.issuer_email)) throw bad('issuer_email', 'must be an email address')
+  if (b.issuer_phone != null && String(b.issuer_phone).length > 40) throw bad('issuer_phone', 'at most 40 characters')
+  if ('quote_validity_days' in b && v == null) b.quote_validity_days = 30
+  if ('quote_prefix' in b && b.quote_prefix == null) b.quote_prefix = 'QT'
+}
 
 
 // ---- onboarding and licence (step 97). Verify accepts 123456. Licence is off (enforced:false) unless the URL has ?licence=missing|expired|expiring.
@@ -343,6 +387,32 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     log(who, id, `${docs[id].doc.doc_no}: draft created from a simulated ${body.channel} enquiry`)
     return docs[id].doc
   }
+  if ((m = p.match(/^\/documents\/([^/]+)\/(preview|export|send)$/))) {
+    const d = docs[m[1]]
+    if (!d || d.doc.direction !== 'out') throw new ApiError(404, 'not_found', 'Document not found.')
+    if (m[2] === 'preview') return mockPreview(d)
+    if (m[2] === 'export') {
+      const sp = new URLSearchParams(q), fmt = sp.get('format') ?? '', variant = sp.get('variant') ?? 'customer'
+      if (!['pdf', 'xlsx', 'csv'].includes(fmt) || !['customer', 'internal'].includes(variant)) throw new ApiError(400, 'bad_param', 'format or variant is not valid')
+      if (variant === 'internal') {
+        if (fmt === 'pdf') throw new ApiError(415, 'unsupported_media', 'internal PDF is not available')
+        perm('export_data'); perm('view_costs')
+      }
+      const type = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv' }[fmt]
+      return new Blob([`SAMPLE ${variant} ${fmt} for ${d.doc.doc_no} (mock mode)\n`], { type })
+    }
+    need()
+    if (method !== 'POST') throw new ApiError(404, 'not_found', 'No mock route.')
+    if (!['approved', 'sent', 'read'].includes(d.doc.status)) throw new ApiError(409, 'not_sendable', `Cannot send a ${d.doc.status} quote.`)
+    const ch = mockPreview(d).channels.find(c => c.channel === body?.channel)
+    if (!ch) throw new ApiError(422, 'bad_channel', 'Unknown channel.')
+    if (!ch.available) throw new ApiError(422, ch.reason!, ch.reason === 'no_email' ? 'This customer has no email.' : 'This customer has no chat contact.')
+    if (Q.get('slowdown') === '1') throw new ApiError(429, 'slow_down', 'Too many sends. Wait a moment.')
+    if (Q.get('sendfail') === '1') return { delivery: { channel: ch.channel, status: 'failed', error: 'The mail server refused the message (simulated).' }, status: d.doc.status }
+    d.messages.push({ direction: 'out', channel: ch.channel, body: body?.message || `SAMPLE message: quotation ${d.doc.doc_no} sent.`, at: new Date().toISOString() })
+    if (d.doc.status === 'approved') { log(who, d.doc.id, `${d.doc.doc_no}: approved to sent`); d.doc.status = 'sent'; d.doc.updated_at = new Date().toISOString() }
+    return { delivery: { channel: ch.channel, status: 'delivered' }, status: d.doc.status }
+  }
   if ((m = p.match(/^\/documents\/([^/]+)$/))) {
     const d = docs[m[1]]
     if (!d) throw new ApiError(404, 'not_found', 'Document not found.')
@@ -389,6 +459,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
       if (brand_color != null && !/^#[0-9a-f]{6}$/i.test(brand_color)) throw new ApiError(422, 'bad_colour', 'brand_color must be #rrggbb')
       if (logo_data_url != null && !/^data:image\/(png|jpeg|webp);base64,/.test(logo_data_url)) throw new ApiError(415, 'unsupported_media', 'logo must be png, jpeg or webp')
       if (logo_data_url != null && logo_data_url.length > 280000) throw new ApiError(413, 'too_large', 'logo is over 200 KB')
+      checkQuoteSettings(rest)
       Object.assign(setting, rest); Object.assign(branding, { display_name: display_name || null, brand_color: brand_color ?? null, logo_data_url: logo_data_url ?? null })
     }
     return { ...setting, ...branding }

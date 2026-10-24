@@ -46,7 +46,8 @@ export interface MarginReport {
   lowest_margin?: { quote_id: string; quote_no: string; margin: string; margin_pct: string | number | null }[]
 }
 export interface Job { id: string; status: 'todo' | 'doing' | 'done'; quote_id: string; quote_no: string; customer: string; total: string; summary: string | null }
-export interface Settings { display_name?: string | null; brand_color?: string | null; logo_data_url?: string | null; min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null }
+export interface Settings { display_name?: string | null; brand_color?: string | null; logo_data_url?: string | null; min_margin_pct: string; ssm_no: string | null; address: string | null; bank_details: string | null; sst_registered: boolean; sst_no: string | null
+  quote_validity_days?: number | null; quote_prefix?: string | null; quote_payment_terms?: string | null; quote_terms_text?: string | null; issuer_email?: string | null; issuer_phone?: string | null }
 export interface Proposal { id: string; key: string; sample_values: unknown[]; status: string }
 export interface AuditEvent { id: number; at: string; actor: string; entity: string; entity_id: string; event: string }
 
@@ -91,7 +92,7 @@ export const can = (k: string) => perms.includes(k)
 export const PERM_LABEL: Record<string, string> = {
   view_costs: 'See costs and prices', view_reports: 'See the margin report', edit_supplier_contacts: 'Edit supplier contacts', manage_contacts: 'Manage contacts',
   upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
-  export_data: 'Export data', view_audit: 'See the activity log',
+  export_data: 'Export data', view_audit: 'See the activity log', decide_quotes: 'Approve, accept, reject or send quotes',
 }
 export const why = (k: string) => `Needs the “${PERM_LABEL[k] ?? k}” permission`
 // Spread on a button: `<button {...needs('manage_contacts', onClick)}>`. Without the permission it is aria-disabled, explains why in its title and does nothing.
@@ -185,9 +186,9 @@ async function mockFetch(method: string, path: string, r: Role, body: unknown, s
   await sleep((contacts ? Number(mockQ('slow')) || 0 : 0) + 120, signal)
   const err = (status: number, error: object) => new Response(JSON.stringify({ error: { request_id: `mock-${status}-7f3a`, ...error } }), { status, headers: { 'X-Request-Id': `mock-${status}-7f3a` } })
   if (method === 'GET' && p === (mockQ('failpath') ?? '/contacts') && mockQ('fail') === '500') return err(500, { code: 'internal', message: 'Internal error' })
-  try { return new Response(JSON.stringify(mock(method, path, r, body)), { status: 200 }) }
+  try { const out = mock(method, path, r, body); return new Response(out instanceof Blob ? out : JSON.stringify(out), { status: 200 }) }
   catch (e) {
-    if (e instanceof ApiError) return err(e.status, { code: e.code, message: e.message })
+    if (e instanceof ApiError) return err(e.status, { code: e.code, message: e.message, fields: e.fields })
     return err(500, { code: 'internal', message: String(e) })
   }
 }
@@ -258,6 +259,11 @@ export async function download(path: string, filename: string, opts?: ReqOpts): 
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
+}
+
+// Same as download() but hands back an object URL (for "Open PDF in a new tab"). The caller revokes it.
+export async function blobUrl(path: string, opts?: ReqOpts): Promise<string> {
+  return URL.createObjectURL(await request<Blob>('GET', path, { ...opts, auth: true, user: true, as: 'blob' }))
 }
 
 // Image for <img>: the API needs the identity headers, so fetch it as a blob. Mock data and data/blob URLs pass through.

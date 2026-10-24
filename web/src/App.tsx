@@ -13,6 +13,8 @@ import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
 import { RolesView } from './Roles'
 import { ChannelsCard } from './Channels'
+import { QuoteSettingsCard } from './QuoteSettings'
+import { QuotePanel, Messages } from './QuoteDoc'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView } from './Assistant'
@@ -296,7 +298,6 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                 <span className="text-muted">Total {rm(d.doc.total)}</span>
               </>}
               actions={d.doc.direction === 'out' && !MOCK && <>
-                <button type="button" className="btn" onClick={() => save(`/documents/${id}/pdf`, `${d.doc.doc_no}.pdf`)}>Download quote PDF</button>
                 {can('export_data') && costs && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
                   <button type="button" className="btn" onClick={() => save(`/export/bom.xlsx?quote_id=${id}`, `bom-${d.doc.doc_no}.xlsx`)}>Download BOM (xlsx)</button>
                   <button type="button" className="btn" onClick={() => save(`/export/po.csv?quote_id=${id}`, `po-${d.doc.doc_no}.csv`)}>Download purchase list (csv)</button>
@@ -305,6 +306,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
 
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
             <div className="min-w-0 lg:order-1">
+            {d.doc.direction === 'out' && <QuotePanel key={id} id={id} status={d.doc.status} owner={owner} onChanged={s.reload} />}
             <h2 className="mb-1 text-lg font-semibold">Lines</h2>
             {edit && !can('upload_documents') && <p className="mb-2 text-sm text-muted">{why('upload_documents')} to edit these lines. You can read them here.</p>}
             {edit && can('upload_documents') && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. The item key is a short code that links the line to your cost book, for example acrylic_3mm_sheet. Lines marked Needs review are unclear on the source document.</p>}
@@ -323,6 +325,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                 </table>
               </TableRegion>
             )}
+            <Messages list={d.messages} />
             </div>
 
             <aside className="grid gap-6 lg:order-2">
@@ -605,6 +608,7 @@ function SettingsView({ owner }: { owner: boolean }) {
         )}
       </Async>
       <ChannelsCard />
+      <QuoteSettingsCard />
     </>
   )
 }

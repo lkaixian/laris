@@ -193,11 +193,13 @@ export function PurchaseView({ owner, backHref }: { owner: boolean; backHref: st
       ) : (
         <>
           <Async2 s={s} />
+          {!s.loading && !s.error && plans.length === 0 && <EmptyState title="No plans are available yet." />}
           {plans.length > 0 && <>
             <ul aria-label="Plans" className="mb-4 grid gap-3 sm:grid-cols-3">
               {plans.map(p => (
                 <li key={p.key} className={`card ${p.key === plan ? 'border-accent' : ''}`}>
                   <h2 className="text-lg font-semibold">{p.name}</h2>
+                  {p.key === plan && <p className="text-sm font-semibold text-accent">Selected</p>}
                   <p className="text-sm text-muted">{p.seats} seats</p>
                   <p className="mt-2 font-semibold">{p.price}</p>
                 </li>

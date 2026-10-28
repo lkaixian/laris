@@ -33,7 +33,7 @@ export function ChannelsCard() {
       <h2 id="ch" className="text-lg font-semibold">Channels</h2>
       <p className="mb-3 text-sm text-muted">Tell LARIS which chat number is yours, so customer messages reach your business.</p>
       {s.error ? <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>
-        : !c ? <div role="status" aria-busy="true" className="skeleton h-16" /> : <>
+        : !c ? <div role="status" aria-busy="true" className="skeleton h-16"><span className="sr-only">Loading...</span></div> : <>
           {missing && (
             <div className="mb-3 flex items-start gap-2 rounded-ui border border-warn bg-warn-bg p-3 text-sm text-warn" data-testid="channels-warning">
               <Icon name="warn" className="mt-0.5 size-5" />

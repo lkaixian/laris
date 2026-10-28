@@ -121,8 +121,9 @@ function AskForm({ onSent }: { onSent: () => void }) {
         {img && (
           <div className="grid gap-2">
             <p id="ring-help" className="text-sm">Circle the item: drag on the photo from the centre outwards, or use the buttons below. A circle is optional.</p>
-            <canvas ref={canvas} role="img" aria-label={circle ? 'Photo of the item with a red circle drawn on it' : 'Photo of the item, no circle drawn'} aria-describedby="ring-help"
-              className="h-auto max-w-full touch-none cursor-crosshair rounded-ui border border-line" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+            <figure className="m-0" role="img" aria-label={circle ? 'Photo of the item with a red circle drawn on it' : 'Photo of the item, no circle drawn'} aria-describedby="ring-help">
+              <canvas ref={canvas} className="h-auto max-w-full touch-none cursor-crosshair rounded-ui border border-line" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+            </figure>
             <div role="group" aria-label="Circle controls" className="flex flex-wrap gap-2">
               <button type="button" className="btn" onClick={() => nudge(-STEP, 0, 0)}>Move circle left</button>
               <button type="button" className="btn" onClick={() => nudge(STEP, 0, 0)}>Move circle right</button>
@@ -185,12 +186,15 @@ function AskForm({ onSent }: { onSent: () => void }) {
 // The image endpoint needs the identity headers, so a plain <img src> will not do: fetch it as a blob.
 function Photo({ url, alt }: { url: string; alt: string }) {
   const [src, setSrc] = useState('')
+  const [bad, setBad] = useState(false)
   useEffect(() => {
     let live = true, made = ''
-    imageUrl(url).then(u => { made = u; if (live) setSrc(u); else if (u.startsWith('blob:')) URL.revokeObjectURL(u) }, () => undefined)
+    setBad(false)
+    imageUrl(url).then(u => { made = u; if (live) setSrc(u); else if (u.startsWith('blob:')) URL.revokeObjectURL(u) }, () => live && setBad(true))
     return () => { live = false; if (made.startsWith('blob:')) URL.revokeObjectURL(made) }
   }, [url])
-  return src ? <img src={src} alt={alt} className="max-h-40 max-w-full rounded-ui border border-soft object-contain" /> : null
+  if (bad) return <span className="text-sm text-muted">Photo not available.</span>
+  return src ? <img src={src} alt={alt} className="max-h-40 max-w-full rounded-ui border border-soft object-contain" /> : <span role="status" aria-busy="true" className="skeleton block h-24 w-40 max-w-full"><span className="sr-only">Loading photo...</span></span>
 }
 
 function AcceptCell({ rfq, r, onDone }: { rfq: string; r: Reply; onDone: () => void }) {

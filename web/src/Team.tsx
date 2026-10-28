@@ -106,6 +106,7 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
   return (
     <>
       <PageHeader title="Team" description="People who can sign in. Staff cannot see cost or margin. Deactivating someone ends their session at once." />
+      {roles.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load the role list, so only the standard roles are shown.</p>}
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <ActionError err={a.err} onRetry={() => last.current?.()} label="Try again" />
       <Async s={s} rows={3} empty={!s.data?.length} emptyText="No users yet." emptyHint="Add the first person below." >

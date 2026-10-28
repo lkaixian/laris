@@ -31,12 +31,12 @@ function dueText(j: Job): { text: string; late: boolean } {
 }
 
 // ---- who can be assigned: owners see everyone (GET /api/users is owner only), everyone else only themselves or nobody
-function usePeople(me: Me): Assignee[] {
+function usePeople(me: Me): [Assignee[], boolean] {
   const owner = getRole() === 'owner'
   const u = useFetch<{ id: string; name: string; active?: boolean }[]>(owner ? '/users' : null)
   const list: Assignee[] = [{ id: me.id, name: me.name }]
   for (const x of u.data ?? []) if (x.active !== false && !list.some(p => p.id === x.id)) list.push({ id: x.id, name: x.name })
-  return list
+  return [list, !!u.error]
 }
 
 type Errs = Partial<Record<'due_on' | 'assignee_id' | 'priority' | 'notes' | 'form', string>>
@@ -233,12 +233,13 @@ function AgendaView({ f, me, people }: { f: Filters; me: Me; people: Assignee[] 
 export function JobsView({ me }: { me: Me }) {
   const [f, setF] = useState<Filters>(initial)
   const set = (p: Partial<Filters>) => setF(x => { saved = { ...x, ...p }; return saved })
-  const people = usePeople(me)
+  const [people, peopleFailed] = usePeople(me)
   useEffect(() => { const h = () => { if (hashParams().size) { const n = initial(); saved = n; setF(n) } }; addEventListener('hashchange', h); return () => removeEventListener('hashchange', h) }, [])
   const tab = (v: Filters['view'], t: string) => <button key={v} type="button" className={`btn ${f.view === v ? 'bg-tint' : ''}`} aria-pressed={f.view === v} onClick={() => set({ view: v })}>{t}</button>
   return (
     <>
       <PageHeader title="Jobs" description={'Created when a customer accepts a quote ("Sign and create job" on the quote).'} />
+      {peopleFailed && <p role="alert" className="mb-2 text-sm text-warn">Could not load the team list, so only you can be assigned for now. Reload to try again.</p>}
       {!can('manage_contacts') && <p className="mb-2 text-sm text-muted">{why('manage_contacts')} to move or edit jobs. You can see the board.</p>}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div role="group" aria-label="View" className="inline-flex gap-1">{tab('board', 'Board')}{tab('agenda', 'Agenda')}</div>

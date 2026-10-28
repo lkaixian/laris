@@ -48,6 +48,7 @@ export function AssistantView() {
           {busy && <p role="status" className="text-sm text-muted">Looking...</p>}
           <div ref={end} />
         </div>
+        {sug.error && turns.length === 0 && <p className="text-sm text-muted">Suggested questions could not be loaded. You can still type your own.</p>}
         {sug.data && turns.length === 0 && (
           <div className="flex flex-wrap gap-2" role="group" aria-label="Suggested questions">
             {sug.data.map(s => <button key={s} type="button" className="btn" onClick={() => ask(s)}>{s}</button>)}

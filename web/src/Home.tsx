@@ -166,7 +166,7 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
               <h2 id="cb" className="text-lg font-semibold">Contact book</h2>
               <a className="link inline-flex min-h-11 items-center" href="#/contacts">Open all contacts</a>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Stat title="Customers" value={d.contacts.customers} href="#/contacts" />
               <Stat title="Suppliers" value={d.contacts.suppliers} href="#/contacts" />
               <Stat title="Contractors" value={d.contacts.contractors} href="#/contacts" />

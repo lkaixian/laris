@@ -107,7 +107,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
 }
 
 // ---------- One product ----------
-function ItemCard({ lid, n, it, showPrice, suppliers, onChanged }: { lid: string; n: number; it: Item; showPrice: boolean; suppliers: Supplier[]; onChanged: () => void }) {
+function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid: string; n: number; it: Item; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onChanged: () => void }) {
   const [edit, setEdit] = useState(false)
   const [f, setF] = useState({ description: '', sku: '', sizes: '', item_key: '', price: '' })
   const [formErr, setFormErr] = useState('')
@@ -229,7 +229,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, onChanged }: { lid: string
         <form id={`${id}-ask`} className="mt-3 grid gap-3 border-t border-soft pt-3" onSubmit={e => { e.preventDefault(); ask() }}>
           <fieldset className="min-w-0">
             <legend className="mb-1 text-sm font-semibold">Which suppliers to ask? (choose at least one)</legend>
-            {suppliers.length === 0 ? <p className="text-sm text-muted">No suppliers yet. Add one under Contacts first.</p> : (
+            {supErr?.error ? <div role="alert" className="text-sm text-warn"><p>{supErr.error}</p><button type="button" className="btn mt-2" onClick={supErr.reload}>Retry loading</button></div> : suppliers.length === 0 ? <p className="text-sm text-muted">No suppliers yet. Add one under Contacts first.</p> : (
               <ul className="grid gap-1">
                 {suppliers.map(s => (
                   <li key={s.id}>
@@ -263,7 +263,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, onChanged }: { lid: string
 }
 
 // ---------- Whole photo + products ----------
-function DetailView({ id, showPrice, suppliers, onList }: { id: string; showPrice: boolean; suppliers: Supplier[]; onList: () => void }) {
+function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onList: () => void }) {
   const s = useFetch<Detail>(`/listings/${id}`)
   const jump = (itemId: string) => { const el = document.getElementById(`it-${itemId}`); el?.scrollIntoView({ block: 'center' }); el?.focus() }
   const d = s.data
@@ -289,7 +289,7 @@ function DetailView({ id, showPrice, suppliers, onList }: { id: string; showPric
               })}
             </div>
             <ul className="grid gap-4">
-              {d.items.map((it, i) => <ItemCard key={it.id} lid={id} n={i + 1} it={it} showPrice={showPrice} suppliers={suppliers} onChanged={() => { s.reload(); onList() }} />)}
+              {d.items.map((it, i) => <ItemCard key={it.id} lid={id} n={i + 1} it={it} showPrice={showPrice} suppliers={suppliers} supErr={supErr} onChanged={() => { s.reload(); onList() }} />)}
             </ul>
           </>
         )}
@@ -325,7 +325,7 @@ export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: s
           </ul>
         </Async>
       </section>
-      {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} onList={list.reload} />}
+      {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}
     </>
   )
 }

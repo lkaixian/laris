@@ -248,7 +248,7 @@ function Sessions() {
 }
 
 // Everyone: change own password, then see and end own sessions.
-export function AccountView({ name, role }: { name: string; role: string }) {
+export function AccountView({ name, role, linked, onChange }: { name: string; role: string; linked?: boolean; onChange?: () => void }) {
   const [cur, setCur] = useState('')
   const [nw, setNw] = useState('')
   const [err, setErr] = useState('')
@@ -289,7 +289,10 @@ export function AccountView({ name, role }: { name: string; role: string }) {
       <section className="mt-8 max-w-xl border-t border-soft pt-6" aria-labelledby="tgme" data-tour="account-telegram">
         <h2 id="tgme" className="text-base font-semibold">Telegram</h2>
         <p className="mb-3 text-sm text-muted">Link your Telegram to send product photos and supplier price lists to LARIS from your phone.</p>
-        <div className="flex flex-wrap items-center gap-2"><TelegramLinkControls base="/me" who="yourself" /></div>
+        <div className="flex flex-wrap items-center gap-2">
+          {linked !== undefined && <span>Status: <span className="font-semibold text-ink">{linked ? 'Linked' : 'Not linked'}</span></span>}
+          <TelegramLinkControls base="/me" who="yourself" linked={linked} onChange={onChange} />
+        </div>
       </section>
       {(MOCK || getAccount()) && <Sessions />}
     </>

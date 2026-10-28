@@ -22,7 +22,7 @@ export interface Provenance {
   line_id: string; source_line_id: string; qty_consumed?: string; cost_date: string; unit_cost: string; cost_snapshot: string
   current_unit_cost: string; cost_is_stale: boolean; line_margin: string
 }
-export interface Me { id: string; role: Role; role_key?: string; role_name?: string; permissions?: string[]; name: string; org: { name: string; brand_color?: string | null; logo_url: string | null } }
+export interface Me { id: string; role: Role; role_key?: string; role_name?: string; permissions?: string[]; telegram_linked?: boolean; ai_guide?: boolean; name: string; org: { name: string; brand_color?: string | null; logo_url: string | null } }
 export interface DocDetail {
   doc: DocSummary
   lines: Line[]
@@ -110,7 +110,7 @@ let lastPerms = 0
 const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
 // Pages that need a permission. Team, Roles, Settings, Privacy and API access are owner-class only (docs/roles.md, "Owner only, not assignable").
 const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access'].includes(route) ? owner : !NEED[route] || can(NEED[route])
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }

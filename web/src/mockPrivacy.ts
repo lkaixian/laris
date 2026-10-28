@@ -1,5 +1,5 @@
 // SAMPLE data for the Privacy and API access pages (mock mode only). Switches: ?privacy=empty | overdue (default: one open, one closed incident),
-// ?api=none (no keys) | over (over the free allowance). Shapes follow src/api/privacy.py and src/api/public_api.py.
+// ?requests=none | many (default: three, two pending), ?api=none (no keys) | over (over the free allowance). Shapes follow src/api/privacy.py and src/api/public_api.py.
 import { ApiError } from './api'
 
 const Q = new URLSearchParams(location.search)
@@ -34,6 +34,12 @@ const keys = Q.get('api') === 'none' ? [] : [
   { id: 'k2', name: 'Old test key', key_prefix: 'lar_9fQ2', created_at: iso(24 * 60), last_used_at: null, revoked: true },
 ]
 
+const RQ = Q.get('requests')
+const rq = (id: string, n: string, kind: 'erase' | 'export', status: string, hoursAgo: number, channel = 'telegram') =>
+  ({ id, party_id: 'p-' + id, party_name: n, kind, status, channel, requested_at: iso(hoursAgo), decided_at: status === 'pending' ? null : iso(hoursAgo - 2) })
+const requests = RQ === 'none' ? [] : [rq('r1', 'SAMPLE Customer', 'erase', 'pending', 50), rq('r2', 'SAMPLE Buyer Two', 'export', 'pending', 5, 'whatsapp'), rq('r3', 'SAMPLE Old Customer', 'erase', 'done', 24 * 9),
+  ...(RQ === 'many' ? Array.from({ length: 12 }, (_, i) => rq('m' + i, `SAMPLE Customer ${i + 4}`, i % 3 ? 'erase' : 'export', i % 4 ? 'pending' : 'dismissed', 3 + i * 20, i % 2 ? 'whatsapp' :  'telegram')) : [])]
+
 // Returns undefined when the path is not one of ours.
 export function mockPrivacy(method: string, p: string, owner: boolean, body: any): unknown {
   let m: RegExpMatchArray | null
@@ -51,6 +57,13 @@ export function mockPrivacy(method: string, p: string, owner: boolean, body: any
   if ((m = p.match(/^\/privacy\/breaches\/([^/]+)$/)) && method === 'POST') {
     const b = incidents.find(x => x.id === m![1]); if (!b) throw new ApiError(404, 'not_found', 'incident not found')
     Object.assign(b, body); return view(b)
+  }
+  if (p === '/privacy/requests' && method === 'GET') return [...requests].sort((a, b) => +(b.status === 'pending') - +(a.status === 'pending'))
+  if ((m = p.match(/^\/privacy\/requests\/([^/]+)$/)) && method === 'POST') {
+    const q = requests.find(x => x.id === m![1]); if (!q) throw new ApiError(404, 'not_found', 'request not found')
+    if (q.status !== 'pending') throw new ApiError(409, 'already_decided', 'this request was already decided')
+    if (body.action === 'erase' && q.kind !== 'erase') throw new ApiError(422, 'bad_action', 'only an erase request can be erased')
+    q.status = body.action === 'erase' ? 'done' : 'dismissed'; q.decided_at = new Date().toISOString(); return q
   }
   if (p === '/usage') {
     const over = Q.get('api') === 'over'

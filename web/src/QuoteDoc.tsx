@@ -22,6 +22,8 @@ const CHAN: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', tel
 // Unknown channels are shown as written, capitalised, never a crash.
 export const chanLabel = (c: unknown) => { const k = String(c ?? ''); return CHAN[k] ?? (k ? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' ') : 'Unknown channel') }
 const REASON: Record<string, string> = { no_email: 'No email on file for this customer', no_contact: 'No chat contact on file' }
+const linkFail = (e: unknown) => e instanceof ApiError && e.status === 409 && e.code === 'public_url_missing' ? 'Set APP_PUBLIC_URL in the server settings first.'
+  : e instanceof ApiError && e.status === 409 && e.code === 'not_linkable' ? 'This quote cannot be shared yet. Approve it first, then try again.' : msg(e)
 const num = (s: string | null) => (s == null ? '' : Number(s).toLocaleString('en-MY', { maximumFractionDigits: 4 }))
 const date = (s: string | null) => s ?? 'Not set'
 // Readable text colour on the brand colour (same rule as applyBrand in ui.tsx). Only a strict #rrggbb is ever used.
@@ -135,6 +137,10 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
   const [menu, setMenu] = useState(false)
   const [pending, setPending] = useState('')
   const [send, setSend] = useState(false)
+  const [lk, setLk] = useState<{ url: string; until: string }>()
+  const [lkBusy, setLkBusy] = useState(false)
+  const [lkMsg, setLkMsg] = useState('')
+  const lkField = useRef<HTMLInputElement>(null)
   const menuBtn = useRef<HTMLButtonElement>(null)
   const sendBtn = useRef<HTMLButtonElement>(null)
   const p = pv.data
@@ -156,6 +162,18 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
     try { const u = await blobUrl(`/documents/${id}/export?format=pdf&variant=customer`); w.location.href = u; setTimeout(() => URL.revokeObjectURL(u), 60_000) }
     catch (e) { w.close(); throw e }
   })
+  // Owner: make a fresh customer link (older ones stop) and copy it. If the browser refuses, the link sits in a selectable field.
+  const copyLink = async () => {
+    if (lkBusy) return
+    setLkBusy(true); setLkMsg('')
+    try {
+      const r = await api<{ url: string; expires_at: string }>('POST', `/documents/${id}/accept-link`)
+      const until = new Date(r.expires_at).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })
+      setLk({ url: r.url, until })
+      try { await navigator.clipboard.writeText(r.url); toast(`Link copied. It works until ${until}.`) }
+      catch { setLkMsg('Could not copy automatically. The link is selected below: press Ctrl+C.'); requestAnimationFrame(() => lkField.current?.select()) }
+    } catch (e) { setLkMsg(linkFail(e)) } finally { setLkBusy(false) }
+  }
   const keyClose = (e: React.KeyboardEvent) => { if (e.key === 'Escape' && menu) { e.stopPropagation(); setMenu(false); menuBtn.current?.focus() } }
   const sendable = ['approved', 'sent', 'read'].includes(status)
   const row = (v: 'customer' | 'internal') => EXPORTS.filter(x => x.variant === v).map(x => (
@@ -168,11 +186,21 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
         <div className="flex flex-wrap items-center gap-2" onKeyDown={keyClose}>
           {sendable && <button ref={sendBtn} type="button" className="btn btn-primary" aria-expanded={send} aria-controls="send-box"
             {...(owner ? { onClick: () => setSend(v => !v) } : { 'aria-disabled': true as const, title: why('decide_quotes'), 'data-locked': true as const })}>Send quote</button>}
+          {sendable && owner && <button type="button" className="btn" aria-disabled={lkBusy || undefined} onClick={copyLink}>{lkBusy ? 'Making link...' : 'Copy customer link'}</button>}
           <button ref={menuBtn} type="button" className="btn" aria-expanded={menu} aria-controls="export-menu" onClick={() => setMenu(v => !v)}>Export<Icon name="down" className="ml-1 size-4" /></button>
           <button type="button" className="btn" aria-disabled={!!pending || undefined} onClick={openPdf}>{pending === 'open' ? 'Opening...' : 'Open PDF in a new tab'}</button>
         </div>
       </div>
       {sendable && !owner && <p className="mt-1 text-sm text-muted">Only the owner can send quotes.</p>}
+      {sendable && owner && (lk || lkMsg) && (
+        <div className="card mt-2 max-w-xl">
+          {lk && <label className="flex flex-col gap-1 text-sm font-semibold">Customer link
+            <input ref={lkField} readOnly className="input font-normal" value={lk.url} onFocus={e => e.currentTarget.select()} /></label>}
+          {lk && <p className="mt-1 text-sm text-muted">Works until {lk.until}. Making a new link stops the older ones.</p>}
+          <p role="status" className="mt-1 text-sm text-warn empty:hidden">{lkMsg}</p>
+        </div>
+      )}
+      {sendable && owner && <p className="mt-1 text-sm text-muted">Copy customer link gives you a page where your customer can read this quote and accept it by typing their name. The signature is simulated, not a legal e-signature.</p>}
       {menu && (
         <div id="export-menu" className="card mt-2 grid max-w-xl gap-3 sm:grid-cols-2" onKeyDown={keyClose}>
           <div><h3 className="mb-1 text-sm font-semibold">Customer files</h3><ul className="grid gap-2">{row('customer')}</ul></div>

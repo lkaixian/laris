@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, download, getRole } from './api'
+import { api, ApiError, download, getRole } from './api'
 import { Async, Hint, PageHeader, useFetch, useAction, ActionError } from './ui'
 import { useToast } from './Toast'
+import { relTime } from './Timeline'
 
 interface Dpo { dpo_name: string | null; dpo_email: string | null; dpo_phone: string | null; configured: boolean }
 interface Incident {
@@ -161,7 +162,7 @@ function BreachRegister() {
       <p className="mb-3 mt-1 text-sm text-muted">Write down any time personal data was lost, sent to the wrong person or seen by someone who should not. Incidents are kept as a record and cannot be deleted.</p>
       <label className="mb-3 flex min-h-11 items-center gap-2 text-sm">
         <input type="checkbox" checked={confirmOn} onChange={e => { setConfirmOn(e.target.checked); writeConfirm(e.target.checked) }} />
-        Ask me to confirm before changing an incident
+        Ask me to confirm before changing an incident or a request
       </label>
       <AddIncident onDone={s.reload} />
       <Async s={s} rows={2} empty={!list.length} emptyText="No incidents recorded." emptyHint="That is good news. If something goes wrong, add it here the same day.">
@@ -172,17 +173,88 @@ function BreachRegister() {
   )
 }
 
+interface Req { id: string; party_id: string; party_name: string; kind: 'erase' | 'export'; status: 'pending' | 'done' | 'dismissed'; channel: 'telegram' | 'whatsapp'; requested_at: string; decided_at: string | null }
+const STATUS = { pending: 'Pending', done: 'Done', dismissed: 'Dismissed' }
+const FRIENDLY: Record<string, string> = { already_decided: 'This request was already dealt with. The list has been refreshed.', not_customer: 'This person is not a customer, so their data cannot be erased here.', bad_action: 'Only a request to erase can be erased. You can dismiss this one.' }
+
+function DataRequests() {
+  const s = useFetch<Req[]>('/privacy/requests')
+  const [ask, setAsk] = useState<{ r: Req; action: 'erase' | 'dismiss' } | null>(null)
+  const [note, setNote] = useState('')
+  const confirmRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (ask) confirmRef.current?.focus() }, [ask])
+  const a = useAction()
+  const toast = useToast()
+  const list = s.data ?? []
+  const decide = (r: Req, action: 'erase' | 'dismiss') => {
+    setAsk(null); setNote('')
+    a.run(async () => {
+      try { await api('POST', `/privacy/requests/${r.id}`, { action }) } catch (e) {
+        const code = e instanceof ApiError ? e.code : ''
+        if (FRIENDLY[code]) { if (e instanceof ApiError) e.shown = true; setNote(FRIENDLY[code]); s.reload(); return }
+        throw e
+      }
+      const m = action === 'erase' ? `Erased the personal data of ${r.party_name}. We tried to tell them in the chat; if it did not arrive, tell them yourself.` : `Dismissed. We tried to tell ${r.party_name} in the chat; if it did not arrive, tell them yourself.`
+      setNote(m); toast(m); s.reload()
+    })
+  }
+  const pick = (r: Req, action: 'erase' | 'dismiss') => { setNote(''); if (readConfirm()) setAsk({ r, action }); else decide(r, action) }
+  const ch = (r: Req) => (r.channel === 'telegram' ? 'Telegram' : 'WhatsApp')
+  return (
+    <section className="card" aria-labelledby="dsr">
+      <h2 id="dsr" className="text-lg font-semibold">Customer data requests</h2>
+      <p className="mt-1 text-sm">Customers can send /forget to your bot to ask you to erase their data. Nothing is erased until you decide here. To download a person&apos;s data, open their page in <a className="link" href="#/contacts">Contacts</a>.</p>
+      {note && <p role="status" className="mt-2 text-sm font-semibold">{note}</p>}
+      <Async s={s} rows={2} empty={!list.length} emptyText="No requests from customers." emptyHint="Customers can send /forget to your bot.">
+        <ul className="mt-3 grid gap-3">
+          {list.map(r => (
+            <li key={r.id} className="rounded-ui border border-line p-3">
+              <p className="flex flex-wrap items-center gap-2">
+                <span className="badge">{STATUS[r.status]}</span>
+                <a className="link break-words font-semibold" href={`#/contact/${r.party_id}`}>{r.party_name}</a>
+              </p>
+              <p className="mt-1 text-sm text-muted">{r.kind === 'erase' ? 'Asked to erase their data' : 'Asked for a copy of their data'} on {ch(r)}.{' '}
+                <time dateTime={r.requested_at} title={when(r.requested_at)}>Asked {relTime(r.requested_at)}</time>.
+                {r.decided_at && <> <time dateTime={r.decided_at} title={when(r.decided_at)}>Decided {relTime(r.decided_at)}</time>.</>}</p>
+              {r.status === 'pending' && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {r.kind === 'erase' && <button type="button" className="btn btn-danger" aria-disabled={a.busy || undefined} onClick={() => pick(r, 'erase')}>Erase their data<span className="sr-only">: {r.party_name}</span></button>}
+                  <button type="button" className="btn" aria-disabled={a.busy || undefined} onClick={() => pick(r, 'dismiss')}>Dismiss<span className="sr-only">: {r.party_name}</span></button>
+                </div>
+              )}
+              {ask?.r.id === r.id && (
+                <div ref={confirmRef} tabIndex={-1} role="group" aria-label="Confirm this request" className="mt-3 grid gap-2 rounded-ui border border-warn p-3 text-sm">
+                  {ask.action === 'erase' ? <>
+                    <p className="font-semibold">Erase the personal data of {r.party_name}? This cannot be undone.</p>
+                    <p><strong>Erased:</strong> name, contact, email, address, notes and the text of every message with this person.</p>
+                    <p><strong>Kept:</strong> quotes and prices, as financial records. Earlier entries in the audit log stay.</p>
+                    <p>The customer is told on the same channel ({ch(r)}).</p>
+                  </> : <>
+                    <p className="font-semibold">Dismiss this request from {r.party_name}?</p>
+                    <p>Nothing is erased. The customer is told on the same channel that the business could not erase their data, and to contact your privacy contact (DPO).</p>
+                  </>}
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={`btn ${ask.action === 'erase' ? 'btn-danger' : 'btn-primary'}`} onClick={() => decide(r, ask.action)}>{ask.action === 'erase' ? 'Yes, erase it' : 'Yes, dismiss it'}</button>
+                    <button type="button" className="btn" onClick={() => setAsk(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Async>
+      <ActionError err={a.err} onRetry={() => s.reload()} label="Reload the list" />
+    </section>
+  )
+}
+
 export function PrivacyView() {
   return (
     <>
       <PageHeader title="Privacy and data" description="Keep your privacy contact up to date, record data incidents and handle customer data requests." />
       <DpoCard />
       <BreachRegister />
-      <section className="card" aria-labelledby="dsr">
-        <h2 id="dsr" className="text-lg font-semibold">Customer data requests</h2>
-        <p className="mt-1 text-sm">When a customer asks what you hold about them, or asks you to delete it, open their page in Contacts. There you can download their data or erase their personal data.</p>
-        <p className="mt-2"><a className="link" href="#/contacts">Open Contacts</a></p>
-      </section>
+      <DataRequests />
     </>
   )
 }

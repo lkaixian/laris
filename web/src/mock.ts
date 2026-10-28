@@ -9,6 +9,8 @@ import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Al
 
 import { mockListings } from './mockListings'
 import { mockPrivacy } from './mockPrivacy'
+import { mockAi, mockAiOn } from './mockAi'
+import { mockAccept } from './mockAccept'
 import { mockTrack, jobStats, dashTrack, extraMembers } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
@@ -358,11 +360,13 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     const items = k === 'ok' ? [] : all.filter(i => rank.indexOf(i.level) <= rank.indexOf(k))
     return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items }
   }
+  { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)
   { const r = mockPrivacy(method, p, owner, body); if (r !== undefined) return r }
+  { const r = mockAi(method, p, owner, body); if (r !== undefined) return r }
   if (p === '/me') {
     const r = roleOf(role)!
-    return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: permsOf(r), name: who,
+    return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: permsOf(r), telegram_linked: tg.linked.has(owner ? 'sample-owner' : 'sample-staff'), name: who, ai_guide: mockAiOn,
       org: { name: branding.display_name || 'SAMPLE Signage Works (synthetic)', brand_color: branding.brand_color, logo_url: branding.logo_data_url } }
   }
   if (p === '/me/password' && method === 'POST') return { ok: true }

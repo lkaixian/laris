@@ -9,9 +9,10 @@ import type { Text } from './i18n'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { focusTop } from './ui'
+import { GuideChat } from './GuideChat'
 
 /* Search palette: functions (functions.ts) and records (GET /search). Opened from Shell (header field, "/" or Ctrl/Cmd+K). */
-interface Row { key: string; title: string; path: string; href: string; icon: IconName; group: 'fn' | 'rec'; fn?: string; action?: Fn['action'] }
+interface Row { key: string; title: string; path: string; href: string; icon: IconName; group: 'fn' | 'rec' | 'ai'; fn?: string; action?: Fn['action'] }
 interface Found { contacts: { id: string; name: string; role: string }[]; documents: DocSummary[] }
 
 const S = {
@@ -22,6 +23,7 @@ const S = {
   searchRecs: { en: 'Search records for', ms: 'Cari rekod untuk' }, close: { en: 'Close search', ms: 'Tutup carian' },
   hints: { en: 'Up/Down to move, Enter to open, Esc to close', ms: 'Atas/Bawah untuk bergerak, Enter untuk buka, Esc untuk tutup' },
   results: { en: 'results', ms: 'hasil' }, noRes: { en: 'No results', ms: 'Tiada hasil' }, label: { en: 'Search', ms: 'Carian' },
+  ask: { en: 'Ask the AI guide', ms: 'Tanya panduan AI' }, aiGroup: { en: 'AI guide', ms: 'Panduan AI' },
   noDoc: { en: 'No document number', ms: 'Tiada nombor dokumen' },
 } satisfies Record<string, Text>
 
@@ -35,6 +37,8 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
   const [recs, setRecs] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
   const [active, setActive] = useState(0)
+  const [guide, setGuide] = useState<string | null>(null)  // question being answered by the AI guide; held in memory only
+  const [aiOff, setAiOff] = useState(false)
   const [prev] = useState(() => document.activeElement as HTMLElement | null)  // focus returns here on Esc / close
   const restore = useRef(true)
   const box = useRef<HTMLDivElement>(null)
@@ -71,8 +75,9 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
   }, [term, lang])
 
   const none = !!term && !fnRows.length && !recs.length && !loading
+  const aiRow: Row[] = ctx.me?.ai_guide && !aiOff && term.length >= 3 ? [{ key: 'guide', title: `${t(S.ask, lang)}: ${term}`, path: '', href: '', icon: 'ask', group: 'ai' }] : []
   const rows: Row[] = term
-    ? [...fnRows, ...recs, ...(none ? [{ key: 'search', title: `${t(S.searchRecs, lang)} '${term}'`, path: '', href: `#/search/${encodeURIComponent(term)}`, icon: 'search' as const, group: 'rec' as const }] : [])]
+    ? [...fnRows, ...recs, ...aiRow, ...(none ? [{ key: 'search', title: `${t(S.searchRecs, lang)} '${term}'`, path: '', href: `#/search/${encodeURIComponent(term)}`, icon: 'search' as const, group: 'rec' as const }] : [])]
     : recent
   const idx = Math.min(active, Math.max(rows.length - 1, 0))
   useEffect(() => setActive(0), [term])
@@ -81,6 +86,7 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
 
   const choose = (r: Row | undefined) => {
     if (!r) return
+    if (r.key === 'guide') { setGuide(term); return }
     if (r.key !== 'search') saveRecent(r)
     restore.current = false
     onClose()
@@ -93,9 +99,9 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       if (rows.length) setActive((idx + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length)
-    } else if (e.key === 'Enter') { e.preventDefault(); choose(rows[idx]) }
+    } else if (e.key === 'Enter') { e.preventDefault(); if (guide === null) choose(rows[idx]) }
     else if (e.key === 'Tab') {  // focus trap: input <-> close button
-      const f = [...box.current!.querySelectorAll<HTMLElement>('input,button')]
+      const f = [...box.current!.querySelectorAll<HTMLElement>('input,button,a[href]')]
       const first = f[0], last = f[f.length - 1]
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
@@ -133,15 +139,17 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
         <div className="flex items-center gap-2 border-b border-soft p-3">
           <span aria-hidden="true" className="text-muted"><Icon name="search" /></span>
           <input autoFocus type="text" role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={t(S.label, lang)}
-            aria-activedescendant={rows.length ? `${id}-o${idx}` : undefined} autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="go"
-            className="input min-h-11 w-full" placeholder={t(S.placeholder, lang)} value={q} onChange={e => setQ(e.target.value)} />
+            aria-activedescendant={rows.length && guide === null ? `${id}-o${idx}` : undefined} autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="go"
+            className="input min-h-11 w-full" placeholder={t(S.placeholder, lang)} value={q} onChange={e => { setQ(e.target.value); setGuide(null) }} />
           <button type="button" className="btn size-11 shrink-0 px-0" aria-label={t(S.close, lang)} onClick={onClose}><Icon name="close" /></button>
         </div>
+        {guide !== null ? <GuideChat key={guide} question={guide} visible={visible} lang={lang} onBack={() => { setGuide(null); box.current?.querySelector('input')?.focus() }} onClose={() => { restore.current = false; onClose() }} onOff={() => setAiOff(true)} /> : <>
         <div id={listId} role="listbox" aria-label={t(S.label, lang)} className="min-h-0 flex-1 overflow-y-auto pb-2">
-          {term ? <>{group('fn', S.fns, 'f')}{group('rec', S.recs, 'r')}</> : group(null, S.recent, 'f')}
+          {term ? <>{group('fn', S.fns, 'f')}{group('rec', S.recs, 'r')}{group('ai', S.aiGroup, 'a')}</> : group(null, S.recent, 'f')}
         </div>
         {!term && <p className="px-4 pb-3 text-sm text-muted">{t(S.try, lang)}</p>}
         {none && <p className="px-4 pb-3 text-sm">{t(S.none, lang)} '{term}'. {t(S.tryNone, lang)}</p>}
+        </>}
         <p className="hidden border-t border-soft px-4 py-2 text-xs text-muted md:block">{t(S.hints, lang)}</p>
         <p role="status" className="sr-only">{term && !loading ? (rows.length && !none ? `${rows.length} ${t(S.results, lang)}` : t(S.noRes, lang)) : ''}</p>
       </div>

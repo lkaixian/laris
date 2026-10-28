@@ -316,6 +316,27 @@ export const ARTICLES: Article[] = [
     navKeys: ['api-access'],
   },
   {
+    id: 'ai-guide',
+    title: T('The AI guide: ask where to click', 'Panduan AI: tanya di mana hendak klik'),
+    summary: T('An optional helper that points to screens. Off until the owner switches it on.', 'Pembantu pilihan yang menunjuk ke skrin. Mati sehingga pemilik menghidupkannya.'),
+    who: ['owner', 'staff'], path: ['Admin', 'AI settings'],
+    body: [
+      p('The AI guide answers questions like "where do I upload a supplier quote?". It can only point you to screens in LARIS. It cannot change anything, send anything to a customer or read your quotes.', 'Panduan AI menjawab soalan seperti "di mana saya muat naik sebut harga pembekal?". Ia hanya boleh menunjukkan skrin dalam LARIS. Ia tidak boleh mengubah apa-apa, menghantar apa-apa kepada pelanggan atau membaca sebut harga anda.'),
+      p('It is off by default. Only the owner can switch it on.', 'Ia mati secara lalai. Hanya pemilik boleh menghidupkannya.'),
+      steps(
+        ['Owner: open Admin, AI settings and choose Guide only (or Guide plus my data, which also lets the Assistant page work).', 'Pemilik: buka Admin, AI settings dan pilih Guide only (atau Guide plus my data, yang juga membolehkan halaman Assistant berfungsi).'],
+        ['Choose the AI service: LARIS hosted ILMU, or My own AI server (an https server on port 443 or 8443).', 'Pilih perkhidmatan AI: ILMU yang dihoskan LARIS, atau My own AI server (pelayan https pada port 443 atau 8443).'],
+        ['Read the notice, tick the box to confirm, and press Save. Press Test connection to check it works.', 'Baca notis, tandakan kotak untuk mengesahkan, dan tekan Save. Tekan Test connection untuk memeriksa ia berfungsi.'],
+        ['Everyone: press Ctrl+K, type your question (3 letters or more) and choose the last row, Ask the AI guide.', 'Semua orang: tekan Ctrl+K, taip soalan anda (3 huruf atau lebih) dan pilih baris terakhir, Ask the AI guide.'],
+      ),
+      p('What is sent: only the question you type, with email addresses, phone numbers and ID numbers removed, plus the names of menu items. No quote, customer, cost or margin is sent. Names and addresses you type into the question are not removed, so do not type them. The question is not stored.', 'Apa yang dihantar: hanya soalan yang anda taip, dengan alamat emel, nombor telefon dan nombor ID dibuang, serta nama item menu. Tiada sebut harga, pelanggan, kos atau margin dihantar. Nama dan alamat yang anda taip dalam soalan tidak dibuang, jadi jangan taipnya. Soalan tidak disimpan.'),
+      note('AI answers can be wrong. Check the screen it points to. The owner must tell customers in the privacy notice that questions can go to an AI provider, and can switch the guide off at any time.', 'Jawapan AI boleh salah. Semak skrin yang ditunjukkan. Pemilik mesti memberitahu pelanggan dalam notis privasi bahawa soalan boleh dihantar kepada penyedia AI, dan boleh mematikan panduan pada bila-bila masa.'),
+    ],
+    related: ['privacy-basics', 'keyboard-shortcuts'],
+    keywords: kw('ai|ai guide|assistant|chatbot|guide|openai|own server|where do i click|privacy|ilmu', 'ai|panduan ai|pembantu|chatbot|panduan|openai|pelayan sendiri|di mana klik|privasi|ilmu'),
+    navKeys: ['ai-settings'],
+  },
+  {
     id: 'take-the-tour',
     title: T('Take the tour again', 'Ikuti lawatan sekali lagi'),
     summary: T('Replay the guided tour of the main screens.', 'Ulang lawatan berpandu skrin utama.'),

@@ -5,6 +5,7 @@ import type { License } from './api'
 import Login from './Login'
 import { Register, Forgot } from './Signup'
 import AcceptInvite from './Invite'
+import Accept from './Accept'
 import { LicenseProvider, LicenceGate, LicenceBanner, LicenceView, PurchaseView, Frame, blocked, useWriteGate, setLicenceOn } from './Licence'
 import { Shell } from './Shell'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -29,6 +30,7 @@ import { CatalogView } from './Listings'
 import { HelpView } from './Help'
 import { PrivacyView } from './Privacy'
 import { ApiAccessView } from './ApiAccess'
+import { AiSettingsView } from './AiSettings'
 import { TourHost } from './Tour'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
@@ -745,8 +747,9 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   privacy: { title: 'Privacy and data', render: () => <PrivacyView /> },
   'api-access': { title: 'API access', render: () => <ApiAccessView /> },
+  'ai-settings': { title: 'AI settings', render: () => <AiSettingsView /> },
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
-  account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} /> },
+  account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} linked={c.me.telegram_linked} onChange={() => window.dispatchEvent(new Event('laris:branding'))} /> },
   activity: { title: 'Activity log', render: () => <ActivityView /> },
   status: { title: 'System status', render: () => <StatusView /> },
   licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
@@ -829,14 +832,15 @@ function AppShell() {
     })
     return () => { live = false }
   }, [gate, me?.id, licTries])  // eslint-disable-line react-hooks/exhaustive-deps
+  const pub = routeOf(hash) === 'q'  // the public customer page: no staff request of any kind is made for it
   useEffect(() => {
-    if (gate !== 'ready') return
+    if (gate !== 'ready' || pub) return
     let live = true
     setMe(undefined); setMeErr('')
     // With a per-user token the server decides the role; follow it instead of the picker.
     resolveMe(role).then(m => { if (!live) return; if (m.role !== role) { setRole(m.role); setRoleState(m.role) } else setMe(m) }, e => live && setMeErr(msg(e)))
     return () => { live = false }
-  }, [role, tries, gate])
+  }, [role, tries, gate, pub])
   const owner = role === 'owner'
   const [, page, arg] = hash.split('/')
   const route0 = (page || 'home').split('?')[0]  // '#/invite?token=...' is route 'invite'
@@ -859,6 +863,7 @@ function AppShell() {
     return y ? restoreScroll(y) : undefined
   }, [hash])
   const onRole = (r: Role) => { setRole(r); setRoleState(r); toast(`Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`) }
+  if (pub) return <Accept token={hash.split('/')[2]?.split('?')[0] ?? ''} />  // customer link: outside the shell, no sign-in
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
   if (route === 'invite') return <AcceptInvite dark={dark} setDark={setDark} />

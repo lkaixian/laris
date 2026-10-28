@@ -46,6 +46,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'settings', label: 'Settings', icon: 'settings' },
     { key: 'privacy', label: 'Privacy and data', icon: 'roles' },
     { key: 'api-access', label: 'API access', icon: 'key' },
+    { key: 'ai-settings', label: 'AI settings', icon: 'ask' },
     { key: 'status', label: 'System status', icon: 'warn' },
     { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
     { key: 'issuer', label: 'Issue licences', icon: 'key', when: () => issuerOn() },

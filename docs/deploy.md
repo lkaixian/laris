@@ -147,6 +147,7 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `TELEGRAM_TENANT_ID` | tenant uuid that receives Telegram messages (one bot per deployment); see "Which business gets a chat message" | only with more than one business |
 | `WHATSAPP_TENANT_ID` | tenant uuid used when a WhatsApp number is not mapped in Settings > Channels | optional |
+| `TELEGRAM_ACK` | `0` turns off the Telegram received/done reactions and typing indicator (default on) | optional |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
 | `RUNPOD_VISION_URL` | catalog photo model: `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` (section 10b) | only for catalog photos |

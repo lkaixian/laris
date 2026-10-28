@@ -56,6 +56,20 @@ def send_message(chat_id, text, *, client=None, token=None) -> str:
     return f"{res['chat']['id']}:{res['message_id']}"
 
 
+def react(chat_id, message_id, emoji, *, client=None, token=None) -> None:
+    """One bot reaction per message; setting another replaces it. Raises like send_message; the caller decides if it matters."""
+    r = (client or httpx.Client(timeout=10)).post(
+        _api("setMessageReaction", token),
+        json={"chat_id": chat_id, "message_id": int(message_id), "reaction": [{"type": "emoji", "emoji": emoji}]})
+    _ok(r, "setMessageReaction")
+
+
+def chat_action(chat_id, action="typing", *, client=None, token=None) -> None:
+    """Shows for 5 seconds or until the bot sends a message."""
+    r = (client or httpx.Client(timeout=10)).post(_api("sendChatAction", token), json={"chat_id": chat_id, "action": action})
+    _ok(r, "sendChatAction")
+
+
 def send_photo(chat_id, image_bytes, mime, caption, *, client=None, token=None) -> str:
     r = (client or httpx.Client(timeout=30)).post(
         _api("sendPhoto", token), data={"chat_id": str(chat_id), "caption": caption[:1024]},

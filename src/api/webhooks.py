@@ -1,6 +1,7 @@
 """Inbound channels. WhatsApp: verify HMAC on the RAW body before parsing. Telegram: secret-token header.
 A staff/owner handle (users.channel_handle) or a supplier party -> supplier-document pipeline; anyone else -> customer
 enquiry pipeline only, rate-limited so spam cannot burn ILMU credit."""
+import asyncio
 import hashlib
 import hmac
 import json
@@ -38,6 +39,8 @@ HELP_CMD = re.compile(r"\s*/(start|help)(@\w+)?\s*$", re.I)
 HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 kg PLA, how much?\", and we will send you a quote.\n"
         "Staff: forward a supplier PDF or photo to record its prices, or send a product photo with the caption /catalog.")
 SORRY = "Sorry, we could not process that message. Our team will follow up."
+VOICE_SORRY = "Sorry, I could not hear that clearly. Please send the voice note again, or type your request."
+TG_ACK = os.environ.get("TELEGRAM_ACK", "1") != "0"  # "0" switches the Telegram reactions and typing indicator off
 
 
 def _h(x) -> str:
@@ -203,8 +206,13 @@ def _handle(conn, s, m):
         return f"Received {res['doc_no'] or 'your document'}; it is queued for review."
     text = m.text if not m.media_kind else None
     if m.media_kind == "audio":
-        data, mime = s.download(m.channel, m.media_ref, m.media_kind)
-        text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
+        try:
+            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
+        except Exception as e:  # a voice note we cannot hear is the customer's to resend, not a silent failure
+            log.warning("inbound %s voice note failed: %s", _h(m.external_id), type(e).__name__)
+        if not text:
+            return VOICE_SORRY
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
     if (r := availability.answer(conn, tid, p["id"], text, s.ilmu, channel=m.channel, external_id=m.external_id)) is not None:
@@ -239,7 +247,7 @@ def _catalog(s, j: Catalog) -> str | None:
 
 
 def _process(s, msgs, statuses=()):
-    replies, later = [], []
+    replies, later, outcomes = [], [], []  # outcomes: (message, ok) for the Telegram reaction; WhatsApp ignores it
     with db.tx("staff", "system:webhook") as conn:
         for wamid, st, at in statuses:
             if st == "read":  # sent -> read is the only status move; read_at is set either way
@@ -248,6 +256,7 @@ def _process(s, msgs, statuses=()):
                                 from messages m where m.document_id = d.id and m.external_id = %s and m.direction = 'out'""",
                              (at, wamid))
         for m in msgs:
+            failed = False
             try:
                 with conn.transaction():  # savepoint per message
                     text = _handle(conn, s, m)
@@ -260,20 +269,25 @@ def _process(s, msgs, statuses=()):
                 text = None
             except Exception as e:
                 log.exception("inbound %s failed", _h(m.external_id))
-                text = None
+                text, failed = None, True
                 _trace(conn, m, type(e).__name__)
             if isinstance(text, Catalog):
                 later.append(text)
             elif text:
                 replies.append((m.channel, m.sender, text, m.to))
+            if not isinstance(text, Catalog):
+                outcomes.append((m, not failed and text not in (SORRY, VOICE_SORRY)))
     for j in later:  # the committed transaction above is closed: the model call below holds no lock
-        if text := _catalog(s, j):
+        text = _catalog(s, j)
+        outcomes.append((j.m, text != SORRY))
+        if text:
             replies.append((j.m.channel, j.m.sender, text, j.m.to))
     for ch, to, text, via in replies:  # after commit; a send failure never loses the stored document
         try:
             s.send(ch, to, text, via)  # answer from the number the customer wrote to
         except Exception:
             log.exception("reply to %s failed", _h(to))
+    return outcomes
 
 
 @r.get("/whatsapp")
@@ -311,6 +325,27 @@ async def tg_inbound(request: Request):
         m = telegram.parse_update(await request.json())
     except (ValueError, KeyError, TypeError):
         raise ApiError(400, "bad_update", "unparseable update")
-    if m:
+    if m and TG_ACK:
+        http, mid = request.app.state.svc.http, m.external_id.rpartition(":")[2]
+
+        async def ack(fn, *a):  # blocking httpx off the event loop; an ack must never break message handling
+            try:
+                await run_in_threadpool(fn, *a, client=http)
+            except Exception as e:
+                log.warning("telegram ack failed: %s", type(e).__name__)
+
+        async def typing():
+            while True:
+                await ack(telegram.chat_action, m.sender, "typing")
+                await asyncio.sleep(4)  # the indicator lasts 5 seconds
+
+        await ack(telegram.react, m.sender, mid, "👀")
+        task, emoji = asyncio.create_task(typing()), "😢"
+        try:
+            emoji = "👍" if all(ok for _, ok in await run_in_threadpool(_process, request.app.state.svc, [m])) else "😢"
+        finally:
+            task.cancel()
+            await ack(telegram.react, m.sender, mid, emoji)
+    elif m:
         await run_in_threadpool(_process, request.app.state.svc, [m])
     return JR({"ok": True})

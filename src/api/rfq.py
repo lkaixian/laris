@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import pipeline
+from .. import pipeline, tgbots
 from ..channels import telegram
 from ..channels.telegram import NOT_STARTED
 from ..errors import ApiError
@@ -75,6 +75,7 @@ def ask(request: Request, image: UploadFile = File(...), description: str = Form
                     (ctx.tenant_id, ctx.user_id, description, note, Jsonb(ring) if ring else None, data, mime)).fetchone()["id"]
     pn = c.execute("select wa_phone_number_id from tenants where id=%s", (ctx.tenant_id,)).fetchone()["wa_phone_number_id"]
     s, media, err = svc(request), None, None
+    tk = (t,) if (t := tgbots.token_for(c, ctx.tenant_id)) else ()  # the business's own bot, else the env bot
     if not all(sup[i]["tg"] for i in ids):  # Telegram-only requests need no WhatsApp upload
         try:
             media = s.upload_media(data, mime, pn)  # once; the same id goes to every WhatsApp supplier
@@ -87,7 +88,7 @@ def ask(request: Request, image: UploadFile = File(...), description: str = Form
         wamid, e_msg = None, None if tg else err
         if tg or media:
             try:
-                wamid = s.send_photo(sup[i]["to"], data, mime, note) if tg else s.send_image(sup[i]["to"], media, note, pn)
+                wamid = s.send_photo(sup[i]["to"], data, mime, note, *tk) if tg else s.send_image(sup[i]["to"], media, note, pn)
             except Exception as e:  # one supplier failing must not stop the rest
                 log.exception("rfq send failed")
                 e_msg = _why(e, "Telegram" if tg else "WhatsApp")

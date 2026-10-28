@@ -55,6 +55,8 @@ def apply_schema(seed: bool | None = None) -> None:
         # trade-template fields become the tenant's starting registry (owner can still add via proposals)
         for t in c.execute("select id, trade_template from tenants").fetchall():
             seed_tenant_fields(c, t[0], t[1])
+        from . import license as lic  # local: license imports clock, which imports db
+        lic.refresh(c)  # a key set from the admin page enforces from the first webhook after a restart, not only after the first signed-in request
 
 
 def seed_tenant_fields(c, tenant_id, trade_template: str) -> None:

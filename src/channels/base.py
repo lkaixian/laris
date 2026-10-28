@@ -24,5 +24,6 @@ class InboundMessage:
     media_ref: str | None = None  # WA media id / Telegram file_id
     media_name: str | None = None  # a document's file name, when the channel gives one
     at: datetime | None = None
-    to: str | None = None  # the business number it arrived on (WhatsApp phone_number_id)
+    to: str | None = None  # the business number it arrived on (WhatsApp phone_number_id); Telegram: the bot token it arrived on (None = the env bot)
+    tenant_id: object = None  # set by a business's own Telegram bot (and the helper bot, once the sender is linked): the one business it may be for
     reply_to: str | None = None  # provider id of the message this replies to: WhatsApp wamid, or Telegram "chat:message_id"

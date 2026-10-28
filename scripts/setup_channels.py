@@ -1,6 +1,7 @@
 """Channel setup. Usage (from the repo root, env or .env loaded by you):
   python scripts/setup_channels.py check                 # which keys are set, never prints values
   python scripts/setup_channels.py telegram-webhook URL  # URL = https://<host>/webhooks/telegram
+  python scripts/setup_channels.py helper-webhook URL    # the LARIS helper bot; URL = https://<host>/webhooks/telegram/helper
   python scripts/setup_channels.py telegram-info
   python scripts/setup_channels.py telegram-poll [BASE]  # dev without a public URL: long-poll and forward to BASE (default http://localhost:5000)
 WhatsApp is configured in the Meta dashboard: callback https://<host>/webhooks/whatsapp, verify token = WHATSAPP_VERIFY_TOKEN."""
@@ -15,7 +16,8 @@ from src.channels import telegram  # noqa: E402
 KEYS = {"ILMU_API_KEY": "voice notes + extraction", "WHATSAPP_TOKEN": "send/download", "WHATSAPP_PHONE_NUMBER_ID": "send",
         "WHATSAPP_VERIFY_TOKEN": "Meta GET verify", "WHATSAPP_APP_SECRET": "HMAC of inbound POSTs",
         "WHATSAPP_FOLLOWUP_TEMPLATE": "optional: outside the 24h window", "TELEGRAM_BOT_TOKEN": "bot",
-        "TELEGRAM_WEBHOOK_SECRET": "required: webhook 403s without it", "APP_TOKEN": "bearer for /api (set on public hosts)"}
+        "TELEGRAM_WEBHOOK_SECRET": "required: webhook 403s without it",
+        "LARIS_HELPER_BOT_TOKEN": "LARIS helper bot (account linking)", "LARIS_HELPER_WEBHOOK_SECRET": "required: helper webhook 403s without it", "APP_TOKEN": "bearer for /api (set on public hosts)"}
 
 
 def main(a):
@@ -28,6 +30,11 @@ def main(a):
             sys.exit("Telegram only accepts https URLs")
         print(telegram.set_webhook(a[1], os.environ["TELEGRAM_WEBHOOK_SECRET"]))
         print(telegram.set_commands())  # the Menu button
+    elif cmd == "helper-webhook" and len(a) == 2:
+        if not a[1].startswith("https://"):
+            sys.exit("Telegram only accepts https URLs")
+        print(telegram.set_webhook(a[1], os.environ["LARIS_HELPER_WEBHOOK_SECRET"], token=os.environ["LARIS_HELPER_BOT_TOKEN"]))
+        print(telegram.set_commands(token=os.environ["LARIS_HELPER_BOT_TOKEN"]))
     elif cmd == "telegram-info":
         i = telegram.webhook_info()
         print({k: i.get(k) for k in ("url", "pending_update_count", "last_error_date", "last_error_message")})

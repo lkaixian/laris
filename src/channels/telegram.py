@@ -133,3 +133,15 @@ def webhook_info(*, client=None, token=None) -> dict:
     r = (client or httpx.Client(timeout=20)).get(_api("getWebhookInfo", token))
     _ok(r, "getWebhookInfo")
     return r.json()["result"]
+
+
+def get_me(token, *, client=None) -> dict:
+    """The bot behind a token: {id, username, first_name, ...}. Raises on a refused token (HTTP 401) like the others."""
+    r = (client or httpx.Client(timeout=20)).get(_api("getMe", token))
+    _ok(r, "getMe")
+    return r.json()["result"]
+
+
+def delete_webhook(token, *, client=None) -> None:
+    r = (client or httpx.Client(timeout=20)).post(_api("deleteWebhook", token), json={"drop_pending_updates": True})
+    _ok(r, "deleteWebhook")

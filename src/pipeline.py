@@ -11,7 +11,7 @@ from statistics import mean
 
 from psycopg.types.json import Jsonb
 
-from . import ilmu, mailer, ocr as ocr_mod, pricing, quote_doc, quote_pdf, tabular, validate
+from . import ilmu, mailer, ocr as ocr_mod, pricing, quote_doc, quote_pdf, tabular, tgbots, validate
 from .channels import telegram
 from .errors import ApiError
 from .templates import load_template
@@ -393,7 +393,7 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
 def _target(conn, doc_id):
     """The quote plus where to reach its customer, or None when there is no chat contact on file."""
     d = conn.execute("""select d.doc_no, d.valid_until, d.currency, d.party_id, p.name, p.contact, e.channel,
-                               t.wa_phone_number_id pn from documents d
+                               t.wa_phone_number_id pn, d.tenant_id from documents d
                         join parties p on p.id=d.party_id join enquiries e on e.id=d.enquiry_id join tenants t on t.id=d.tenant_id
                         where d.id=%s and d.direction='out'""", (doc_id,)).fetchone()
     return d if d and d["contact"] and d["channel"] in ("whatsapp", "telegram") else None
@@ -415,7 +415,7 @@ def send_followup(conn, send, doc_id) -> bool:
     d, body = _target(conn, doc_id), followup_text(conn, doc_id)
     if not d:
         return False
-    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body, d["pn"]))
+    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body, tgbots.via(conn, d["tenant_id"], d["channel"], d["pn"])))
     return True
 
 
@@ -459,7 +459,7 @@ def send_quote(conn, svc, doc_id) -> bool:
         [f"Quotation {d['doc_no']}"]
         + [f"{l['line_no']}. {l['description']} x {l['qty']:f} {l['uom']} @ {d['currency']} {l['unit_price']:.2f}" for l in ls]
         + [f"Total: {d['currency']} {total:.2f}"] + ([f"Valid until {d['valid_until']}"] if d["valid_until"] else []))
-    wid = svc.send(d["channel"], d["contact"], body, d["pn"])
+    wid = svc.send(d["channel"], d["contact"], body, tgbots.via(conn, d["tenant_id"], d["channel"], d["pn"]))
     _record_message(conn, None, doc_id, "out", d["channel"], body, wid)
     try:  # the text is out; the PDF is a bonus that must not turn a delivered quote into a failed one
         deliver_quote(conn, svc, doc_id, d["channel"], d["contact"])

@@ -20,6 +20,8 @@ OPEN = {
     ("POST", "/api/password/forgot"), ("POST", "/api/password/reset"),
     ("POST", "/api/invites/preview"), ("POST", "/api/invites/accept"),
     ("POST", "/api/me/password"), ("POST", "/api/me/sessions/revoke-others"), ("DELETE", "/api/me/sessions/{sid}"),
+    ("POST", "/api/me/telegram-link"), ("DELETE", "/api/me/telegram-link"),  # a person links or unlinks their own Telegram
+    ("POST", "/api/license/admin/public-key"), ("POST", "/api/license/admin/issue"),  # platform admin only: 404 (not 403) for everyone else, tests/test_license_admin.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
 }
 ID = str(uuid4())
@@ -53,7 +55,12 @@ REQ = {
     ("POST", "/api/users"): {"json": {"name": "n", "username": "someone", "role": "staff", "password": "correct horse battery 1"}},
     ("POST", "/api/users/{uid}"): {"json": {"name": "n"}},
     ("POST", "/api/settings/channels"): {"json": {"wa_phone_number_id": "12345678"}},
+    ("POST", "/api/settings/telegram/connect"): {"json": {"token": "123456:" + "a" * 35}},
+    ("POST", "/api/settings/telegram/disconnect"): {},
+    ("POST", "/api/users/{uid}/telegram-link"): {},
+    ("DELETE", "/api/users/{uid}/telegram-link"): {},
     ("POST", "/api/license"): {"json": {"key": "x"}},
+    ("POST", "/api/license/accept-offer"): {},
     ("POST", "/api/license/request"): {"json": {"plan": "starter", "seats": 1}},
 }
 

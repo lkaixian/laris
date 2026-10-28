@@ -12,6 +12,7 @@ import { ToastProvider, useToast } from './Toast'
 import IdleGuard from './Idle'
 import { AccountView, TeamView } from './Team'
 import { RolesView } from './Roles'
+import { IssuerView } from './Issuer'
 import { ChannelsCard } from './Channels'
 import { QuoteSettingsCard } from './QuoteSettings'
 import { QuotePanel, Messages } from './QuoteDoc'
@@ -743,6 +744,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   activity: { title: 'Activity log', render: () => <ActivityView /> },
   status: { title: 'System status', render: () => <StatusView /> },
   licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
+  issuer: { title: 'Issue licences', render: () => <IssuerView /> },
   purchase: { title: 'Get a licence', render: c => <PurchaseView owner={c.owner} backHref="#/licence" /> },
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
 }

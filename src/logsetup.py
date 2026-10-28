@@ -47,3 +47,4 @@ def setup() -> None:
         _add(h, RequestIdFilter)
         _add(h, ScrubTraceback)
     _add(logging.getLogger("uvicorn.access"), MaskQuery)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # its INFO line prints the full URL, and a Telegram URL carries the bot token

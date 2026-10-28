@@ -7,7 +7,7 @@ import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { useToast } from './Toast'
-import { licenceOn } from './Licence'
+import { licenceOn, issuerOn, useIssuerProbe } from './Licence'
 
 /*
   App shell: grouped sidebar (>= md, collapsible to icons), top bar + slide-over drawer (< md), header with org mark,
@@ -42,6 +42,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'settings', label: 'Settings', icon: 'settings' },
     { key: 'status', label: 'System status', icon: 'warn' },
     { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
+    { key: 'issuer', label: 'Issue licences', icon: 'key', when: () => issuerOn() },
   ] },
 ]
 
@@ -163,6 +164,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
   const menuBtn = useRef<HTMLButtonElement>(null)
   const searchBox = useRef<HTMLInputElement>(null)
   const signedIn = !!getToken()
+  useIssuerProbe()
   const groups = visibleNav(me, owner)
 
   const toggleCollapsed = () => { const c = !collapsed; setCollapsed(c); try { localStorage.setItem(COLLAPSE_KEY, c ? '1' : '0') } catch { /* storage blocked: lasts for this visit */ } }

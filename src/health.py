@@ -85,9 +85,19 @@ def whatsapp_not_set(ctx):
         return _item("info", "whatsapp_not_set", "WhatsApp is not connected.", "Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in Secrets.")
 
 
+def _own_bot(ctx) -> bool:
+    return bool(ctx.conn.execute("select 1 from tenant_telegram_bots where tenant_id=%s", (ctx.tenant_id,)).fetchone())
+
+
 def telegram_not_set(ctx):
-    if not _set("TELEGRAM_BOT_TOKEN"):
-        return _item("info", "telegram_not_set", "Telegram is not connected.", "Set TELEGRAM_BOT_TOKEN in Secrets.")
+    if not _set("TELEGRAM_BOT_TOKEN") and not _own_bot(ctx):
+        return _item("info", "telegram_not_set", "Telegram is not connected.", "Connect your Telegram bot under Channels.")
+
+
+def telegram_helper_not_set(ctx):
+    if not (_set("LARIS_HELPER_BOT_TOKEN") and _set("LARIS_HELPER_WEBHOOK_SECRET")):
+        return _item("info", "telegram_helper_not_set", "The LARIS helper bot is not set up, so owners and staff cannot link their Telegram accounts.",
+                     "Set LARIS_HELPER_BOT_TOKEN and LARIS_HELPER_WEBHOOK_SECRET in Secrets, then register its webhook.")
 
 
 def ocr_missing(ctx):
@@ -116,7 +126,7 @@ def no_owner_email(ctx):
 
 
 CHECKS = (email_off, email_sandbox, rls_bypass, demo_mode, scheduler_off, scheduler_failing, ntp_offline, licence, ilmu_not_set, vision_not_set,
-          whatsapp_not_set, telegram_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email)
+          whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email)
 
 
 def report(ctx) -> dict:

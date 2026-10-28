@@ -132,7 +132,8 @@ def users(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
     return reply(ctx, ctx.conn.execute(
         USER + """, u.password_hash is not null as has_password,
-                  (select count(*) from sessions s where s.user_id = u.id and s.expires_at > now()) as sessions"""
+                  (select count(*) from sessions s where s.user_id = u.id and s.expires_at > now()) as sessions,
+                  coalesce(u.channel_handle, '') ~* '^\\s*(tg|telegram):' as telegram_linked"""
         + FROM + " where u.tenant_id=%s order by u.active desc, u.name", (ctx.tenant_id,)).fetchall())
 
 

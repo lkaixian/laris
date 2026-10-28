@@ -46,3 +46,22 @@ ALTER TABLE license_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE license_requests FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_scope ON license_requests;
 CREATE POLICY tenant_scope ON license_requests USING (laris_tenant_ok(tenant_id)) WITH CHECK (laris_tenant_ok(tenant_id));
+
+-- Issued from the web page (src/api/license_routes.py): the licence the platform operator signed in the browser, waiting for the customer to accept it.
+ALTER TABLE license_requests ADD COLUMN IF NOT EXISTS issued_token text;
+ALTER TABLE license_requests ADD COLUMN IF NOT EXISTS issued_at timestamptz;
+
+-- The public key set from the platform admin page (used when env LICENSE_PUBLIC_KEY / src/license_public.key is not set). ONE global row,
+-- never deleted by the app. A public key only: no signing key is ever stored.
+CREATE TABLE IF NOT EXISTS license_config (
+  id boolean PRIMARY KEY DEFAULT true CHECK (id),
+  public_key text,
+  set_by uuid,
+  set_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION license_config_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'license_config cannot be deleted';
+END $$;
+DROP TRIGGER IF EXISTS license_config_guard ON license_config;
+CREATE TRIGGER license_config_guard BEFORE DELETE ON license_config FOR EACH ROW EXECUTE FUNCTION license_config_guard();

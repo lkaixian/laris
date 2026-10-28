@@ -17,7 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
-from .. import availability, db, pipeline
+from .. import availability, db, pipeline, tgbots
 from .. import license as lic
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -25,7 +25,7 @@ from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
 from . import listings
-from .deps import JR, throttle
+from .deps import HITS, JR, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -92,9 +92,12 @@ PARTY_Q = r"""select id, tenant_id, role from parties
 def resolve_tenant(conn, m, digits):
     """Which business is this message for? -> (tenant id, None) or (None, reason code). Never guesses:
     1. WhatsApp: the tenant that owns the number it arrived on (tenants.wa_phone_number_id); a number nobody owns is dropped once any is mapped
+    0. a business's own Telegram bot (m.tenant_id): always that business
     2. env TELEGRAM_TENANT_ID (Telegram) / WHATSAPP_TENANT_ID (WhatsApp)
     3. exactly one business exists: that one
     4. otherwise only an exact sender match (active staff handle or contact) in exactly one business; none or several: dropped."""
+    if m.tenant_id:  # a business's own bot (or a linked helper user): that business or nothing
+        return m.tenant_id, None
     if m.channel == "whatsapp" and m.to:
         if t := conn.execute("select id from tenants where wa_phone_number_id = %s", (m.to,)).fetchone():
             return t["id"], None
@@ -109,6 +112,11 @@ def resolve_tenant(conn, m, digits):
     args = {"ch": m.channel, "d": digits, "s": m.sender, "scope": None}
     hit = {x["tenant_id"] for q in (STAFF_Q, PARTY_Q) for x in conn.execute(q, args).fetchall()}
     return (hit.pop(), None) if len(hit) == 1 else (None, "ambiguous_sender" if hit else "unknown_sender")
+
+
+def _dl(s, m):
+    """Download the message's media; a Telegram message from a business or helper bot is fetched with that bot's token."""
+    return s.download(m.channel, m.media_ref, m.media_kind, *((m.to,) if m.channel == "telegram" and m.to else ()))
 
 
 def _hold(conn, tid, p, m):
@@ -190,10 +198,10 @@ def _handle(conn, s, m):
             return "Thanks, we have your reply."
         if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
             throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
-            data, _ = s.download(m.channel, m.media_ref, m.media_kind)
+            data, _ = _dl(s, m)
             return Catalog(tid, actor, p["id"], data, m)  # the model runs after this transaction has closed (see _catalog)
         if m.media_kind in ("image", "document"):
-            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            data, mime = _dl(s, m)
             if m.media_kind == "document":  # sheets/Word/CSV arrive as documents; Telegram gives no mime
                 mime = sniff(data, m.media_name, mime) or mime
             res = pipeline.ingest_supplier_document(conn, tid, data=data, mime=mime, party_id=p["id"], channel=m.channel, actor=actor,
@@ -207,7 +215,7 @@ def _handle(conn, s, m):
     text = m.text if not m.media_kind else None
     if m.media_kind == "audio":
         try:
-            data, mime = s.download(m.channel, m.media_ref, m.media_kind)
+            data, mime = _dl(s, m)
             text = pipeline.transcribe(data, mime or "audio/ogg", s.ilmu)
         except Exception as e:  # a voice note we cannot hear is the customer's to resend, not a silent failure
             log.warning("inbound %s voice note failed: %s", _h(m.external_id), type(e).__name__)
@@ -315,37 +323,143 @@ async def wa_inbound(request: Request):
     return JR({"ok": True})
 
 
-@r.post("/telegram")
-async def tg_inbound(request: Request):
-    secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+def _tg_check(request: Request, secret: str):
     if not secret or not hmac.compare_digest(request.headers.get("x-telegram-bot-api-secret-token", "").encode(), secret.encode()):
         raise ApiError(403, "bad_secret", "invalid secret token")
     _cap(request)
+
+
+async def _tg_update(request: Request):
     try:
-        m = telegram.parse_update(await request.json())
+        return telegram.parse_update(await request.json())
     except (ValueError, KeyError, TypeError):
         raise ApiError(400, "bad_update", "unparseable update")
-    if m and TG_ACK:
-        http, mid = request.app.state.svc.http, m.external_id.rpartition(":")[2]
 
-        async def ack(fn, *a):  # blocking httpx off the event loop; an ack must never break message handling
-            try:
-                await run_in_threadpool(fn, *a, client=http)
-            except Exception as e:
-                log.warning("telegram ack failed: %s", type(e).__name__)
 
-        async def typing():
-            while True:
-                await ack(telegram.chat_action, m.sender, "typing")
-                await asyncio.sleep(4)  # the indicator lasts 5 seconds
+async def _tg_run(request: Request, m, token, run):
+    """Received (eyes), typing, then thumbs up or sad face around `run` (sync, returns [(message, ok)]). token None = the env bot."""
+    if not TG_ACK:
+        await run_in_threadpool(run)
+        return
+    kw = {"token": token} if token else {}
+    http, mid = request.app.state.svc.http, m.external_id.rpartition(":")[2]
 
-        await ack(telegram.react, m.sender, mid, "👀")
-        task, emoji = asyncio.create_task(typing()), "😢"
+    async def ack(fn, *a):  # blocking httpx off the event loop; an ack must never break message handling
         try:
-            emoji = "👍" if all(ok for _, ok in await run_in_threadpool(_process, request.app.state.svc, [m])) else "😢"
-        finally:
-            task.cancel()
-            await ack(telegram.react, m.sender, mid, emoji)
-    elif m:
-        await run_in_threadpool(_process, request.app.state.svc, [m])
+            await run_in_threadpool(lambda: fn(*a, client=http, **kw))
+        except Exception as e:
+            log.warning("telegram ack failed: %s", type(e).__name__)
+
+    async def typing():
+        while True:
+            await ack(telegram.chat_action, m.sender, "typing")
+            await asyncio.sleep(4)  # the indicator lasts 5 seconds
+
+    await ack(telegram.react, m.sender, mid, "👀")
+    task, emoji = asyncio.create_task(typing()), "😢"
+    try:
+        emoji = "👍" if all(ok for _, ok in await run_in_threadpool(run)) else "😢"
+    finally:
+        task.cancel()
+        await ack(telegram.react, m.sender, mid, emoji)
+
+
+@r.post("/telegram")
+async def tg_inbound(request: Request):
+    _tg_check(request, os.environ.get("TELEGRAM_WEBHOOK_SECRET", ""))
+    if m := await _tg_update(request):
+        await _tg_run(request, m, None, lambda: _process(request.app.state.svc, [m]))
+    return JR({"ok": True})
+
+
+def _bot(key):
+    with db.tx("staff", "system:webhook") as conn:
+        return conn.execute("select tenant_id, bot_id, token_enc, secret_enc from tenant_telegram_bots where bot_key=%s", (key,)).fetchone()
+
+
+@r.post("/telegram/b/{bot_key}")
+async def tg_business(bot_key: str, request: Request):
+    """A business's own customer bot (connected under Channels). Every message is for that business, answered by that bot."""
+    bot = await run_in_threadpool(_bot, bot_key)
+    if not bot:
+        raise ApiError(404, "not_found", "not found")
+    _tg_check(request, tgbots.decrypt(bot["secret_enc"]))
+    if m := await _tg_update(request):
+        m.tenant_id, m.to = bot["tenant_id"], tgbots.decrypt(bot["token_enc"])
+        m.external_id = f"b{bot['bot_id']}:{m.external_id}"  # another bot's chat with the same person reuses chat and message numbers
+        await _tg_run(request, m, m.to, lambda: _process(request.app.state.svc, [m]))
+    return JR({"ok": True})
+
+
+# ---- the LARIS helper bot: owners and staff link their Telegram account here and send /catalog photos and supplier documents
+LINK_CMD = re.compile(r"\s*/(?:start(?:@\w+)?\s+link_|link(?:@\w+)?\s+)(\S{1,64})\s*$", re.I)
+UNLINK_CMD = re.compile(r"\s*/unlink(@\w+)?\s*$", re.I)
+BAD_CODE = "That link did not work. Ask for a new one in the LARIS dashboard (Team, Link Telegram)."
+NOT_LINKED = "Ask your business owner to send you a link from the LARIS dashboard."
+HELPER_HELP = ("You are linked to LARIS. Send a product photo with the caption /catalog, or forward a supplier price list or PDF "
+               "to record its prices. Send /unlink to disconnect.")
+HANDLE_Q = "lower(btrim(coalesce(channel_handle,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)"
+
+
+def _helper_link(conn, chat, code) -> tuple[str, bool]:
+    try:
+        throttle(f"helperlink:{chat}", 5, 3600, "too many tries", HITS)  # wrong guesses only: a success below gives the slot back
+    except ApiError:
+        return "Too many tries. Please wait an hour, or ask for a new link in the LARIS dashboard.", False
+    row = conn.execute("""select c.id, c.user_id, c.tenant_id, u.name uname, t.name tname from telegram_link_codes c
+                          join users u on u.id = c.user_id and u.active join tenants t on t.id = c.tenant_id
+                          where c.code_hash = %s and c.used_at is null and c.expires_at > now() for update of c""",
+                       (hashlib.sha256(code.upper().encode()).hexdigest(),)).fetchone()
+    if not row:
+        return BAD_CODE, False
+    HITS[f"helperlink:{chat}"].pop()
+    if conn.execute(f"select 1 from users where tenant_id=%(t)s and id <> %(u)s and active and {HANDLE_Q}", {"t": row["tenant_id"], "u": row["user_id"], "s": chat}).fetchone():
+        return f"This Telegram account is already linked to someone else at {row['tname']}. Send /unlink from it first.", False
+    conn.execute("update users set channel_handle = %s where id = %s", (f"tg:{chat}", row["user_id"]))
+    conn.execute("update telegram_link_codes set used_at = now() where id = %s", (row["id"],))
+    conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:helper','users',%s,'telegram linked')",
+                 (row["tenant_id"], row["user_id"]))
+    return (f"Linked to {row['tname']} as {row['uname']}. Staff: send a product photo with the caption /catalog, or forward a supplier "
+            "price list. Send /unlink to disconnect."), True
+
+
+def _helper(s, m, token):
+    """One helper-bot message -> [(message, ok)]. Nothing but the link commands and the guide runs for a chat that is not linked."""
+    m.to, m.external_id = token, f"h:{m.external_id}"
+    chat, cmd = m.sender, (m.text or "") if not m.media_kind else ""
+    reply, ok = None, True
+    with db.tx("staff", "system:helper") as conn:
+        who = conn.execute(STAFF_Q, {"ch": "telegram", "d": "".join(c for c in chat if c.isdigit()), "s": chat, "scope": None}).fetchall()
+        if lk := LINK_CMD.match(cmd):
+            reply, ok = _helper_link(conn, chat, lk.group(1))
+        elif UNLINK_CMD.match(cmd):
+            gone = conn.execute(f"update users set channel_handle = null where active and {HANDLE_Q} returning id, tenant_id", {"s": chat}).fetchall()
+            for u in gone:
+                conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:helper','users',%s,'telegram unlinked')",
+                             (u["tenant_id"], u["id"]))
+            reply = "Disconnected. You can link again from the LARIS dashboard." if gone else NOT_LINKED
+        elif len(who) > 1:  # the same chat is linked in two businesses: never guess
+            log.warning("helper message from %s dropped: ambiguous_sender", _h(chat))
+            return [(m, False)]
+        elif not who:
+            reply, ok = NOT_LINKED, False
+        elif HELP_CMD.match(cmd):
+            reply = HELPER_HELP
+        else:
+            m.tenant_id = who[0]["tenant_id"]
+    if reply:
+        try:
+            s.send("telegram", chat, reply, token)
+        except Exception as e:
+            log.warning("helper reply to %s failed: %s", _h(chat), type(e).__name__)
+        return [(m, ok)]
+    return _process(s, [m])
+
+
+@r.post("/telegram/helper")
+async def tg_helper(request: Request):
+    _tg_check(request, os.environ.get("LARIS_HELPER_WEBHOOK_SECRET", ""))
+    token = os.environ.get("LARIS_HELPER_BOT_TOKEN", "")
+    if token and (m := await _tg_update(request)):
+        await _tg_run(request, m, token, lambda: _helper(request.app.state.svc, m, token))
     return JR({"ok": True})

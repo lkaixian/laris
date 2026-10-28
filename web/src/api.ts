@@ -162,6 +162,7 @@ export class ApiError extends Error {
   requestId?: string
   retryAfter?: number
   fields?: { field: string; message: string }[]
+  details?: { licences?: number }
   shown = false
   toasted = false
   constructor(public status: number, public code: string, message: string, public businesses?: Business[]) { super(message) }
@@ -172,6 +173,7 @@ export interface License {
   status: 'missing' | 'active' | 'expiring' | 'expired' | 'invalid' | 'clock_unverified'; plan: string | null; seats: number | null; seats_used: number
   expires_at: string | null; days_left: number | null; enforced: boolean; read_only: boolean
   clock: { source: 'ntp' | 'system'; trusted_at: string | null; rollback: boolean } | null
+  offer?: { plan: string; seats: number; expires_at: string } | null  // a licence the platform operator issued for this business, ready to activate
 }
 const licence402 = (e: unknown) => { if (e instanceof ApiError && e.status === 402 && e.code === 'license_required') window.dispatchEvent(new Event('laris:license402')) }
 
@@ -191,9 +193,9 @@ async function mockFetch(method: string, path: string, r: Role, body: unknown, s
   await sleep((contacts ? Number(mockQ('slow')) || 0 : 0) + 120, signal)
   const err = (status: number, error: object) => new Response(JSON.stringify({ error: { request_id: `mock-${status}-7f3a`, ...error } }), { status, headers: { 'X-Request-Id': `mock-${status}-7f3a` } })
   if (method === 'GET' && p === (mockQ('failpath') ?? '/contacts') && mockQ('fail') === '500') return err(500, { code: 'internal', message: 'Internal error' })
-  try { const out = mock(method, path, r, body); return new Response(out instanceof Blob ? out : JSON.stringify(out), { status: 200 }) }
+  try { const out = p.startsWith('/license') ? (await import('./mockLicence')).mockLicence(method, p, body, (m, q) => mock(m, q, r, body)) : mock(method, path, r, body); return new Response(out instanceof Blob ? out : JSON.stringify(out), { status: 200 }) }
   catch (e) {
-    if (e instanceof ApiError) return err(e.status, { code: e.code, message: e.message, fields: e.fields })
+    if (e instanceof ApiError) return err(e.status, { code: e.code, message: e.message, fields: e.fields, details: e.details })
     return err(500, { code: 'internal', message: String(e) })
   }
 }
@@ -207,7 +209,7 @@ function toError(res: Response, data: any): ApiError {  // eslint-disable-line @
   const f = res.status === 422 && Array.isArray(er?.fields) ? er.fields[0] : undefined
   if (f?.message) message = f.field ? `${cap(String(f.field).replace(/_/g, ' '))}: ${f.message}` : f.message
   const e = new ApiError(res.status, er?.code ?? 'error', message, er?.businesses)
-  e.requestId = rid; e.fields = er?.fields
+  e.requestId = rid; e.fields = er?.fields; e.details = er?.details
   const ra = Number(res.headers.get('Retry-After'))
   if (res.status === 429 && ra > 0) e.retryAfter = ra
   return e

@@ -198,6 +198,7 @@ const roles = [
 const Q = new URLSearchParams(location.search)
 const permsOf = (r: { key: string; permissions: string[] }) => (Q.get('perms') === 'none' && r.key !== 'owner' ? [] : r.permissions)
 const channels = { wa: Q.get('wa') === '1' ? '60123456789' : null as string | null }
+const tg = { on: null as boolean | null, linked: new Set(['sample-owner']) }
 const members = [
   { id: 'sample-owner', name: 'SAMPLE Owner', username: 'owner', role: 'owner', role_id: 'r-owner', role_key: 'owner', role_name: 'Owner', active: true, has_password: true, sessions: 1 },
   { id: 'sample-staff', name: 'SAMPLE Staff', username: 'staff', role: 'staff', role_id: 'r-staff', role_key: 'staff', role_name: 'Staff', active: true, has_password: true, sessions: 0 },
@@ -511,7 +512,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body?.role === 'supplier' || (p !== '/contacts' && (body?.name !== undefined || body?.contact !== undefined) && contacts().find(c => c.id === p.split('/')[2])?.role === 'supplier')) perm('edit_supplier_contacts')
   }
   if (p.startsWith('/contacts')) throw new ApiError(409, 'mock', 'Mock mode does not save contacts.')
-  if (p === '/users' && method === 'GET') { need(); return [...members, ...extraMembers()] }
+  if (p === '/users' && method === 'GET') { need(); return [...members, ...extraMembers()].map(x => ({ ...x, telegram_linked: tg.linked.has(x.id) })) }
   if (p === '/users' && method === 'POST') {
     need()
     const r = roleOf(body.role)
@@ -561,6 +562,33 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { ...r, users: members.filter(x => x.role_id === r.id).length }
   }
   { const r = mockTrack(method, p, q, { owner, me: owner ? 'sample-owner' : 'sample-staff', perm, people: members.filter(x => x.active).map(x => x.id), doc: id => docs[id]?.doc }, body); if (r !== undefined) return r }
+  // Telegram. Switches: ?tg=1 connected, ?tg=attention, ?tg=env, ?tg=checking, ?helper=off. Token "bad", "inuse", "down", "nourl", "nokey" give each error.
+  if (p === '/settings/telegram') {
+    need()
+    const src = Q.get('tg') === 'env' ? 'environment' : 'dashboard'
+    if (tg.on === null) tg.on = ['1', 'attention', 'env', 'checking'].includes(Q.get('tg') ?? '')
+    const bot = tg.on ? { connected: true, username: 'acme_shop_bot', name: 'Acme Shop', webhook_ok: Q.get('tg') === 'attention' ? false : Q.get('tg') === 'checking' ? null : true, last_error: Q.get('tg') === 'attention' ? 'Wrong response from the webhook: 502' : null, source: src }
+      : { connected: false, username: null, name: null, webhook_ok: null, last_error: null, source: null }
+    return { helper: Q.get('helper') === 'off' ? { configured: false, username: null, link: null } : { configured: true, username: 'laris_helper_bot', link: 'https://t.me/laris_helper_bot' }, bot,
+      staff: members.map(x => ({ user_id: x.id, name: x.name, role: x.role_name, linked: tg.linked.has(x.id) })) }
+  }
+  if (p === '/settings/telegram/connect' || p === '/settings/telegram/disconnect') {
+    need()
+    if (p.endsWith('connect') && !p.endsWith('disconnect')) {
+      const t = String(body?.token ?? '')
+      const bad: Record<string, [number, string]> = { bad: [422, 'bad_token'], inuse: [409, 'bot_in_use'], down: [502, 'telegram_unreachable'], nourl: [422, 'public_url_unset'], nokey: [422, 'secret_key_unset'] }
+      if (bad[t]) throw new ApiError(bad[t][0], bad[t][1], bad[t][1])
+      tg.on = true
+    } else tg.on = false
+    return tg.on ? { connected: true, username: 'acme_shop_bot', name: 'Acme Shop', webhook_ok: true, last_error: null, source: 'dashboard' } : { connected: false, username: null, name: null, webhook_ok: null, last_error: null, source: null }
+  }
+  if ((m = p.match(/^\/(?:users\/([^/]+)|me)\/telegram-link$/))) {
+    const uid = m[1] ?? (owner ? 'sample-owner' : 'sample-staff')
+    if (m[1]) need()
+    if (method === 'DELETE') { tg.linked.delete(uid); return { ok: true } }
+    if (Q.get('helper') === 'off') throw new ApiError(409, 'helper_not_configured', 'helper bot not configured')
+    return { url: 'https://t.me/laris_helper_bot?start=7Hk2mQ9xPz', code: '7Hk2mQ9xPz', expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }
+  }
   if (p === '/settings/channels') {
     need()
     if (method === 'POST') {

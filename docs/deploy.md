@@ -71,7 +71,7 @@ The app checks an Ed25519-signed key per organisation. It holds only the PUBLIC 
 Issuer, once, on the issuer's own machine (not the server):
 
 1. `python scripts/issue_license.py keygen` writes the private key to `~/.laris/license_private.pem` (refuses to overwrite; back it up, never commit or share it) and prints the public key.
-2. On the server set the Secret `LICENSE_PUBLIC_KEY=<that base64>` (or put the same text in `src/license_public.key`). From the next start licensing is enforced.
+2. On the server set the Secret `LICENSE_PUBLIC_KEY=<that base64>` (or put the same text in `src/license_public.key`). From the next start licensing is enforced. This is now optional: the platform admin (owner whose verified email is `LICENSE_ISSUER_EMAIL`) can set the public key from the web issuer page instead (docs/licensing.md); a key in the environment always wins and cannot be changed from the page.
 3. Per customer: `python scripts/issue_license.py issue --email owner@shop.com --plan standard --days 365 --seats 10 --org "Shop" [--send]`. The key is printed once; `--send` emails it (needs `MAILTRAP_API_TOKEN` on the issuer machine, else it says email is off). The customer's owner activates it under Licence while signed in with that verified email.
 4. Requests: `DATABASE_URL=... python scripts/issue_license.py requests` lists pending ones; `issue --request <id>` fills email, plan and seats and marks it issued.
 
@@ -147,6 +147,8 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `TELEGRAM_BOT_TOKEN` | Telegram bot | yes if Telegram is shown |
 | `TELEGRAM_TENANT_ID` | tenant uuid that receives Telegram messages (one bot per deployment); see "Which business gets a chat message" | only with more than one business |
 | `WHATSAPP_TENANT_ID` | tenant uuid used when a WhatsApp number is not mapped in Settings > Channels | optional |
+| `LARIS_HELPER_BOT_TOKEN` | the platform's LARIS helper bot (made in BotFather): where owners and staff link their Telegram account and send `/catalog` photos and supplier documents | optional (Team: Link Telegram is refused with `helper_not_configured` without it) |
+| `LARIS_HELPER_WEBHOOK_SECRET` | secret header of `/webhooks/telegram/helper` (403 until set) | with the helper bot |
 | `TELEGRAM_ACK` | `0` turns off the Telegram received/done reactions and typing indicator (default on) | optional |
 | `RUNPOD_ENDPOINT_URL` | RunPod fallback STT endpoint | yes (sponsor proof) |
 | `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
@@ -206,6 +208,8 @@ python scripts/setup_channels.py telegram-webhook https://<deployment-domain>/we
 python scripts/setup_channels.py telegram-info              # last_error_message must be empty
 python scripts/setup_channels.py telegram-poll              # local only: long-poll and forward to localhost:5000
 ```
+
+**LARIS helper bot and each business's own bot.** Make one bot for the whole platform in BotFather, set `LARIS_HELPER_BOT_TOKEN` and `LARIS_HELPER_WEBHOOK_SECRET`, then `python scripts/setup_channels.py helper-webhook https://<deployment-domain>/webhooks/telegram/helper`. Owners and staff open the link from Team (Link Telegram) in the helper bot; that sets their `tg:<chat id>` handle, after which `/catalog` photos and supplier documents sent to the helper bot reach the same pipeline as before. A chat that is not linked gets one reply and nothing is stored. Each business makes its own customer bot in BotFather and pastes the token under Channels: the server registers `{APP_PUBLIC_URL}/webhooks/telegram/b/<key>` itself (needs `SECRET_KEY`, which encrypts the saved token, and `APP_PUBLIC_URL`). Messages on a business's bot are only ever for that business and are answered by that bot; quotes, follow-ups and Ask-suppliers messages to Telegram contacts use the business's bot when it has one, else `TELEGRAM_BOT_TOKEN`. The `TELEGRAM_*` env bot keeps working unchanged. Changing `SECRET_KEY` makes saved bot tokens unreadable: connect the bots again.
 
 **Ask suppliers over Telegram (demo without WhatsApp).** Put `tg:<chat id>` (or `telegram:<chat id>`; a group id is negative, e.g. `tg:-1001234567`) in the supplier party's contact. That supplier gets the photo from the bot and their replies are read like WhatsApp ones (reply to the photo, or the newest open ask). The supplier must open the bot and press Start first, or the send fails with "supplier must open the bot and press Start first". To find a chat id: message the bot from that Telegram account, run `python scripts/setup_channels.py telegram-poll` and read the number after `chat` on each line it prints (webhook mode: the same id is in the update). Any other contact is sent on WhatsApp as before.
 

@@ -210,7 +210,8 @@ class Services:
         self.mail = mailer.send  # (to, subject, text, html=None, category=None, attachments=None) -> bool, never raises
 
     def send(self, channel: str, to: str, text: str, phone_id: str | None = None) -> str:
-        """phone_id: the tenant's own WhatsApp business number; None falls back to WHATSAPP_PHONE_NUMBER_ID."""
+        """phone_id: the tenant's own WhatsApp business number; None falls back to WHATSAPP_PHONE_NUMBER_ID.
+        On Telegram it is the business's own bot token (src/tgbots.via); None = the env bot."""
         if channel == "whatsapp":
             try:
                 return whatsapp.send_text(to, text, client=self.http, phone_id=phone_id)
@@ -221,7 +222,7 @@ class Services:
                 return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"),
                                               [" ".join(text.split())[:1000]], client=self.http, phone_id=phone_id)
         if channel == "telegram":
-            return telegram.send_message(to, text, client=self.http)
+            return telegram.send_message(to, text, client=self.http, token=phone_id)
         raise ValueError(f"cannot send on {channel}")
 
     def upload_media(self, data: bytes, mime: str, phone_id: str | None = None) -> str:
@@ -240,14 +241,14 @@ class Services:
             return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"), [" ".join(note.split())[:1000]],
                                           header_image=media_id, client=self.http, phone_id=phone_id)
 
-    def send_photo(self, chat_id: str, data: bytes, mime: str, note: str) -> str:
-        return telegram.send_photo(chat_id, data, mime, note, client=self.http)
+    def send_photo(self, chat_id: str, data: bytes, mime: str, note: str, token: str | None = None) -> str:
+        return telegram.send_photo(chat_id, data, mime, note, client=self.http, token=token)
 
     def send_document(self, channel: str, to: str, data: bytes, filename: str, caption: str, phone_id: str | None = None) -> str:
         """A PDF to a customer. WhatsApp outside the 24h window: only an approved template opens the chat, and it carries the caption
         text only (no file); with no WHATSAPP_FOLLOWUP_TEMPLATE the send fails with a plain reason."""
         if channel == "telegram":
-            return telegram.send_document(to, data, "application/pdf", filename, caption, client=self.http)
+            return telegram.send_document(to, data, "application/pdf", filename, caption, client=self.http, token=phone_id)
         try:
             return whatsapp.send_document(to, data, "application/pdf", filename, caption, client=self.http, phone_id=phone_id)
         except httpx.HTTPStatusError as e:
@@ -259,10 +260,10 @@ class Services:
             return whatsapp.send_template(to, tpl, os.environ.get("WHATSAPP_TEMPLATE_LANG", "en"), [" ".join(caption.split())[:1000]],
                                           client=self.http, phone_id=phone_id)
 
-    def download(self, channel: str, ref: str, kind: str) -> tuple[bytes, str]:
+    def download(self, channel: str, ref: str, kind: str, token: str | None = None) -> tuple[bytes, str]:
         if channel == "whatsapp":
             return whatsapp.download_media(ref, client=self.http)
-        data = telegram.get_file(ref, client=self.http)  # telegram gives no mime: sniff
+        data = telegram.get_file(ref, client=self.http, token=token)  # telegram gives no mime: sniff
         return data, "application/pdf" if data[:4] == b"%PDF" else {"audio": "audio/ogg"}.get(kind, "image/jpeg")
 
 

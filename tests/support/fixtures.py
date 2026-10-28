@@ -54,7 +54,8 @@ class FakeSvc(Services):
         self.docs.append((channel, to, filename, caption, data, phone_id))
         return f"doc.{len(self.docs)}"
 
-    def download(self, channel, ref, kind):
+    def download(self, channel, ref, kind, token=None):
+        self.dl_tokens = getattr(self, "dl_tokens", []) + [token]
         return self.media[ref]
 
 

@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import { api, ApiError, getAccount, MOCK } from './api'
 import { ActionError, Async, PageHeader, msg, useAction, useFetch } from './ui'
 import { useToast } from './Toast'
+import { TelegramLinkControls } from './TelegramLink'
 
-interface Member { id: string; name: string; username: string | null; role: 'owner' | 'staff'; role_key?: string; role_name?: string; active: boolean; has_password: boolean; sessions: number }
+interface Member { id: string; name: string; username: string | null; role: 'owner' | 'staff'; role_key?: string; role_name?: string; active: boolean; has_password: boolean; sessions: number; telegram_linked?: boolean }
 
 interface Invite { id: string; email: string; role_key: string; role_name: string; status: 'pending' | 'accepted' | 'revoked' | 'expired'; invited_by_name?: string; created_at: string; expires_at: string }
 
@@ -123,6 +124,10 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
                 {m.username ? <>Signs in as <span className="font-semibold text-ink">{m.username}</span></> : 'No sign-in account yet'}
                 {m.sessions > 0 && ` · ${m.sessions} active ${m.sessions === 1 ? 'session' : 'sessions'}`}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+                <span>Telegram: <span className="font-semibold text-ink">{m.telegram_linked ? 'Linked' : 'Not linked'}</span></span>
+                <TelegramLinkControls base={`/users/${m.id}`} who={m.name} linked={!!m.telegram_linked} onChange={s.reload} />
+              </div>
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1 text-sm font-semibold">New password for {m.name}
                   <input className="input font-normal" type="password" autoComplete="new-password" value={reset[m.id] ?? ''}
@@ -281,6 +286,11 @@ export function AccountView({ name, role }: { name: string; role: string }) {
         {err && <p role="alert" className="text-sm text-warn">{err}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Changing...' : 'Change password'}</button></div>
       </form>
+      <section className="mt-8 max-w-xl border-t border-soft pt-6" aria-labelledby="tgme">
+        <h2 id="tgme" className="text-base font-semibold">Telegram</h2>
+        <p className="mb-3 text-sm text-muted">Link your Telegram to send product photos and supplier price lists to LARIS from your phone.</p>
+        <div className="flex flex-wrap items-center gap-2"><TelegramLinkControls base="/me" who="yourself" /></div>
+      </section>
       {(MOCK || getAccount()) && <Sessions />}
     </>
   )

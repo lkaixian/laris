@@ -29,6 +29,8 @@ export function ChannelsCard() {
   const missing = c && c.tenants_total_hint && (!c.whatsapp_mapped || !c.telegram_mapped)
   const both = c && !c.whatsapp_mapped && !c.telegram_mapped
   return (
+    <>
+    <TelegramCards />
     <section className="card mt-8 max-w-xl" aria-labelledby="ch">
       <h2 id="ch" className="text-lg font-semibold">Channels</h2>
       <p className="mb-3 text-sm text-muted">Tell LARIS which chat number is yours, so customer messages reach your business.</p>
@@ -54,5 +56,88 @@ export function ChannelsCard() {
             <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save channels'}</button></div>
           </form></>}
     </section>
+    </>
+  )
+}
+
+interface Bot { connected: boolean; username: string | null; name: string | null; webhook_ok: boolean | null; last_error: string | null; source: 'dashboard' | 'environment' | null }
+interface Tg { helper: { configured: boolean; username: string | null; link: string | null }; bot: Bot }
+
+const CONNECT_ERR: Record<string, string> = {
+  bad_token: 'Telegram did not accept that token. Copy it again from BotFather.',
+  bot_in_use: 'That bot is already connected to another business. Make a new bot in BotFather and use its token.',
+  telegram_unreachable: 'LARIS could not reach Telegram. Wait a minute and try again.',
+  public_url_unset: 'The server does not know its public address yet. Ask whoever set up LARIS to set APP_PUBLIC_URL.',
+  secret_key_unset: 'The server is missing a security key. Ask whoever set up LARIS to set it, then try again.',
+}
+
+// Settings > Channels, Telegram: the customer bot (owner pastes a BotFather token) and the LARIS helper bot (staff link their account).
+function TelegramCards() {
+  const s = useFetch<Tg>('/settings/telegram')
+  const [token, setToken] = useState('')
+  const [show, setShow] = useState(false)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [ask, setAsk] = useState(false)
+  const toast = useToast()
+  const act = async (path: string, body: unknown, done: string) => {
+    if (busy) return
+    setErr(''); setBusy(true)
+    try { await api('POST', path, body); setToken(''); setShow(false); setAsk(false); toast(done); s.reload() }
+    catch (e) { setErr(e instanceof ApiError && CONNECT_ERR[e.code] ? CONNECT_ERR[e.code] : msg(e)) }
+    finally { setBusy(false) }
+  }
+  const b = s.data?.bot, h = s.data?.helper
+  const wait = <div role="status" aria-busy="true" className="skeleton h-16"><span className="sr-only">Loading...</span></div>
+  const fail = <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>
+  return (
+    <>
+      <section className="card mt-8 max-w-xl" aria-labelledby="tgb">
+        <h2 id="tgb" className="text-lg font-semibold">Your customer bot</h2>
+        <p className="mb-3 text-sm text-muted">A Telegram bot with your shop's name, so customers can message you there and get replies.</p>
+        {s.error ? fail : !b ? wait : b.connected ? (
+          <div className="grid gap-3">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{b.name}</span>
+              {b.username && <a className="link" href={`https://t.me/${b.username}`} target="_blank" rel="noreferrer">@{b.username}<span className="sr-only"> (opens Telegram)</span></a>}
+              <span className={b.webhook_ok === false ? 'badge badge-warn' : 'badge'}>{b.webhook_ok === true ? 'Working' : b.webhook_ok === false ? 'Needs attention' : 'Checking...'}</span>
+            </p>
+            {b.webhook_ok === false && b.last_error && <p className="text-sm text-warn">{b.last_error}</p>}
+            {b.source === 'environment' ? <p className="text-sm text-muted">Connected through the server settings. To change it, ask whoever set up LARIS.</p>
+              : ask ? (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Confirm disconnecting the bot">
+                  <span className="text-sm font-semibold">Disconnect this bot? Customers will no longer get replies on Telegram.</span>
+                  <button type="button" className="btn btn-danger" autoFocus aria-disabled={busy || undefined} onClick={() => act('/settings/telegram/disconnect', undefined, 'Customer bot disconnected.')}>{busy ? 'Working...' : 'Yes, disconnect'}</button>
+                  <button type="button" className="btn" onClick={() => setAsk(false)}>Cancel</button>
+                </div>
+              ) : <div><button type="button" className="btn" onClick={() => setAsk(true)}>Disconnect</button></div>}
+            {err && <p role="alert" className="text-sm text-warn">{err}</p>}
+          </div>
+        ) : (
+          <form className="grid gap-3" onSubmit={e => { e.preventDefault(); if (token.trim()) act('/settings/telegram/connect', { token: token.trim() }, 'Customer bot connected.') }}>
+            <ol className="list-decimal pl-5 text-sm">
+              <li>Open <a className="link" href="https://t.me/BotFather" target="_blank" rel="noreferrer">BotFather</a> in Telegram.</li>
+              <li>Send /newbot and pick a name for your shop's bot.</li>
+              <li>Copy the token it gives you and paste it below.</li>
+            </ol>
+            <label className="flex flex-col gap-1 text-sm font-semibold">Bot token
+              <span className="flex gap-2">
+                <input className="input min-w-0 flex-1 font-normal" type={show ? 'text' : 'password'} autoComplete="off" autoCapitalize="none" spellCheck={false} value={token}
+                  aria-invalid={!!err || undefined} aria-describedby={err ? 'tg-err' : undefined} onChange={e => { setToken(e.target.value); setErr('') }} />
+                <button type="button" className="btn" aria-pressed={show} onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}<span className="sr-only"> token</span></button>
+              </span></label>
+            {err && <p id="tg-err" role="alert" className="text-sm text-warn">{err}</p>}
+            <div><button type="submit" className="btn btn-primary" aria-disabled={busy || !token.trim() || undefined}>{busy ? 'Connecting...' : 'Connect bot'}</button></div>
+          </form>
+        )}
+      </section>
+      <section className="card mt-8 max-w-xl" aria-labelledby="tgh">
+        <h2 id="tgh" className="text-lg font-semibold">LARIS helper bot (for you and your staff)</h2>
+        <p className="mb-3 text-sm text-muted">You and your staff link your own account to this bot. Then you can send product photos with /catalog and supplier price lists straight from Telegram. Link people on the Team page, or yours on the Account page.</p>
+        {s.error ? fail : !h ? wait : h.configured && h.username
+          ? <a className="link" href={h.link ?? `https://t.me/${h.username}`} target="_blank" rel="noreferrer">@{h.username}<span className="sr-only"> (opens Telegram)</span></a>
+          : <p className="text-sm text-muted">Not available on this server yet.</p>}
+      </section>
+    </>
   )
 }

@@ -4,15 +4,21 @@ A signed key per organisation. Off unless a public key is configured; then it is
 
 ## Flow
 
+Normal use is the web issuer page (below); the CLI (`scripts/issue_license.py`) stays for automation. The private key never reaches the server either way.
+
 ```
-issuer machine                         customer's LARIS server                      customer owner
---------------                         -----------------------                      --------------
-keygen -> private.pem (kept)
-       -> public key  ----------------> LICENSE_PUBLIC_KEY (only this is on the server)
+operator's browser (web page)          customer's LARIS server                      customer owner
+-----------------------------          -----------------------                      --------------
+private key (kept in the browser,
+  signs with WebCrypto)
+public key -> POST /license/admin/public-key -> license_config row (or env LICENSE_PUBLIC_KEY; env wins)
                                                                                   <- POST /api/license/request {plan, seats}
-requests (lists them)  <---------------- license_requests row + email to LICENSE_ISSUER_EMAIL
-issue --email --plan --seats --days
-  token LARIS1.<payload>.<signature> ---- emailed (--send) or sent by hand ------> POST /api/license {key}
+GET /license/admin/requests <------------ license_requests row + email to LICENSE_ISSUER_EMAIL
+sign payload in the browser
+POST /license/admin/issue {request_id, token} -> verified, stored on the request, emailed to the requester
+  (CLI instead: keygen / requests / issue --email --plan --seats --days [--send]; token sent by hand)
+                                                                                  GET /api/license -> offer; POST /api/license/accept-offer
+                                                                                  (or paste the key: POST /api/license {key})
                                          verify signature, email == owner's verified email,
                                          not expired by trusted time, licence id unused elsewhere,
                                          seats >= active users -> stored on the tenant, audited
@@ -21,6 +27,43 @@ issue --email --plan --seats --days
 ```
 
 Token: `LARIS1.<b64url(payload json)>.<b64url(ed25519 signature over the payload bytes)>`; payload `{v:1, lid, email, org, plan, seats, issued_at, expires_at}`. Verification is strict (exact field set, types, ranges, signature). One licence id belongs to one tenant (unique index).
+
+## Issuing from the web page
+
+Platform admin = a signed-in owner whose verified email equals env `LICENSE_ISSUER_EMAIL` (case-insensitive). Everyone else gets 404 from `/api/license/admin/*`. The server only ever holds the PUBLIC key: from env / `src/license_public.key` (source `environment`, cannot be changed from the page) or the one row of `license_config` (source `dashboard`, set by `POST /api/license/admin/public-key`; replacing a key that would stop verifying stored licences needs `confirm:true`). Changing the key also resets the 60 s status cache. A key set from the page is read again within 60 s by other server processes.
+
+`POST /api/license/admin/issue {request_id, token}` verifies the token exactly as activation does, then requires: payload email == the request's email, seats <= requested, plan not above the requested plan (order starter < standard < pro; any other plan name is refused), else 422 `token_mismatch`. It stores the token on the request, emails it to the requester and answers `{ok, emailed}`. The customer's `GET /api/license` then carries `offer:{plan, seats, expires_at}` and `POST /api/license/accept-offer` activates it through the same code as `POST /api/license`.
+
+Payload field formats (the signer must match byte for byte; the server checks the same rules as `src/license.py` `_valid`):
+
+| field | type | rule |
+|---|---|---|
+| `v` | integer | exactly `1` |
+| `lid` | string | a lowercase UUID version 4, canonical form `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`, new for every licence |
+| `email` | string | lowercase, contains `@`, at most 254 characters; must equal the request's email |
+| `org` | string | at most 200 characters (may be empty) |
+| `plan` | string | `[a-z0-9_-]{1,30}`, normally `starter`, `standard` or `pro` |
+| `seats` | integer | 1..10000, JSON number without decimals |
+| `issued_at` | integer | Unix seconds (UTC), 0..4102444800 |
+| `expires_at` | integer | Unix seconds, greater than `issued_at`, at most 4102444800 (`issued_at + days*86400` in the CLI) |
+
+Exactly these 8 fields; any extra or missing field is refused. Integers must be JSON integers (not strings, not `1.0`, not booleans).
+
+Browser signing recipe:
+
+1. Build the payload object with exactly the 8 fields above.
+2. Serialise it as JSON with the keys sorted alphabetically (`email, expires_at, issued_at, lid, org, plan, seats, v`), no spaces anywhere (separators `,` and `:`), integers without decimals, UTF-8. Non-ASCII text in `org` may be written either way (`\uXXXX` or raw UTF-8): the server signs nothing and verifies the exact bytes you send, so only use what you sign.
+3. Encode that string to UTF-8 bytes. These bytes are what you sign: `signature = Ed25519.sign(privateKey, bytes)` (WebCrypto algorithm `Ed25519`; 64 bytes).
+4. `token = "LARIS1." + b64url(bytes) + "." + b64url(signature)`, where b64url is URL-safe base64 (`+` becomes `-`, `/` becomes `_`) with the `=` padding removed.
+5. Send `{request_id, token}` to `POST /api/license/admin/issue`.
+
+Example payload bytes (also asserted in `tests/test_license_admin.py`, which signs it with a key made by `scripts/issue_license.py keygen`):
+
+```
+{"email":"owner@shop.test","expires_at":1831536000,"issued_at":1800000000,"lid":"0b0f6f06-8d0b-4a39-9d0e-5d4e2a8a7c11","org":"Shop","plan":"pro","seats":25,"v":1}
+```
+
+The public key shown on the page is the base64 (standard alphabet, with padding) of the raw 32-byte Ed25519 public key (WebCrypto `exportKey("raw")`).
 
 ## Trusted time
 

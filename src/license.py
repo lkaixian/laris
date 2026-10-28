@@ -1,8 +1,9 @@
 """Signed software licence: `LARIS1.<b64url(payload json)>.<b64url(ed25519 signature over those payload bytes)>`.
-The app only ever holds the PUBLIC key: env LICENSE_PUBLIC_KEY (base64 of the raw 32 bytes) or the file src/license_public.key
+The app only ever holds the PUBLIC key: env LICENSE_PUBLIC_KEY (base64 of the raw 32 bytes), the file src/license_public.key, or the license_config row set from the admin page
 (same text; no key is committed). No key configured = licensing is off and the app behaves as before. A deterrent, not DRM (docs/licensing.md)."""
 import base64
 import binascii
+import hashlib
 import json
 import logging
 import os
@@ -13,7 +14,10 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+
+from psycopg.rows import dict_row
 
 from . import clock
 from .errors import ApiError
@@ -38,19 +42,60 @@ def _unb64(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
-# ---- the public key
-def configured() -> bool:
-    """Enforcement is on exactly when a public key is configured (even a broken one: that fails closed)."""
-    return bool(os.environ.get("LICENSE_PUBLIC_KEY", "").strip()) or KEYFILE.is_file()
+# ---- the public key: env / file first, else the one row of license_config (set from the platform admin page; src/api/license_routes.py)
+_DB: dict = {"raw": "", "at": None}  # the dashboard key, cached CACHE_SECONDS; set() and invalidate() reset it
 
 
-def public_key() -> Ed25519PublicKey | None:
-    raw = os.environ.get("LICENSE_PUBLIC_KEY", "").strip() or (KEYFILE.read_text(encoding="utf-8").strip() if KEYFILE.is_file() else "")
+def _env_raw() -> str:
+    return os.environ.get("LICENSE_PUBLIC_KEY", "").strip() or (KEYFILE.read_text(encoding="utf-8").strip() if KEYFILE.is_file() else "")
+
+
+def refresh(conn) -> None:
+    """Reload the dashboard key when the cached copy is older than CACHE_SECONDS. Cheap: call it wherever a connection is at hand."""
+    if _DB["at"] is not None and time.monotonic() - _DB["at"] < CACHE_SECONDS:
+        return
+    with conn.cursor(row_factory=dict_row) as cur:
+        row = cur.execute("select public_key from license_config").fetchone()
+    _DB.update(raw=(row["public_key"] or "").strip() if row else "", at=time.monotonic())
+
+
+def set_key(conn, raw: str, user_id) -> None:
+    conn.execute("""insert into license_config(id, public_key, set_by, set_at) values (true, %s, %s, now())
+                    on conflict (id) do update set public_key = excluded.public_key, set_by = excluded.set_by, set_at = excluded.set_at""", (raw, user_id))
+    invalidate()
+    _DB.update(raw=raw, at=time.monotonic())
+
+
+def raw_key() -> str:
+    return _env_raw() or _DB["raw"]
+
+
+def source() -> str | None:
+    return "environment" if _env_raw() else "dashboard" if _DB["raw"] else None
+
+
+def parse_key(raw: str) -> Ed25519PublicKey | None:
     try:
         return Ed25519PublicKey.from_public_bytes(base64.b64decode(raw, validate=True)) if raw else None
     except (ValueError, binascii.Error):
-        log.error("LICENSE_PUBLIC_KEY / src/license_public.key is not a base64 Ed25519 public key (32 bytes): no licence can verify")
         return None
+
+
+def fingerprint(key: Ed25519PublicKey) -> str:
+    return hashlib.sha256(key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).hexdigest()[:12]
+
+
+def configured() -> bool:
+    """Enforcement is on exactly when a public key is configured (even a broken one: that fails closed)."""
+    return bool(raw_key())
+
+
+def public_key() -> Ed25519PublicKey | None:
+    raw = raw_key()
+    key = parse_key(raw)
+    if raw and key is None:
+        log.error("the licence public key (env / src/license_public.key / dashboard) is not a base64 Ed25519 public key (32 bytes): no licence can verify")
+    return key
 
 
 # ---- issue (the issuer's tool and tests; the app itself never signs)
@@ -81,12 +126,12 @@ def _valid(p) -> bool:
         return False
 
 
-def inspect(token) -> tuple[dict | None, str | None]:
+def inspect(token, key: Ed25519PublicKey | None = None) -> tuple[dict | None, str | None]:
     """(payload, None) for a token whose signature and fields verify, else (None, reason): no_key | malformed | signature | fields.
-    Expiry is NOT judged here (status() does, with trusted time)."""
-    if not configured():
+    Expiry is NOT judged here (status() does, with trusted time). `key`: verify under this key instead of the configured one."""
+    if key is None and not configured():
         return None, "no_key"
-    key = public_key()
+    key = key or public_key()
     if key is None:
         return None, "no_key"
     if not isinstance(token, str) or len(token) > MAX_TOKEN:
@@ -111,6 +156,7 @@ def invalidate(tenant_id=None):
         _CACHE.pop(tenant_id, None)
     else:
         _CACHE.clear()
+        _DB.update(raw="", at=None)
 
 
 def _iso(ts: int) -> str:
@@ -120,6 +166,7 @@ def _iso(ts: int) -> str:
 def status(conn, tenant_id) -> dict:
     """missing | active | expiring (<=14 days) | expired | invalid | clock_unverified, with plan, seats, seats_used, expires_at, days_left,
     enforced and the clock. Cached 60 s per tenant; activation invalidates it. conn must see the tenant (RLS)."""
+    refresh(conn)
     hit = _CACHE.get(tenant_id)
     if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
         return hit[1]
@@ -146,6 +193,7 @@ def status(conn, tenant_id) -> dict:
 
 def gate(path: str, ctx):
     """Called for every write that goes through write_ctx: 402 while an enforced installation has no usable licence."""
+    refresh(ctx.conn)
     if not configured() or path.startswith(ALLOWED):
         return
     s = status(ctx.conn, ctx.tenant_id)

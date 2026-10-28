@@ -30,6 +30,13 @@ export const blocked = (l?: License) => !!l?.enforced && l.status !== 'active' &
 const STATUS: Record<License['status'], string> = {
   active: 'Active', expiring: 'Expiring soon', missing: 'No licence installed', expired: 'Expired', invalid: 'Not valid', clock_unverified: 'Date could not be confirmed',
 }
+// The platform operator's page (Issuer.tsx) is only for the LARIS team: the nav shows it once GET /license/admin/config answers (a 404 means not the admin).
+let issuer = false
+export const issuerOn = () => issuer
+export function useIssuerProbe() {
+  const [, set] = useState(0)
+  useEffect(() => { api('GET', '/license/admin/config', undefined, { quiet: true }).then(() => { issuer = true; set(n => n + 1) }, () => { issuer = false }) }, [])
+}
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'
 
 // Minimal frame for screens shown instead of the app: logo, organisation, theme, sign out. Page content is the <main>.
@@ -78,6 +85,37 @@ export function KeyForm({ onDone }: { onDone: () => void }) {
   )
 }
 
+// A licence the platform operator already issued for this business: one click to activate.
+function OfferCard({ offer, onDone }: { offer: NonNullable<License['offer']>; onDone: () => void }) {
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  const go = async () => {
+    if (busy) return
+    setBusy(true); setErr('')
+    try { await api('POST', '/license/accept-offer'); toast('Licence activated.'); onDone() }
+    catch (e) {
+      setErr(e instanceof ApiError && e.code === 'no_offer' ? 'This licence is no longer available. Ask the LARIS team to send it again.' : msg(e))
+      if (e instanceof ApiError && e.code === 'no_offer') onDone()
+    } finally { setBusy(false) }
+  }
+  return (
+    <section aria-labelledby="lic-o" className="card mb-4 border-l-4 border-l-accent">
+      <h2 id="lic-o" className="font-semibold">A licence is ready for your business</h2>
+      <p className="mt-1">{offer.plan[0].toUpperCase() + offer.plan.slice(1)}, {offer.seats} seats, valid until {fmtDate(offer.expires_at)}.</p>
+      {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
+      <button type="button" className="btn btn-primary mt-3" aria-disabled={busy || undefined} onClick={go}>{busy ? 'Activating...' : 'Activate licence'}</button>
+    </section>
+  )
+}
+// The offer card (when there is an offer) with the paste-a-key box tucked under it; just the box otherwise.
+function Activate({ lic, onDone }: { lic: License; onDone: () => void }) {
+  return <>
+    {lic.offer && <OfferCard offer={lic.offer} onDone={onDone} />}
+    <details className="card"><summary className="cursor-pointer font-semibold">Have a key instead?</summary><div className="mt-3"><KeyForm onDone={onDone} /></div></details>
+  </>
+}
+
 const WHY: Record<string, string> = {
   missing: 'No licence is installed yet.', expired: 'The licence has expired.', invalid: 'The installed licence is not valid.',
   clock_unverified: 'The server could not confirm today\'s date, so the licence cannot be checked. Try again in a moment.',
@@ -91,7 +129,7 @@ export function LicenceGate({ lic, owner, org, dark, setDark, reload, onReadOnly
       {owner ? <>
         <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight">Activate your licence</h1>
         <p className="mt-1 text-muted">{WHY[lic.status] ?? ''} Paste the licence key we emailed you to unlock changes for {org}.</p>
-        <div className="card mt-4"><KeyForm onDone={reload} /></div>
+        <div className="mt-4">{lic.offer ? <Activate lic={lic} onDone={reload} /> : <div className="card"><KeyForm onDone={reload} /></div>}</div>
         <p className="mt-4 text-sm">Don't have a licence? <a className="link" href="#/purchase">Request one</a></p>
       </> : <>
         <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight">Licence needed</h1>
@@ -133,6 +171,7 @@ export function LicenceView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Licence" description={owner ? 'Your plan, seats and expiry. Activate a new key here to renew.' : 'The licence status of your organisation. Only the owner can change it.'} />
+      {owner && lic.offer && <div className="max-w-xl"><OfferCard offer={lic.offer} onDone={reload} /></div>}
       {lic.clock?.rollback && <p role="alert" className="card mb-4 border-warn bg-warn-bg text-warn">The computer clock appears to have been set back. Licence checks may be wrong until the date is corrected.</p>}
       <section aria-labelledby="lic-s" className="card max-w-xl">
         <h2 id="lic-s" className="sr-only">Licence status</h2>
@@ -147,8 +186,8 @@ export function LicenceView({ owner }: { owner: boolean }) {
       </section>
       {owner ? (
         <section aria-labelledby="lic-a" className="card mt-4 max-w-xl">
-          <h2 id="lic-a" className="mb-2 font-semibold">Activate or renew</h2>
-          <KeyForm onDone={reload} />
+          {lic.offer ? <details><summary id="lic-a" className="cursor-pointer font-semibold">Have a key instead?</summary><div className="mt-3"><KeyForm onDone={reload} /></div></details>
+            : <><h2 id="lic-a" className="mb-2 font-semibold">Activate or renew</h2><KeyForm onDone={reload} /></>}
           <p className="mt-3 text-sm">Need a new key? <a className="link" href="#/purchase">Request a licence</a></p>
         </section>
       ) : <p className="mt-4 max-w-xl text-sm text-muted">Ask the owner to activate or renew the licence.</p>}

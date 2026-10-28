@@ -1,0 +1,57 @@
+# SAMPLE template (invented, synthetic numbers). Small aircon service company.
+key: aircon_service
+min_margin_pct: 20
+followup_hours: 24
+required_enquiry_fields: [service, units, location, preferred_date]
+item_catalog:
+  - {item_key: gas_r32_kg, uom: kg, aliases: [r32, r32 gas, gas r32]}
+  - {item_key: gas_r410a_kg, uom: kg, aliases: [r410a, r410a gas, gas r410a]}
+  - {item_key: copper_pipe_m, uom: m, aliases: [copper pipe, paip kuprum, paip tembaga]}
+  - {item_key: wall_bracket, uom: pcs, aliases: [bracket, wall bracket, bracket dinding, pemegang dinding]}
+  - {item_key: drain_pipe_m, uom: m, aliases: [drain pipe, paip air, paip longkang]}
+  - {item_key: wiring_m, uom: m, aliases: [wiring, wire, kabel, wayar]}
+  - {item_key: capacitor, uom: pcs, aliases: [capacitor, kapasitor, cap aircond]}
+  - {item_key: cleaning_chemical_l, uom: l, aliases: [chemical, cleaning chemical, bahan kimia, cecair cuci]}
+rate_card:            # RM/hour, call-out is RM per visit
+  technician_hour: 45.00
+  call_out: 80.00
+recipes:
+  general_servicing:
+    description: General servicing per unit (servis aircond)
+    uom: unit
+    markup_pct: 40
+    bom:
+      - {item_key: cleaning_chemical_l, qty: 0.1}
+    hours: {technician_hour: 0.75}
+  chemical_wash:
+    description: Chemical wash per unit (cuci aircond)
+    uom: unit
+    markup_pct: 40
+    bom:
+      - {item_key: cleaning_chemical_l, qty: 0.5}
+    hours: {technician_hour: 1.5}
+  gas_topup:
+    description: Gas top-up R32 (tambah gas)
+    uom: unit
+    markup_pct: 40
+    bom:
+      - {item_key: gas_r32_kg, qty: 0.3}
+    hours: {technician_hour: 0.5}
+  install_wall_1hp:
+    description: New 1.0HP wall unit installation, excluding the unit (pasang aircond)
+    uom: unit
+    markup_pct: 35
+    bom:
+      - {item_key: copper_pipe_m, qty: 3}
+      - {item_key: wall_bracket, qty: 1}
+      - {item_key: drain_pipe_m, qty: 3}
+      - {item_key: wiring_m, qty: 3}
+      - {item_key: gas_r32_kg, qty: 0.2}
+    hours: {technician_hour: 3}   # RM per unit: cost 3x25 + 15 + 3x3 + 3x4 + 0.2x60 = 123 + 3x45 = 258, +35% = RM348.30 (pipe RM25/m, bracket RM15, drain RM3/m, wire RM4/m, R32 RM60/kg)
+  troubleshooting_callout:
+    description: Troubleshooting call-out, fixed rate (kos panggilan)
+    uom: visit
+    fixed_rate: call_out
+fields:
+  - {key: unit_hp, label: Unit size (HP), type: select, options: ["0.75", "1.0", "1.5", "2.0", "2.5"], applies_to: [in, out]}
+  - {key: site_address, label: Site address, type: text, applies_to: [in]}

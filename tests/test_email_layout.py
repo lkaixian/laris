@@ -27,7 +27,7 @@ def mk(blocks, **kw):
     return render(**d)
 
 
-ALL = [("p", EVIL), ("code", EVIL, EVIL), ("facts", [(EVIL, EVIL)]), ("table", [EVIL], [[EVIL]]),
+ALL = [("p", EVIL), ("code", EVIL, EVIL), ("mono", EVIL), ("facts", [(EVIL, EVIL)]), ("table", [EVIL], [[EVIL]]),
        ("button", EVIL, "https://example.com/a"), ("note", EVIL)]
 
 
@@ -54,6 +54,13 @@ def test_long_string_and_code_once():
     text, html = mk([("p", long), ("code", "482913", "n")])
     assert "word-break:break-word" in html and "overflow-wrap:anywhere" in html
     assert html.count("482913") == 1 and text.count("482913") == 1
+
+
+def test_mono_block_wraps_long_key_once():
+    key = "eyJ" + "A1b2C3." * 40
+    text, html = mk([("mono", key)])
+    assert "word-break:break-all" in html and "font-size:13px" in html and "user-select:all" in html and "text-align:left" in html
+    assert html.count(key) == 1 and text.count(f"\n    {key}\n") == 1
 
 
 def test_structure_and_logo():

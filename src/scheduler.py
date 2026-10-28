@@ -46,6 +46,7 @@ def purge_stale(c) -> int:
         n += 1
     n += c.execute("update rfq_replies set message_text = null where message_text is not null and created_at < now() - interval '180 days'").rowcount
     n += c.execute("update listing_items set crop = ''::bytea where length(crop) > 0 and listing_id in (select id from listings where created_at < now() - interval '90 days')").rowcount
+    n += c.execute("update rfq_items set image = ''::bytea where length(image) > 0 and created_at < now() - interval '90 days'").rowcount  # the photo sent to suppliers
     n += c.execute("update listings set image = ''::bytea where length(image) > 0 and created_at < now() - interval '90 days'").rowcount
     return n
 

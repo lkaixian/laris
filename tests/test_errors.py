@@ -148,3 +148,10 @@ def test_ready_schema_missing(env):
     finally:
         with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as c:
             c.execute("alter table tenants_x rename to tenants")
+
+
+def test_access_log_masks_the_public_quote_token():
+    rec = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                            ("1.2.3.4:5", "POST", "/api/public/quote/AbC123secretToken/accept", "1.1", 200), None)
+    logsetup.MaskQuery().filter(rec)
+    assert "secretToken" not in rec.getMessage() and "/api/public/quote/***/accept" in rec.getMessage()

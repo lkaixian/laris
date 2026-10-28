@@ -27,10 +27,21 @@ CREATE TABLE IF NOT EXISTS telegram_link_codes (
   used_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS telegram_link_codes_user_idx ON telegram_link_codes (user_id);
+-- What the owner customised on the customer bot (Settings, Telegram). No row = the defaults. days: ISO weekdays, Monday = 1 .. Sunday = 7.
+CREATE TABLE IF NOT EXISTS tenant_bot_settings (
+  tenant_id uuid PRIMARY KEY REFERENCES tenants,
+  welcome text,
+  help text,
+  language text NOT NULL DEFAULT 'auto' CHECK (language IN ('auto','en','ms')),
+  quick_replies jsonb NOT NULL DEFAULT '[]',
+  after_hours jsonb NOT NULL DEFAULT '{"enabled":false}',
+  reactions boolean NOT NULL DEFAULT true,
+  updated_at timestamptz DEFAULT now()
+);
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['tenant_telegram_bots','telegram_link_codes'] LOOP
+  FOREACH t IN ARRAY ARRAY['tenant_telegram_bots','telegram_link_codes','tenant_bot_settings'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_scope ON %I', t);

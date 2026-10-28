@@ -96,11 +96,11 @@ def line_json(ctx: Ctx, l: dict, doc: dict, hide: set) -> dict:
 @r.get("/me")
 def me(ctx: Ctx = Depends(read_ctx)):
     t = ctx.conn.execute("select coalesce(display_name, name) as name, brand_color, logo_data_url from tenants where id=%s", (ctx.tenant_id,)).fetchone()
-    ro = ctx.conn.execute("select r.key, r.name from users u left join roles r on r.id = u.role_id where u.id=%s", (ctx.user_id,)).fetchone()
+    ro = ctx.conn.execute("select r.key, r.name, coalesce(u.channel_handle,'') ~* '^\\s*(tg|telegram):' as tg from users u left join roles r on r.id = u.role_id where u.id=%s", (ctx.user_id,)).fetchone()
     # role = the class (owner|staff) for older UI code; role_key / role_name / permissions drive the new UI. logo_url is a data URL
     # (usable as <img src>), else the ORG_LOGO_URL env, else null (UI shows initials)
     return reply(ctx, {"role": ctx.role, "role_key": ro["key"] or ctx.role, "role_name": ro["name"] or ctx.role.title(),
-                       "permissions": sorted(ctx.perms), "name": ctx.name, "id": ctx.user_id,
+                       "permissions": sorted(ctx.perms), "name": ctx.name, "id": ctx.user_id, "telegram_linked": bool(ro["tg"]),
                        "org": {"name": t["name"], "brand_color": t["brand_color"],
                                "logo_url": t["logo_data_url"] or os.environ.get("ORG_LOGO_URL") or None}})
 
@@ -233,7 +233,7 @@ def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depe
     out = summary(ctx, get_doc(ctx, doc_id))
     if to == "sent":
         try:  # the customer gets the SELLING price only; a send failure must not undo the owner's decision
-            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request), doc_id) else "not_sent"
+            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request), doc_id, pipeline.new_link(c, doc_id, ctx.user_id)[0]) else "not_sent"
         except Exception:
             log.exception("could not send quote %s", doc_id)
             out["delivery"] = "failed"  # surfaced so the owner can resend by hand
@@ -260,7 +260,7 @@ def send_quote(doc_id: UUID, body: SendQuote, request: Request, ctx: Ctx = Depen
     throttle(f"send:{ctx.tenant_id}", 20, 3600, "Too many quotes sent in an hour. Wait a while.")
     delivery = {"channel": body.channel, "status": "delivered"}
     try:
-        pipeline.deliver_quote(ctx.conn, svc(request), doc_id, body.channel, to, body.message)
+        pipeline.deliver_quote(ctx.conn, svc(request), doc_id, body.channel, to, body.message, pipeline.new_link(ctx.conn, doc_id, ctx.user_id)[0])
     except Exception as e:  # the owner sees a plain reason; the address and provider text stay out of it
         log.warning("quote %s not sent on %s: %s", doc_id, body.channel, type(e).__name__)
         delivery = {"channel": body.channel, "status": "failed",
@@ -571,13 +571,15 @@ def erase_party(party_id: UUID, ctx: Ctx = Depends(write_ctx)):
         raise ApiError(404, "not_found", "party not found")
     if p["role"] != "customer":
         raise ApiError(409, "not_customer", "only customer records can be erased here")
-    c.execute("""update parties set name = 'Erased customer ' || left(id::text, 8), contact = null, address = null,
+    c.execute("""update parties set name = 'Erased customer ' || left(id::text, 8), contact = null, address = null, email = null, notes = null,
                    attention = null, ssm_no = null, sst_no = null where id=%s""", (party_id,))
     n = c.execute("""update messages set body = '[erased]', transcript = null, media_key = null
                      where enquiry_id in (select id from enquiries where party_id=%s)
                         or document_id in (select id from documents where party_id=%s)""", (party_id, party_id)).rowcount
-    audit(ctx, "parties", party_id, "personal data erased on request", None, {"messages_erased": n})
-    return reply(ctx, {"id": party_id, "messages_erased": n})
+    c.execute("update documents set extraction = null, source_object_key = null where party_id=%s", (party_id,))  # raw AI / OCR output can repeat the name and number
+    k = c.execute("update rfq_replies set message_text = null where send_id in (select id from rfq_sends where supplier_id=%s)", (party_id,)).rowcount
+    audit(ctx, "parties", party_id, "personal data erased on request", None, {"messages_erased": n, "replies_erased": k})
+    return reply(ctx, {"id": party_id, "messages_erased": n, "replies_erased": k})
 
 
 class ManualLine(BaseModel, extra="forbid"):

@@ -125,8 +125,21 @@ def no_owner_email(ctx):
         return _item("warn", "no_owner_email", "No active owner has an email address, so nobody can recover a lost password.", "Add an email to the owner's account under Team.")
 
 
+def privacy_dpo_missing(ctx):
+    if not ctx.conn.execute("select 1 from tenant_privacy where tenant_id=%s and dpo_name <> '' and (dpo_email <> '' or dpo_phone <> '')", (ctx.tenant_id,)).fetchone():
+        return _item("warn", "privacy_dpo_missing", "No data protection officer contact is recorded (the amended PDPA asks for one).", "Owner: add the officer's name and email or phone under Settings, Privacy.")
+
+
+def breach_overdue(ctx):
+    n = ctx.conn.execute("""select count(*) as n from breach_incidents where status = 'open' and commissioner_notified_at is null
+                            and (significant_harm or coalesce(people_affected, 0) > 1000) and detected_at + interval '72 hours' < now()""").fetchone()["n"]
+    if n:
+        return _item("critical", "breach_overdue", f"{n} open data breach(es) passed 72 hours with no Commissioner notice recorded.",
+                     "Owner: notify the Commissioner now (confirm the rule at pdp.gov.my) and record the time in the breach register.")
+
+
 CHECKS = (email_off, email_sandbox, rls_bypass, demo_mode, scheduler_off, scheduler_failing, ntp_offline, licence, ilmu_not_set, vision_not_set,
-          whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email)
+          whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email, privacy_dpo_missing, breach_overdue)
 
 
 def report(ctx) -> dict:

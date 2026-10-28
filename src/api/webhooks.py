@@ -10,6 +10,7 @@ import os
 import re
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 from typing import NamedTuple
 
 import psycopg
@@ -25,7 +26,7 @@ from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
 from . import listings
-from .deps import HITS, JR, throttle
+from .deps import HITS, JR, Ctx, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -40,6 +41,58 @@ HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 k
         "Staff: forward a supplier PDF or photo to record its prices, or send a product photo with the caption /catalog.")
 SORRY = "Sorry, we could not process that message. Our team will follow up."
 VOICE_SORRY = "Sorry, I could not hear that clearly. Please send the voice note again, or type your request."
+# The fixed customer-facing strings, English and Malay (the owner picks the language, or "auto" follows the customer's words).
+T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
+            "noted": "Noted, thank you. We will confirm {doc} with you shortly.",
+            "received": "Received {doc}; it is queued for review.", "doc": "your document",
+            "thanks": "Thanks, we received your enquiry ({doc}). We will send your quote shortly.",
+            "clarify": "Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity.",
+            "after": "We are closed right now. We will reply when we open."},
+     "ms": {"welcome": "Hai! Hantar apa yang anda perlukan dalam mesej atau nota suara, contohnya \"50 kg PLA, berapa harga?\", dan kami akan hantar sebut harga.\n"
+                       "Staf: majukan PDF atau gambar pembekal untuk merekod harganya, atau hantar gambar produk dengan kapsyen /catalog.",
+            "sorry": "Maaf, kami tidak dapat memproses mesej itu. Pasukan kami akan menghubungi anda.",
+            "voice": "Maaf, saya tidak dapat mendengar nota suara itu dengan jelas. Sila hantar semula, atau taip permintaan anda.",
+            "noted": "Baik, terima kasih. Kami akan sahkan {doc} dengan anda tidak lama lagi.",
+            "received": "{doc} telah diterima dan sedang menunggu semakan.", "doc": "Dokumen anda",
+            "thanks": "Terima kasih, pertanyaan anda ({doc}) telah kami terima. Kami akan hantar sebut harga tidak lama lagi.",
+            "clarify": "Maaf, kami tidak pasti apa yang anda perlukan atau berapa banyak. Kami beri sebut harga untuk: {names}. Sila balas dengan item dan kuantiti.",
+            "after": "Kami sudah tutup sekarang. Kami akan balas apabila kedai dibuka semula."}}
+T["ms"]["help"] = T["ms"]["welcome"]
+SORRYS = {t[k] for t in T.values() for k in ("sorry", "voice")}
+MALAY = {"nak", "ada", "tak", "tidak", "berapa", "tolong", "harga", "boleh", "saya", "kita", "kami", "terima", "kasih", "mahu", "hendak", "tempah", "sila", "untuk"}
+AH = {"enabled": False, "message": "", "open": "09:00", "close": "18:00", "days": [1, 2, 3, 4, 5, 6, 7]}  # days: ISO weekdays, Monday = 1
+NO_ROW = {"welcome": None, "help": None, "language": "auto", "quick_replies": [], "after_hours": AH, "reactions": True}
+
+
+class Reply(str):
+    """Reply text that also carries a Telegram reply keyboard (the /start welcome)."""
+    markup = None
+
+
+def bot_settings(conn, tid) -> dict:
+    """The owner's customisation of the customer bot (tenant_bot_settings); no row = the defaults."""
+    row = conn.execute("select welcome, help, language, quick_replies, after_hours, reactions from tenant_bot_settings where tenant_id=%s", (tid,)).fetchone()
+    return {**row, "after_hours": {**AH, **row["after_hours"]}} if row else NO_ROW
+
+
+def _now() -> datetime:
+    return datetime.now(pipeline.MY)
+
+
+def _lang(cfg, text) -> str:
+    if cfg["language"] != "auto":
+        return cfg["language"]
+    return "ms" if MALAY & set(re.findall(r"[a-z]+", (text or "").lower())) else "en"
+
+
+def _closed(cfg, lang) -> str:
+    """The after-hours note to append to a confirmation, or "" (open, or the owner switched it off). A day not ticked counts as closed."""
+    ah, now = cfg["after_hours"], _now()
+    if not ah["enabled"]:
+        return ""
+    t = now.strftime("%H:%M")
+    inside = ah["open"] <= t < ah["close"] if ah["open"] <= ah["close"] else t >= ah["open"] or t < ah["close"]  # open after close = overnight
+    return "" if inside and now.isoweekday() in ah["days"] else "\n\n" + (ah["message"] or T[lang]["after"])
 TG_ACK = os.environ.get("TELEGRAM_ACK", "1") != "0"  # "0" switches the Telegram reactions and typing indicator off
 
 
@@ -57,12 +110,12 @@ def _cap(request: Request):
 CLARIFY = ("no_items", "bad_items", "bad_qty", "too_many_items")  # the customer's message could not be turned into items
 
 
-def _clarify(conn, tid) -> str:
+def _clarify(conn, tid, lang="en") -> str:
     """Ask the customer what we could not read instead of a dead-end apology (the model's ask_clarification, templated)."""
     t = conn.execute("select trade_template from tenants where id=%s", (tid,)).fetchone()
     names = "; ".join(r.get("description", k) for k, r in load_template(t["trade_template"])["recipes"].items())
     pipeline._log_ai(conn, tid, "ask_clarification", None, {"reason": "enquiry not understood"})
-    return f"Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity."
+    return T[lang]["clarify"].format(names=names)
 
 
 def _limited(key, limit=LIMIT) -> bool:
@@ -168,8 +221,13 @@ def _handle(conn, s, m):
     if tid is None:  # fail closed: no reply, no processing, no number or text in the log; 200 so the provider does not retry
         log.warning("inbound from %s dropped: %s", _h(digits), why)
         return None
-    if m.text and not m.media_kind and HELP_CMD.match(m.text):  # /start and /help: no record, no model call
-        return HELP
+    cfg = bot_settings(conn, tid) if m.channel == "telegram" else {**NO_ROW, "language": "en"}  # the customisation is for the Telegram bots only
+    if m.text and not m.media_kind and (cmd := HELP_CMD.match(m.text)):  # /start and /help: no record, no model call
+        start, lang = cmd.group(1).lower() == "start", _lang(cfg, None)
+        out = Reply(cfg["welcome" if start else "help"] or T[lang]["welcome" if start else "help"])
+        if start and cfg["quick_replies"]:  # a tap on a button sends its label as text: no callback handling
+            out.markup = {"keyboard": [[{"text": q}] for q in cfg["quick_replies"]], "resize_keyboard": True, "is_persistent": True}
+        return out
     args = {"ch": m.channel, "d": digits, "s": m.sender, "scope": tid}  # from here every lookup is this business only
     u = conn.execute(STAFF_Q + " limit 1", args).fetchone()
     p = None
@@ -211,7 +269,8 @@ def _handle(conn, s, m):
                                                     external_id=m.external_id, ilmu_client=s.ilmu)
         else:
             raise ApiError(415, "unsupported_media", "supplier documents: send a PDF, photo or text")
-        return f"Received {res['doc_no'] or 'your document'}; it is queued for review."
+        lang = _lang(cfg, m.text)
+        return T[lang]["received"].format(doc=res["doc_no"] or T[lang]["doc"])
     text = m.text if not m.media_kind else None
     if m.media_kind == "audio":
         try:
@@ -220,20 +279,21 @@ def _handle(conn, s, m):
         except Exception as e:  # a voice note we cannot hear is the customer's to resend, not a silent failure
             log.warning("inbound %s voice note failed: %s", _h(m.external_id), type(e).__name__)
         if not text:
-            return VOICE_SORRY
+            return T[_lang(cfg, None)]["voice"]
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
+    lang = _lang(cfg, text)
     if (r := availability.answer(conn, tid, p["id"], text, s.ilmu, channel=m.channel, external_id=m.external_id)) is not None:
         return r
     if pipeline.classify_reply(text) and (hit := pipeline.record_reply(conn, p["id"], m.channel, text, m.external_id)):
-        return f"Noted, thank you. We will confirm {hit['doc_no']} with you shortly."  # the owner records accept or decline
+        return T[lang]["noted"].format(doc=hit["doc_no"]) + _closed(cfg, lang)  # the owner records accept or decline
     try:
         res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
     except ApiError as e:
         if e.code not in CLARIFY:  # anything else (no cost on file, AI down) is our problem, not the customer's
             raise
-        return _clarify(conn, tid)
-    return f"Thanks, we received your enquiry ({res['doc_no']}). We will send your quote shortly."
+        return _clarify(conn, tid, lang)
+    return T[lang]["thanks"].format(doc=res["doc_no"]) + _closed(cfg, lang)
 
 
 def _catalog(s, j: Catalog) -> str | None:
@@ -254,6 +314,16 @@ def _catalog(s, j: Catalog) -> str | None:
         return SORRY
 
 
+def _sorry(conn, m) -> str:
+    """The apology in the business's language (English if anything about that cannot be looked up)."""
+    try:
+        with conn.transaction():
+            tid, _ = resolve_tenant(conn, m, "".join(c for c in m.sender if c.isdigit()))
+            return T[_lang(bot_settings(conn, tid) if tid and m.channel == "telegram" else NO_ROW, m.text)]["sorry"]
+    except Exception:
+        return SORRY
+
+
 def _process(s, msgs, statuses=()):
     replies, later, outcomes = [], [], []  # outcomes: (message, ok) for the Telegram reaction; WhatsApp ignores it
     with db.tx("staff", "system:webhook") as conn:
@@ -270,7 +340,7 @@ def _process(s, msgs, statuses=()):
                     text = _handle(conn, s, m)
             except ApiError as e:
                 log.warning("inbound %s rejected: %s", _h(m.external_id), e.message)
-                text = SORRY
+                text = _sorry(conn, m)
                 _trace(conn, m, e.code)
             except psycopg.errors.UniqueViolation:  # a replay that raced past the duplicate check: the first copy won
                 log.info("inbound %s is a duplicate", _h(m.external_id))
@@ -284,7 +354,7 @@ def _process(s, msgs, statuses=()):
             elif text:
                 replies.append((m.channel, m.sender, text, m.to))
             if not isinstance(text, Catalog):
-                outcomes.append((m, not failed and text not in (SORRY, VOICE_SORRY)))
+                outcomes.append((m, not failed and text not in SORRYS))
     for j in later:  # the committed transaction above is closed: the model call below holds no lock
         text = _catalog(s, j)
         outcomes.append((j.m, text != SORRY))
@@ -292,7 +362,10 @@ def _process(s, msgs, statuses=()):
             replies.append((j.m.channel, j.m.sender, text, j.m.to))
     for ch, to, text, via in replies:  # after commit; a send failure never loses the stored document
         try:
-            s.send(ch, to, text, via)  # answer from the number the customer wrote to
+            if getattr(text, "markup", None):  # the /start keyboard: only Telegram has one
+                telegram.send_message(to, text, client=s.http, token=via, reply_markup=text.markup)
+            else:
+                s.send(ch, to, text, via)  # answer from the number the customer wrote to
         except Exception:
             log.exception("reply to %s failed", _h(to))
     return outcomes
@@ -329,6 +402,13 @@ def _tg_check(request: Request, secret: str):
     _cap(request)
 
 
+async def _json(request: Request):
+    try:
+        return await request.json()
+    except ValueError:
+        raise ApiError(400, "bad_update", "unparseable update")
+
+
 async def _tg_update(request: Request):
     try:
         return telegram.parse_update(await request.json())
@@ -336,9 +416,21 @@ async def _tg_update(request: Request):
         raise ApiError(400, "bad_update", "unparseable update")
 
 
-async def _tg_run(request: Request, m, token, run):
-    """Received (eyes), typing, then thumbs up or sad face around `run` (sync, returns [(message, ok)]). token None = the env bot."""
+def _reactions(m) -> bool:
+    """False when the owner switched the reaction and typing indicator off for this business (any failure to look it up: on)."""
     if not TG_ACK:
+        return True
+    try:
+        with db.tx("staff", "system:webhook") as conn:
+            tid = m.tenant_id or resolve_tenant(conn, m, "".join(c for c in m.sender if c.isdigit()))[0]
+            return not tid or bot_settings(conn, tid)["reactions"]
+    except Exception:
+        return True
+
+
+async def _tg_run(request: Request, m, token, run, ack=True):
+    """Received (eyes), typing, then thumbs up or sad face around `run` (sync, returns [(message, ok)]). token None = the env bot."""
+    if not (TG_ACK and ack):
         await run_in_threadpool(run)
         return
     kw = {"token": token} if token else {}
@@ -368,7 +460,7 @@ async def _tg_run(request: Request, m, token, run):
 async def tg_inbound(request: Request):
     _tg_check(request, os.environ.get("TELEGRAM_WEBHOOK_SECRET", ""))
     if m := await _tg_update(request):
-        await _tg_run(request, m, None, lambda: _process(request.app.state.svc, [m]))
+        await _tg_run(request, m, None, lambda: _process(request.app.state.svc, [m]), await run_in_threadpool(_reactions, m))
     return JR({"ok": True})
 
 
@@ -387,7 +479,7 @@ async def tg_business(bot_key: str, request: Request):
     if m := await _tg_update(request):
         m.tenant_id, m.to = bot["tenant_id"], tgbots.decrypt(bot["token_enc"])
         m.external_id = f"b{bot['bot_id']}:{m.external_id}"  # another bot's chat with the same person reuses chat and message numbers
-        await _tg_run(request, m, m.to, lambda: _process(request.app.state.svc, [m]))
+        await _tg_run(request, m, m.to, lambda: _process(request.app.state.svc, [m]), await run_in_threadpool(_reactions, m))
     return JR({"ok": True})
 
 
@@ -456,10 +548,44 @@ def _helper(s, m, token):
     return _process(s, [m])
 
 
+NOT_OWNER = ("We could not connect your new bot. Link your Telegram as the business owner from the LARIS dashboard (Team, Link Telegram), "
+             "then create the bot again.")
+
+
+def _managed_bot(s, mb, token):
+    """One-tap bot creation: the owner confirmed a bot made through the helper (the manager bot). The business is found ONLY through the
+    creator's linked chat (a linked owner of exactly one business); anything else in the update is ignored. Failures: a plain sentence to the owner."""
+    from . import telegram_bots  # here, not at the top: telegram_bots imports this module
+    uid = str((mb.get("user") or {}).get("id") or "") if isinstance(mb, dict) else ""
+    bot = (mb.get("bot") or {}).get("id") if isinstance(mb, dict) else None
+    if not uid.isdigit() or not isinstance(bot, int):
+        return
+    try:
+        with db.tx("staff", "system:helper") as conn:
+            owners = conn.execute(f"select id, tenant_id from users where active and role = 'owner' and {HANDLE_Q}", {"s": uid}).fetchall()
+            if len(owners) != 1:
+                msg = NOT_OWNER
+            else:
+                new = telegram.managed_bot_token(bot, client=s.http, token=token)
+                me = telegram_bots.connect_bot(Ctx(conn, "owner", owners[0]["id"], owners[0]["tenant_id"], "", frozenset()), new, s.http)
+                msg = f"Your bot @{me.get('username')} is connected. Customers can message it now."
+    except ApiError as e:
+        msg = e.message
+    except Exception as e:  # never the exception text: it can carry a URL with a token
+        log.warning("managed bot from %s failed: %s", _h(uid), type(e).__name__)
+        msg = "Sorry, we could not connect your new bot. Please try again, or connect it from the LARIS dashboard (Settings, Telegram)."
+    try:
+        s.send("telegram", uid, msg, token)
+    except Exception as e:
+        log.warning("helper reply to %s failed: %s", _h(uid), type(e).__name__)
+
+
 @r.post("/telegram/helper")
 async def tg_helper(request: Request):
     _tg_check(request, os.environ.get("LARIS_HELPER_WEBHOOK_SECRET", ""))
     token = os.environ.get("LARIS_HELPER_BOT_TOKEN", "")
-    if token and (m := await _tg_update(request)):
+    if token and isinstance(upd := await _json(request), dict) and "managed_bot" in upd:
+        await run_in_threadpool(_managed_bot, request.app.state.svc, upd["managed_bot"], token)
+    elif token and (m := await _tg_update(request)):
         await _tg_run(request, m, token, lambda: _helper(request.app.state.svc, m, token))
     return JR({"ok": True})

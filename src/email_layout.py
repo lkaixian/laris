@@ -1,5 +1,5 @@
 """Transactional email layout: render(...) -> (text, html). Stdlib only, table based, inline styles plus one small <style> block.
-Colours are the theme.css tokens (green accent, never amber). Blocks: ("p", s) ("code", s, note) ("facts", [(label, value)])
+Colours are the theme.css tokens (green accent, never amber). Blocks: ("p", s) ("code", s, note) ("mono", s) small monospace select-all block for long keys ("facts", [(label, value)])
 ("table", [header], [[cell]]) ("button", label, url) ("note", s). Subjects are built by the callers, never here."""
 import re
 import textwrap
@@ -44,6 +44,10 @@ def _html_block(b) -> str:
         return (f'<div class="tn" style="background:#e1f0e8;border-radius:8px;padding:20px 16px;margin:0 0 16px;text-align:center">'
                 f'<div class="ink" style="font-family:{MONO};font-size:32px;line-height:1.2;font-weight:600;letter-spacing:8px;'
                 f'font-variant-numeric:tabular-nums;color:#16231d;{WRAP}">{escape(b[1])}</div>{note}</div>')
+    if k == "mono":
+        return (f'<div class="tn ink ln" style="background:#e1f0e8;border:1px solid #6a7d72;border-radius:8px;padding:12px 16px;margin:0 0 16px;'
+                f'font-family:{MONO};font-size:13px;line-height:1.5;text-align:left;color:#16231d;word-break:break-all;'
+                f'user-select:all;-webkit-user-select:all">{escape(b[1])}</div>')
     if k == "facts":
         rows = "".join(f'<tr><td class="mu" style="padding:6px 12px 6px 0;font-size:14px;line-height:1.5;color:#475a50;vertical-align:top">{escape(a)}</td>'
                        f'<td class="ink" style="padding:6px 0;font-size:16px;line-height:1.5;font-weight:600;color:#16231d;{WRAP}">{escape(v)}</td></tr>'
@@ -77,6 +81,8 @@ def _text_block(b) -> str:
         return fill(b[1])
     if k == "code":
         return f"    {b[1]}" + (f"\n{fill(b[2])}" if b[2] else "")
+    if k == "mono":
+        return f"    {b[1]}"
     if k == "facts":
         w = max((len(a) for a, _ in b[1]), default=0)
         return "\n".join(f"{a + ':':<{w + 1}} {v}" for a, v in b[1])

@@ -6,17 +6,21 @@ import os
 import re
 import secrets
 import time
+import unicodedata
+from typing import Annotated, Literal
+from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
 import psycopg
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from psycopg.types.json import Jsonb
+from pydantic import BaseModel, BeforeValidator, Field
 
 from .. import tgbots
 from ..channels import telegram
 from ..errors import ApiError
-from . import channel_settings
+from . import channel_settings, webhooks
 from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, write_ctx
 
 log = logging.getLogger("laris")
@@ -32,23 +36,43 @@ def _http(request):
     return svc(request).http
 
 
-def _username(tok, request):
-    """The bot's @username from getMe, cached 1 h (a failure is retried after a minute); None when Telegram cannot be asked."""
-    at, name = _HELPER.get(tok, (0, None))
+def _me(tok, request) -> dict:
+    """The bot's getMe, cached 1 h (a failure, or a helper that cannot manage bots yet, is retried after a minute); {} when Telegram cannot be asked."""
+    at, me = _HELPER.get(tok, (0, {}))
     if time.monotonic() - at > 3600:
         try:
-            name = telegram.get_me(tok, client=_http(request)).get("username")
+            me = telegram.get_me(tok, client=_http(request))
         except Exception as e:
             log.warning("telegram getMe failed: %s", type(e).__name__)
-            name = None
-        _HELPER[tok] = (time.monotonic() if name else time.monotonic() - 3540, name)
-    return name
+            me = {}
+        ok = me.get("username") and (me.get("can_manage_bots") or tok != os.environ.get("LARIS_HELPER_BOT_TOKEN", "").strip())
+        _HELPER[tok] = (time.monotonic() if ok else time.monotonic() - 3540, me)
+    return me
+
+
+def _username(tok, request):
+    return _me(tok, request).get("username")
 
 
 def _helper(request) -> dict:
     tok = os.environ.get("LARIS_HELPER_BOT_TOKEN", "").strip()
     name = _username(tok, request) if tok else None
     return {"configured": bool(tok), "username": name, "link": f"https://t.me/{name}" if name else None}
+
+
+def _create(ctx: Ctx, request) -> dict:
+    """One-tap creation: a t.me/newbot link through the helper (the manager bot), with a suggested username and name."""
+    tok = os.environ.get("LARIS_HELPER_BOT_TOKEN", "").strip()
+    me = _me(tok, request) if tok else {}
+    if not me.get("username") or not me.get("can_manage_bots"):
+        return {"create_link": None, "create_blocked": "unavailable"}
+    if not ctx.conn.execute("select 1 from users where id=%s and channel_handle ~* %s", (ctx.user_id, TG_HANDLE)).fetchone():
+        return {"create_link": None, "create_blocked": "link_first"}  # the managed_bot update is matched to the business by the creator's linked chat
+    name = ctx.conn.execute("select name from tenants where id=%s", (ctx.tenant_id,)).fetchone()["name"]
+    slug = re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()).lstrip("0123456789")
+    suffix = "_laris_bot"
+    uname = (slug[:32 - len(suffix)] or "shop") + suffix
+    return {"create_link": f"https://t.me/newbot/{me['username']}/{uname}?{urlencode({'name': name[:64]})}", "create_blocked": None}
 
 
 def _live(tid, token, request) -> tuple:
@@ -88,7 +112,7 @@ def get_telegram(request: Request, ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
     staff = ctx.conn.execute("""select id as user_id, name, role, coalesce(channel_handle,'') ~* %s as linked from users
                                 where tenant_id=%s and active order by name, id""", (TG_HANDLE, ctx.tenant_id)).fetchall()
-    return reply(ctx, {"helper": _helper(request), "bot": _bot_view(ctx, request), "staff": staff})
+    return reply(ctx, {"helper": _helper(request), "bot": {**_bot_view(ctx, request), **_create(ctx, request)}, "staff": staff})
 
 
 class Connect(BaseModel, extra="forbid"):
@@ -103,17 +127,15 @@ def _in_use(ctx: Ctx, bot_id) -> bool:
     return bool(hit)
 
 
-@r.post("/settings/telegram/connect")
-def connect(body: Connect, request: Request, ctx: Ctx = Depends(write_ctx)):
-    require_owner(ctx)
-    token = body.token.strip()
+def connect_bot(ctx: Ctx, token: str, http) -> dict:
+    """Validate, register and store a business's customer bot -> its getMe. Used by the dashboard and by one-tap creation (webhooks._managed_bot)."""
+    token = token.strip()
     if not TOKEN_RE.match(token):
         raise ApiError(422, "bad_token", "That does not look like a bot token. Copy the whole token from BotFather.")
     tgbots.encrypt("x")  # raises 422 secret_key_unset before any network call
     base = os.environ.get("APP_PUBLIC_URL", "").strip().rstrip("/")
     if not base:
         raise ApiError(422, "public_url_unset", "This server does not know its public web address yet, so Telegram cannot be told where to send messages. Ask whoever runs this server to set APP_PUBLIC_URL.")
-    http = _http(request)
     try:
         me = telegram.get_me(token, client=http)
     except RuntimeError as e:  # "telegram getMe failed: HTTP 401": Telegram answered, and refused the token
@@ -153,6 +175,13 @@ def connect(body: Connect, request: Request, ctx: Ctx = Depends(write_ctx)):
             log.warning("telegram deleteWebhook failed: %s", type(e).__name__)
     _LIVE.pop(ctx.tenant_id, None)
     audit(ctx, "tenants", ctx.tenant_id, "telegram bot connected", None, {"bot": me.get("username")})
+    return me
+
+
+@r.post("/settings/telegram/connect")
+def connect(body: Connect, request: Request, ctx: Ctx = Depends(write_ctx)):
+    require_owner(ctx)
+    connect_bot(ctx, body.token, _http(request))
     return reply(ctx, _bot_view(ctx, request))
 
 
@@ -217,3 +246,62 @@ def link_me(request: Request, ctx: Ctx = Depends(write_ctx)):
 def unlink_me(ctx: Ctx = Depends(write_ctx)):
     return _unlink(ctx, ctx.user_id)
 
+
+
+# ---- what the owner customised on the customer bot (webhooks.bot_settings reads it; no row = the defaults)
+def _clean(v):
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", v).strip() if isinstance(v, str) else v  # control characters out, newline and tab stay
+
+
+def _txt(n, lo=0):
+    return Annotated[str, BeforeValidator(_clean), Field(min_length=lo, max_length=n)]
+
+
+HHMM = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
+
+
+class AfterHoursIn(BaseModel, extra="forbid"):
+    enabled: bool | None = None
+    message: _txt(300) | None = None
+    open: HHMM | None = None
+    close: HHMM | None = None
+    days: Annotated[list[Annotated[int, Field(ge=1, le=7)]], Field(min_length=1)] | None = None  # ISO weekdays: Monday = 1
+
+
+class BotSettingsIn(BaseModel, extra="forbid"):
+    welcome: _txt(600) | None = None
+    help: _txt(1000) | None = None
+    language: Literal["auto", "en", "ms"] | None = None
+    quick_replies: Annotated[list[_txt(40, 1)], Field(max_length=4)] | None = None
+    after_hours: AfterHoursIn | None = None
+    reactions: bool | None = None
+
+
+def _settings_view(cur: dict) -> dict:
+    d = webhooks.T["en"]
+    return {"welcome": cur["welcome"] or d["welcome"], "help": cur["help"] or d["help"], "language": cur["language"],
+            "quick_replies": cur["quick_replies"], "after_hours": {**cur["after_hours"], "message": cur["after_hours"]["message"] or d["after"]},
+            "reactions": cur["reactions"], "defaults": {"welcome": d["welcome"], "help": d["help"], "after_hours_message": d["after"]}}
+
+
+@r.get("/settings/telegram/bot-settings")
+def get_bot_settings(ctx: Ctx = Depends(read_ctx)):
+    require_owner(ctx)
+    return reply(ctx, _settings_view(webhooks.bot_settings(ctx.conn, ctx.tenant_id)))
+
+
+@r.post("/settings/telegram/bot-settings")
+def set_bot_settings(body: BotSettingsIn, ctx: Ctx = Depends(write_ctx)):
+    require_owner(ctx)
+    d = body.model_dump(exclude_none=True)
+    fields = sorted(d)
+    cur = webhooks.bot_settings(ctx.conn, ctx.tenant_id)
+    ah = {**cur["after_hours"], **d.pop("after_hours", {})}
+    ah["days"] = sorted(set(ah["days"]))
+    new = {**cur, **d, "after_hours": ah}
+    ctx.conn.execute("""insert into tenant_bot_settings(tenant_id,welcome,help,language,quick_replies,after_hours,reactions) values (%s,%s,%s,%s,%s,%s,%s)
+                        on conflict (tenant_id) do update set welcome=excluded.welcome, help=excluded.help, language=excluded.language,
+                          quick_replies=excluded.quick_replies, after_hours=excluded.after_hours, reactions=excluded.reactions, updated_at=now()""",
+                     (ctx.tenant_id, new["welcome"] or None, new["help"] or None, new["language"], Jsonb(new["quick_replies"]), Jsonb(ah), new["reactions"]))
+    audit(ctx, "tenants", ctx.tenant_id, "telegram bot settings changed", None, {"fields": fields})
+    return reply(ctx, _settings_view(new))

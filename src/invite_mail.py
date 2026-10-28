@@ -1,11 +1,9 @@
 """Invitation email templates: (subject, text, html) for svc.mail(to, *invite_mail(...))."""
-from html import escape
+from .mailer import _mail
 
 
 def invite_mail(business: str, role: str, inviter: str, link: str) -> tuple[str, str, str]:
-    subject = f"You are invited to {business} on LARIS"
-    lines = [f"{inviter} invited you to join {business} on LARIS as {role}.", "This invitation expires in 7 days."]
-    text = "\n\n".join([*lines, f"Accept it here: {link}", "If you did not expect this, ignore this email."])
-    html = ("".join(f"<p>{escape(x)}</p>" for x in lines) + f'<p><a href="{escape(link)}">Accept the invitation</a></p>'
-            + f"<p>{escape(link)}</p><p>If you did not expect this, ignore this email.</p>")
-    return subject, text, html
+    return _mail(f"You are invited to {business} on LARIS", f"You are invited to {business}", f"{inviter} invited you to join {business} on LARIS.",
+                 [("p", f"{inviter} invited you to join {business} on LARIS as {role}."), ("button", "Accept the invitation", link),
+                  ("note", "This invitation expires in 7 days. If you did not expect this, ignore this email.")],
+                 "You got this email because someone invited this address to LARIS.")

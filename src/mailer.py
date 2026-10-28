@@ -3,9 +3,10 @@ MAILTRAP_API_TOKEN (unset = email is off), MAILTRAP_INBOX_ID (set = sandbox inbo
 import base64
 import logging
 import os
-from html import escape
 
 import httpx
+
+from .email_layout import render
 
 log = logging.getLogger("laris")
 LIVE = "https://send.api.mailtrap.io/api/send"
@@ -52,40 +53,74 @@ def send(to: str, subject: str, text: str, html: str | None = None, category: st
     return False
 
 
-def _mail(subject: str, lines: list[str]) -> tuple[str, str, str]:
-    return subject, "\n\n".join(lines), "".join(f"<p>{escape(x)}</p>" for x in lines)
+def base_url() -> str | None:
+    return (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/") or None
+
+
+def _mail(subject: str, title: str, preheader: str, blocks: list, footer: str, brand: str = "LARIS", via: str | None = None) -> tuple[str, str, str]:
+    text, html = render(title=title, preheader=preheader, blocks=blocks, brand=brand, via=via, footer=footer, base_url=base_url())
+    return subject, text, html
+
+
+def _code_mail(subject: str, title: str, what: str, code: str, ignore: str, footer: str) -> tuple[str, str, str]:
+    return _mail(subject, title, f"Your LARIS {what} is inside. It expires in 10 minutes.", [("p", "Hello,"), ("p", f"Enter this code {ignore[0]}."),
+                 ("code", code, "Expires in 10 minutes"), ("note", ignore[1])], footer)
 
 
 def verification_mail(code: str) -> tuple[str, str, str]:
     """(subject, text, html) for send(to, *verification_mail(...)). The greeting is fixed: it goes to an address nobody has proven yet,
     so no user-supplied text (name, business) is echoed."""
-    return _mail("Your LARIS verification code", ["Hello,", f"Your LARIS verification code is {code}. It expires in 10 minutes.",
-                                                  "If you did not sign up, ignore this email."])
+    return _code_mail("Your LARIS verification code", "Your verification code", "verification code", code,
+                      ("to verify your email address", "If you did not sign up, ignore this email."),
+                      "You got this email because someone signed up to LARIS with this address.")
 
 
 def reset_mail(code: str) -> tuple[str, str, str]:
-    return _mail("Your LARIS password reset code", ["Hello,", f"Your LARIS password reset code is {code}. It expires in 10 minutes.",
-                                                    "If you did not ask for it, ignore this email; your password has not changed."])
+    return _code_mail("Your LARIS password reset code", "Reset your password", "password reset code", code,
+                      ("to choose a new password", "If you did not ask for it, ignore this email. Your password has not changed."),
+                      "You got this email because a password reset was requested for this address.")
 
 
-def quote_mail(m: dict, note: str | None = None) -> tuple[str, str, str]:
-    """(subject, text, html) for a quotation sent as a PDF attachment. Built from the customer model: no cost data."""
-    org = m["issuer"]["name"]
-    lines = [f"Dear {m['customer']['attention'] or m['customer']['name']},", f"Please find our quotation {m['doc_no']} from {org}."]
-    if note:
-        lines.append(note)
+def quote_mail(m: dict, note: str | None = None, accept_url: str | None = None) -> tuple[str, str, str]:
+    """(subject, text, html) for a quotation sent as a PDF attachment. Built from the customer model: no cost data.
+    accept_url: the customer's simulated-signature link, shown as a button."""
+    org, doc = m["issuer"]["name"], m["doc_no"]
+    facts = [("Quotation", doc)]
     if m["valid_until"]:
-        lines.append(f"Valid until {m['valid_until']}.")
-    lines.append("The quotation is attached as a PDF.")
-    return _mail(f"Quotation {m['doc_no']} from {org}", lines)
+        facts.append(("Valid until", str(m["valid_until"])))
+    if m.get("total") is not None:
+        facts.append(("Total", f"{m['currency']} {m['total']:.2f}"))
+    blocks = [("p", f"Dear {m['customer']['attention'] or m['customer']['name']},"), ("p", f"Please find our quotation {doc} from {org}.")]
+    if note:
+        blocks.append(("p", note))
+    blocks.append(("facts", facts))
+    if accept_url:
+        blocks += [("button", "Review and accept", accept_url), ("note", "Simulated signature for demonstration; not a legal e-signature.")]
+    blocks.append(("note", "The quotation is attached as a PDF."))
+    return _mail(f"Quotation {doc} from {org}", f"Quotation {doc}", f"Quotation {doc} from {org}.", blocks,
+                 f"You got this email because {org} sent you a quotation from LARIS.", brand=org, via="LARIS")
 
 
 def job_reminder_mail(name: str, jobs: list[dict], link: str | None = None) -> tuple[str, str, str]:
     """(subject, text, html) listing jobs due today or overdue: quote number, customer and days late only, never cost or margin."""
     def when(n: int) -> str:
         return "due today" if n == 0 else f"{n} day{'s' if n != 1 else ''} overdue"
-    lines = [f"Hello {name},", f"{len(jobs)} job{'s are' if len(jobs) != 1 else ' is'} due today or overdue:"]
-    lines += [f"{j['doc_no']} for {j['customer']}: {when(j['days_overdue'])}" for j in jobs]
+    n = len(jobs)
+    blocks = [("p", f"Hello {name},"), ("p", f"{n} job{'s are' if n != 1 else ' is'} due today or overdue:"),
+              ("table", ["Quote", "Customer", "Status"], [[j["doc_no"], j["customer"], when(j["days_overdue"])] for j in jobs])]
     if link:
-        lines.append(f"Open the job board: {link}")
-    return _mail(f"Jobs to do: {len(jobs)} due or overdue", lines)
+        blocks.append(("button", "Open the job board", link))
+    return _mail(f"Jobs to do: {n} due or overdue", f"{n} job{'s' if n != 1 else ''} due or overdue", f"{jobs[0]['doc_no']}: {when(jobs[0]['days_overdue'])}." if jobs else "Jobs to do.",
+                 blocks, "You got this email because you have job reminders turned on in LARIS.")
+
+
+def license_mail(plan: str, seats: int, token: str) -> tuple[str, str, str]:
+    """(subject, text, html) telling a customer their licence is ready: a button to the Licence page and the key to paste."""
+    b = base_url()
+    blocks = [("p", f"Your LARIS licence ({plan}, {seats} seats) is ready."),
+              ("p", "Sign in as the owner with this email address, open Licence and accept it, or paste this key.")]
+    if b:
+        blocks.append(("button", "Open the Licence page", f"{b}/#/licence"))
+    blocks += [("mono", token), ("note", "Keep it private: it works for one organisation.")]
+    return _mail("Your LARIS licence key", "Your LARIS licence is ready", f"Your {plan} licence for {seats} seats is ready.", blocks,
+                 "You got this email because a LARIS licence was issued for this address.")

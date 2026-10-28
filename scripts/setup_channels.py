@@ -33,7 +33,8 @@ def main(a):
     elif cmd == "helper-webhook" and len(a) == 2:
         if not a[1].startswith("https://"):
             sys.exit("Telegram only accepts https URLs")
-        print(telegram.set_webhook(a[1], os.environ["LARIS_HELPER_WEBHOOK_SECRET"], token=os.environ["LARIS_HELPER_BOT_TOKEN"]))
+        print(telegram.set_webhook(a[1], os.environ["LARIS_HELPER_WEBHOOK_SECRET"], token=os.environ["LARIS_HELPER_BOT_TOKEN"],
+                                   updates=("message", "managed_bot")))  # managed_bot: one-tap customer bot creation
         print(telegram.set_commands(token=os.environ["LARIS_HELPER_BOT_TOKEN"]))
     elif cmd == "telegram-info":
         i = telegram.webhook_info()

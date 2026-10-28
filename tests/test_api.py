@@ -1038,3 +1038,12 @@ def test_telegram_start_replies_with_help_and_records_nothing(env, monkeypatch):
     assert e.c.post("/webhooks/telegram", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": TG_SECRET}).status_code == 200
     assert e.svc.sent[-1][:2] == ("telegram", "5151") and "how much" in e.svc.sent[-1][2]
     assert e.sql("select count(*) n from enquiries")[0]["n"] == n
+
+
+def test_me_reports_whether_telegram_is_linked(env):
+    e = env
+    assert e.c.get("/api/me", headers=e.O).json()["telegram_linked"] is False
+    e.sql("update users set channel_handle='tg:4242' where role='owner'")
+    assert e.c.get("/api/me", headers=e.O).json()["telegram_linked"] is True
+    e.sql("update users set channel_handle='+60 12-999 0001' where role='owner'")  # a phone number is not a Telegram link
+    assert e.c.get("/api/me", headers=e.O).json()["telegram_linked"] is False

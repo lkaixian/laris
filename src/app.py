@@ -21,7 +21,7 @@ from . import logsetup
 logsetup.setup()  # before the modules below log anything
 
 from . import db, scheduler
-from .api import assistant, auth_routes, channel_settings, contacts, invites, jobs, license_routes, listings, rfq, roles, routes, signup, system, telegram_bots, track, webhooks
+from .api import accept, assistant, auth_routes, channel_settings, contacts, invites, jobs, license_routes, listings, onboarding, privacy, public_api, rfq, roles, routes, signup, system, telegram_bots, track, webhooks
 from .api.deps import JR, Services
 from .errors import ApiError
 
@@ -68,6 +68,10 @@ app.include_router(system.r)
 app.include_router(contacts.r)
 app.include_router(rfq.r)
 app.include_router(listings.r)
+app.include_router(privacy.r)
+app.include_router(onboarding.r)
+app.include_router(accept.r)
+app.include_router(public_api.r)
 app.include_router(roles.r)
 app.include_router(assistant.r)
 app.include_router(channel_settings.r)

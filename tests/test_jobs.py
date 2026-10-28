@@ -2,6 +2,7 @@
 scheduler emails reminders. Nothing touches a network (emails are captured), and each tenant's scheduler work stands alone."""
 import json
 import logging
+import re
 import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -251,10 +252,10 @@ def test_reminder_to_owners_lists_due_and_overdue_once_per_day(env, mails, monke
     assert scheduler.run_once()["reminders"] == 1
     ((to, subject, text, html),) = mails
     assert to == "owner@shop.test" and "2" in subject
-    assert "JB-DUE for A & <B> Sdn Bhd: due today" in text and "JB-LATE" in text and "3 days overdue" in text
+    assert "JB-DUE   A & <B> Sdn Bhd  due today" in text and "JB-LATE" in text and "3 days overdue" in text
     assert "JB-FUTURE" not in text and "JB-DONE" not in text and "JB-NODATE" not in text and "http" not in text
     assert "A &amp; &lt;B&gt; Sdn Bhd" in html and "<B>" not in html
-    assert not any(w in (text + html).lower() for w in COST_WORDS)
+    assert not any(w in (text + re.sub(r"<style>.*?</style>|<[^>]+>", " ", html)).lower() for w in COST_WORDS)
     assert sent_at(e, due) and sent_at(e, late)
     assert scheduler.run_once()["reminders"] == 0 and len(mails) == 1  # once per job per day
     midnight = datetime.combine(t, datetime.min.time(), pipeline.MY)
@@ -309,7 +310,7 @@ def test_failed_email_is_retried_and_blocked_licence_is_skipped(env, mails, monk
 def test_mailer_builds_the_reminder_without_cost_data():
     s, text, html = mailer.job_reminder_mail("Ann", [{"doc_no": "QT-1", "customer": "Acme", "days_overdue": 0},
                                                      {"doc_no": "QT-2", "customer": "Bo", "days_overdue": 1}], None)
-    assert "2 jobs are due" in text and "due today" in text and "1 day overdue" in text and "<p>Hello Ann,</p>" in html and "http" not in text
+    assert "2 jobs are due" in text and "due today" in text and "1 day overdue" in text and "Hello Ann," in html and "http" not in text
 
 
 # ---------------------------------------------------------------- one tenant failing never stops another

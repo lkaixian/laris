@@ -65,9 +65,7 @@ def mail_token(to: str, token: str, plan: str, seats: int) -> bool:
     if not mailer.enabled():
         log("email is OFF (MAILTRAP_API_TOKEN not set): the key was NOT sent. Send it yourself.")
         return False
-    text = (f"Your LARIS licence ({plan}, {seats} seats):\n\n{token}\n\nSign in as the owner with this email address, open Licence and paste the key. "
-            "Keep it private: it works for one organisation.")
-    ok = mailer.send(to, "Your LARIS licence key", text, category="license")
+    ok = mailer.send(to, *mailer.license_mail(plan, seats, token), category="license")
     log("emailed the key." if ok else "email FAILED: the key was NOT sent. Send it yourself.")
     return ok
 

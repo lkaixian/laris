@@ -23,7 +23,7 @@ class TG:
     """Records (token, method, json) and answers like Telegram. `down` = network failure."""
 
     def __init__(self):
-        self.calls, self.down = [], False
+        self.calls, self.down, self.manage, self.mtoken = [], False, True, BOT_B  # manage: the helper's can_manage_bots; mtoken: what getManagedBotToken returns
         self.client = httpx.Client(transport=httpx.MockTransport(self))
 
     def __call__(self, req):
@@ -34,7 +34,8 @@ class TG:
         if tok.startswith("999999"):
             return httpx.Response(401, json={"ok": False})
         bid = int(tok.split(":")[0])
-        res = {"getMe": {"id": bid, "username": f"bot{bid}", "first_name": "Shop"}, "getWebhookInfo": {"url": "https://x"}}.get(meth, True)
+        res = {"getMe": {"id": bid, "username": f"bot{bid}", "first_name": "Shop", "can_manage_bots": self.manage}, "getWebhookInfo": {"url": "https://x"},
+               "sendMessage": {"chat": {"id": 1}, "message_id": 1}, "getManagedBotToken": self.mtoken}.get(meth, True)
         return httpx.Response(200, json={"ok": True, "result": res})
 
     def of(self, meth):

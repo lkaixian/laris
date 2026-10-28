@@ -47,9 +47,9 @@ def parse_update(update: dict) -> InboundMessage | None:
     return msg
 
 
-def send_message(chat_id, text, *, client=None, token=None) -> str:
+def send_message(chat_id, text, *, client=None, token=None, reply_markup=None) -> str:
     r = (client or httpx.Client(timeout=20)).post(
-        _api("sendMessage", token), json={"chat_id": chat_id, "text": text}
+        _api("sendMessage", token), json={"chat_id": chat_id, "text": text, **({"reply_markup": reply_markup} if reply_markup else {})}
     )
     _ok(r, "sendMessage")
     res = r.json()["result"]
@@ -110,10 +110,10 @@ def get_updates(offset=None, timeout=25, *, client=None, token=None) -> list[dic
     return r.json()["result"]
 
 
-def set_webhook(url, secret, *, client=None, token=None) -> dict:
+def set_webhook(url, secret, *, client=None, token=None, updates=("message",)) -> dict:
     r = (client or httpx.Client(timeout=20)).post(
         _api("setWebhook", token),
-        json={"url": url, "secret_token": secret, "allowed_updates": ["message"], "drop_pending_updates": True})
+        json={"url": url, "secret_token": secret, "allowed_updates": list(updates), "drop_pending_updates": True})
     _ok(r, "setWebhook")
     return r.json()
 
@@ -139,6 +139,13 @@ def get_me(token, *, client=None) -> dict:
     """The bot behind a token: {id, username, first_name, ...}. Raises on a refused token (HTTP 401) like the others."""
     r = (client or httpx.Client(timeout=20)).get(_api("getMe", token))
     _ok(r, "getMe")
+    return r.json()["result"]
+
+
+def managed_bot_token(bot_id, *, client=None, token=None) -> str:
+    """The token of a bot created through this (manager) bot, by the managed bot's user id. Raises like the others; never log the result."""
+    r = (client or httpx.Client(timeout=20)).post(_api("getManagedBotToken", token), json={"user_id": bot_id})
+    _ok(r, "getManagedBotToken")
     return r.json()["result"]
 
 

@@ -10,7 +10,7 @@ import psycopg
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel, Field
 
-from .. import clock, license as lic
+from .. import clock, license as lic, mailer
 from ..errors import ApiError
 from .deps import Ctx, audit, read_ctx, reply, require_owner, svc, throttle, write_ctx
 
@@ -229,7 +229,5 @@ def admin_issue(body: Issue, request: Request, ctx: Ctx = Depends(write_ctx)):
         ctx.conn.execute("update license_requests set status = 'issued', issued_token = %s, issued_at = now(), issued_license_id = %s where id = %s",
                          (token, p["lid"], rid))
     audit(ctx, "license_requests", rid, f"license issued: {p['plan']} x{p['seats']}", None, {"license_id": p["lid"], "email": p["email"]})  # never the token
-    text = (f"Your LARIS licence ({p['plan']}, {p['seats']} seats) is ready. Sign in as the owner with this email address, open Licence and accept it, "
-            f"or paste this key:\n\n{token}\n\nKeep it private: it works for one organisation.")
-    emailed = bool(svc(request).mail(p["email"], "Your LARIS licence key", text, category="license"))  # best effort: mail() never raises
+    emailed = bool(svc(request).mail(p["email"], *mailer.license_mail(p["plan"], p["seats"], token), category="license"))  # best effort: mail() never raises
     return reply(ctx, {"ok": True, "emailed": emailed})

@@ -22,6 +22,9 @@ OPEN = {
     ("POST", "/api/me/password"), ("POST", "/api/me/sessions/revoke-others"), ("DELETE", "/api/me/sessions/{sid}"),
     ("POST", "/api/me/telegram-link"), ("DELETE", "/api/me/telegram-link"),  # a person links or unlinks their own Telegram
     ("POST", "/api/license/admin/public-key"), ("POST", "/api/license/admin/issue"),  # platform admin only: 404 (not 403) for everyone else, tests/test_license_admin.py
+    ("POST", "/api/me/onboarding"),  # a person's own tour progress, tests/test_onboarding.py
+    ("POST", "/api/v1/quote-price"),  # no user session at all: an owner-issued API key (X-API-Key) is the credential; read-only pricing, tests/test_public_api.py
+    ("POST", "/api/public/quote/{token}/accept"), ("POST", "/api/public/quote/{token}/decline"),  # the customer's own link, tests/test_accept.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
 }
 ID = str(uuid4())
@@ -30,6 +33,7 @@ SEND = {"to": "parsed"}
 REQ = {
     ("POST", "/api/documents/{doc_id}/transition"): {"json": SEND},
     ("POST", "/api/documents/{doc_id}/send"): {"json": {"channel": "email"}},
+    ("POST", "/api/documents/{doc_id}/accept-link"): {},
     ("POST", "/api/documents/{doc_id}/lines/{line_id}"): {"json": {"qty": 1}},
     ("POST", "/api/settings"): {"json": {"brand_color": "#112233"}},
     ("POST", "/api/jobs/{job_id}"): {"json": {"status": "doing"}},
@@ -57,8 +61,14 @@ REQ = {
     ("POST", "/api/settings/channels"): {"json": {"wa_phone_number_id": "12345678"}},
     ("POST", "/api/settings/telegram/connect"): {"json": {"token": "123456:" + "a" * 35}},
     ("POST", "/api/settings/telegram/disconnect"): {},
+    ("POST", "/api/settings/telegram/bot-settings"): {"json": {"reactions": True}},
     ("POST", "/api/users/{uid}/telegram-link"): {},
     ("DELETE", "/api/users/{uid}/telegram-link"): {},
+    ("POST", "/api/settings/privacy"): {"json": {"dpo_name": "x"}},
+    ("POST", "/api/privacy/breaches"): {"json": {"detected_at": "2026-01-01T00:00:00+00:00", "summary": "x"}},
+    ("POST", "/api/privacy/breaches/{bid}"): {"json": {"notes": "x"}},
+    ("POST", "/api/settings/api-keys"): {"json": {"name": "ERP"}},
+    ("DELETE", "/api/settings/api-keys/{kid}"): {},
     ("POST", "/api/license"): {"json": {"key": "x"}},
     ("POST", "/api/license/accept-offer"): {},
     ("POST", "/api/license/request"): {"json": {"plan": "starter", "seats": 1}},
@@ -172,7 +182,16 @@ def test_a_role_with_no_permissions_sees_no_cost_or_margin_anywhere(env, monkeyp
     for u, p in pages.items():
         assert not keys(p) & (STAFF_HIDE | {"lowest_margin", "cost_items", "current_costs", "provenance"}), (u, keys(p) & STAFF_HIDE)
     assert all(x["unit_price"] is None and x["text"] == "" for i in pages["/api/rfq"] for x in i["replies"])
-    assert "4.5" not in json.dumps(pages["/api/rfq"]) and pages[f"/api/documents/{inbound}"]["doc"]["total"] is None
+    def numbers(o):  # every standalone numeric value, plus numeric strings, anywhere in the JSON
+        if isinstance(o, dict):
+            o = list(o.values())
+        if isinstance(o, list):
+            return [n for v in o for n in numbers(v)]
+        try:
+            return [float(o)] if o is not None and not isinstance(o, bool) else []
+        except ValueError:
+            return []
+    assert 4.5 not in numbers(pages["/api/rfq"]) and pages[f"/api/documents/{inbound}"]["doc"]["total"] is None
     assert "stale_quotes" not in pages["/api/dashboard"] and "followups_pending" not in pages["/api/dashboard"]
     for u in ("/api/audit", "/api/followups", "/api/reports/margin", "/api/cost-items", "/api/alerts/stale-costs",
               "/api/export/contacts.csv", f"/api/export/po.csv?quote_id={qid}", "/api/roles", "/api/users", "/api/invites"):

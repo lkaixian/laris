@@ -64,7 +64,8 @@ def timeline(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
         raise ApiError(404, "not_found", "document not found")
     titles, ev = TITLES[d["direction"]], []
     rows = c.execute(
-        """select a.at, a.event, a.after->>'decision_reason' as reason, case when a.actor like 'system%%' then 'system' else u.name end as actor
+        """select a.at, a.event, a.after->>'decision_reason' as reason, a.actor = 'customer:link' as via_link,
+                  case when a.actor like 'system%%' then 'system' else u.name end as actor
            from audit_log a left join users u on u.id::text = a.actor and u.tenant_id = a.tenant_id
            where a.tenant_id=%s and a.entity='documents' and a.entity_id=%s
              and (a.event = 'insert' or a.event like 'status %%' or a.event like 'quote send by %%: failed') order by a.at, a.id limit 400""",
@@ -76,8 +77,14 @@ def timeline(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
         elif a["event"].startswith("status "):
             to = a["event"].split("->")[-1]
             seen.add(to)
+            title = titles.get(to, tr.label(to))
+            if a["via_link"] and to == "accepted":  # the customer signed on the link (db/accept.sql): their typed name, shown as text
+                n = c.execute("select signer_name from quote_accept_links where quote_id=%s and tenant_id=%s and decision='accepted'", (doc_id, ctx.tenant_id)).fetchone()
+                title = f"Accepted by {n['signer_name'] if n else 'customer'} via link (simulated e-signature)"
+            elif a["via_link"] and to == "rejected":
+                title = "Declined by customer via link (simulated)"
             ev.append({"at": a["at"], "kind": "sent" if to == "sent" else "decision" if to in ("accepted", "rejected") else "status",
-                       "title": titles.get(to, tr.label(to)), "actor": a["actor"], **({"detail": a["reason"]} if a["reason"] and to in ("accepted", "rejected") else {})})
+                       "title": title, "actor": a["actor"], **({"detail": a["reason"]} if a["reason"] and to in ("accepted", "rejected") else {})})
         else:
             ev.append({"at": a["at"], "kind": "sent", "title": "Sending to the customer failed", "actor": a["actor"], "detail": a["event"].removeprefix("quote ")})
     if not any(e["kind"] == "created" for e in ev):

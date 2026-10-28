@@ -528,4 +528,4 @@ def test_mailer_sandbox_url_payload_and_off(monkeypatch, caplog):
 
 def test_mail_templates_escape_html():
     _, text, html = mailer.verification_mail("123456")
-    assert "123456" in text and "<script>" not in html and html.startswith("<p>Hello,</p>")
+    assert "123456" in text and "<script>" not in html and html.count("123456") == 1 and ">Hello,</p>" in html

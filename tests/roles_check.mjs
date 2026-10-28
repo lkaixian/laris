@@ -1,7 +1,7 @@
 // Run: node tests/roles_check.mjs  (db/roles.sql: the app role cannot weaken audit or guards)
 import {PGlite} from '@electric-sql/pglite';import fs from 'fs';
 const db=new PGlite(),rd=f=>fs.readFileSync(new URL('../db/'+f,import.meta.url),'utf8');
-for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','listings.sql','rbac.sql','signup.sql','multi.sql','invites.sql','channels.sql','quotes.sql','jobs.sql','track.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
+for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','listings.sql','rbac.sql','signup.sql','multi.sql','invites.sql','channels.sql','quotes.sql','jobs.sql','track.sql','accept.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
 let bad=0;const ok=(c,n)=>{console.log(c?'ok  ':'FAIL',n);if(!c)bad++};
 const refuses=async(n,s)=>{try{await db.exec(s);ok(false,n)}catch(e){ok(true,n+' -> '+e.message.slice(0,70))}};
 // a second tenant with one document and one cost, so isolation has something to hide
@@ -17,6 +17,10 @@ for(const t of [o,b]){const q=(await db.query(`insert into documents(tenant_id,d
 const bu=(await db.query(`select id from users where tenant_id='${b}' limit 1`)).rows[0].id;
 await db.exec(`insert into license_requests(tenant_id,email,plan,seats) values ('${o}','a@x.com','pro',5),('${b}','b@x.com','pro',5)`);
 for(const t of [o,b])await db.exec(`insert into invites(tenant_id,email,role_id,token_sha256) select '${t}','i@x.com',id,'h-'||'${t}' from roles where tenant_id='${t}' and key='staff'`);
+const ou=(await db.query(`select id from users where tenant_id='${o}' and role='owner' limit 1`)).rows[0].id;
+const al=(await db.query(`insert into documents(tenant_id,direction,kind,party_id,status,doc_no,approved_by,approved_at) select '${o}','out','quotation',id,'sent','AL-1','${ou}',now() from parties where tenant_id='${o}' limit 1 returning id`)).rows[0].id;
+const bq=(await db.query(`select id from documents where tenant_id='${b}' limit 1`)).rows[0].id;
+await db.exec(`insert into quote_accept_links(tenant_id,quote_id,token_hash,expires_at) values ('${o}','${al}','hash-o',now()+interval '1 day'),('${b}','${bq}','hash-b',now()+interval '1 day')`);
 await db.exec("set role laris_app");
 await db.exec("select set_config('laris.tenant','*',false)");
 ok(await n("select count(*)::int c from documents")>0,'system scope (*) can read and write normal tables');
@@ -36,6 +40,8 @@ ok(await n("select count(*)::int c from invites")===1 && await n(`select count(*
 await refuses('a tenant cannot write an invite into another tenant',`insert into invites(tenant_id,email,role_id,token_sha256) values ('${b}','z@x.com','${br}','zz')`);
 await refuses('an invite cannot carry another tenant role',`insert into invites(tenant_id,email,role_id,token_sha256) values ('${o}','z@x.com','${br}','zz')`);
 ok(await n("select count(*)::int c from jobs")===1 && await n(`select count(*)::int c from jobs where tenant_id='${b}'`)===0,'a tenant sees only its own jobs');
+ok(await n("select count(*)::int c from quote_accept_links")===1 && await n(`select count(*)::int c from quote_accept_links where tenant_id='${b}'`)===0,'a tenant sees only its own accept links');
+await refuses('a tenant cannot write an accept link into another tenant',`insert into quote_accept_links(tenant_id,quote_id,token_hash,expires_at) values ('${b}','${bq}','zz',now())`);
 await refuses('a tenant cannot write a job into another tenant',`insert into jobs(tenant_id,quote_id) select '${b}',id from documents limit 1`);
 await refuses('a job cannot be assigned to another tenant user',`update jobs set assignee_id='${bu}'`);
 await refuses('one pending invite per email',`insert into invites(tenant_id,email,role_id,token_sha256) select tenant_id,'i@x.com',role_id,'again' from invites`);
@@ -61,6 +67,15 @@ ok(await n("select count(*)::int c from v_quote_margin")===0,'...nor the margin 
 await db.exec("select set_config('laris.tenant','',false)");
 ok(await n("select count(*)::int c from documents")===0,'no tenant set sees nothing (fails closed)');
 await db.exec("select set_config('laris.tenant','*',false)");
+await db.exec("select set_config('laris.role','',false)");
+await refuses('the app role without the owner role cannot accept a quote itself',`update documents set status='accepted' where id='${al}'`);
+const res=async h=>(await db.query(`select accept_link_decide('${h}','accepted','Some One','iph',null,now())->>'result' c`)).rows[0].c;
+ok(await res('nope')==='not_found' && await res('hash-b')==='not_found','accept function: unknown token and a link whose quote is not open are refused alike');
+await db.exec("select set_config('laris.tenant','',false)");
+ok(await res('hash-o')==='ok' && await res('hash-o')==='already_decided','accept function: a valid link accepts once, the repeat is answered from the row');
+await db.exec("select set_config('laris.tenant','*',false)");
+ok(await n("select count(*)::int c from jobs where quote_id='"+al+"'")===1 && await n("select count(*)::int c from documents where id='"+al+"' and status='accepted'")===1,'accept function: one job, quote accepted');
+ok((await db.query("select current_setting('laris.role') c, current_setting('laris.tenant') t")).rows[0].c==='' ,'accept function: the caller laris.role is put back');
 await db.exec("update cost_items set unit_cost = unit_cost");
 await refuses('cannot disable the audit trigger',"alter table documents disable trigger documents_audit");
 await refuses('cannot delete audit rows',"delete from audit_log");

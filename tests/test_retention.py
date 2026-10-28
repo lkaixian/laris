@@ -69,7 +69,7 @@ def test_daily_cap_per_email(env):
 
 def test_mail_greeting_is_fixed():
     for text in (mailer.verification_mail("123456")[1], mailer.reset_mail("123456")[1]):
-        assert text.startswith("Hello,\n\n")
+        assert "\n\nHello,\n\n" in text
 
 
 def test_dev_echo_ignored_on_deployment(env, monkeypatch):

@@ -3,6 +3,7 @@ import base64
 import csv
 import io
 import json
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -299,7 +300,7 @@ def test_email_send_attaches_the_pdf_moves_approved_to_sent_and_resends(env):
     assert to == "buyer@cafe.test" and subject.startswith("Quotation QT-") and cat == "quote"
     assert len(att) == 1 and att[0]["filename"].endswith(".pdf") and att[0]["mime"] == "application/pdf" and att[0]["content"][:5] == b"%PDF-"
     assert "PDF" in text and "Valid until" in text and "Thanks <b>again</b>" in text and "&lt;b&gt;again&lt;/b&gt;" in html and "<b>again" not in html
-    assert not any(w in (text + html + subject + pdf_text(att[0]["content"])).lower() for w in ("cost", "margin", "supplier"))
+    assert not any(w in (text + re.sub(r"<style>.*?</style>|<[^>]+>", " ", html) + subject + pdf_text(att[0]["content"])).lower() for w in ("cost", "margin", "supplier"))
     sent_at = e.sql("select sent_at from documents where id=%s", (d,))[0]["sent_at"]
     assert sent_at is not None
     m = e.sql("select channel::text c, direction::text d, body, external_id from messages where document_id=%s and channel='email'", (d,))

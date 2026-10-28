@@ -1,0 +1,65 @@
+# SAMPLE template (invented, synthetic numbers). Tailor: alterations and made-to-measure.
+key: tailoring
+min_margin_pct: 25
+followup_hours: 48
+required_enquiry_fields: [item, qty, measurements_or_size, deadline]
+item_catalog:
+  - {item_key: cotton_fabric_m, uom: m, aliases: [cotton fabric, cotton, kain kapas, kapas]}
+  - {item_key: batik_fabric_m, uom: m, aliases: [batik fabric, batik, kain batik]}
+  - {item_key: lining_fabric_m, uom: m, aliases: [lining, lining fabric, kain lapik, kain pelapik]}
+  - {item_key: zip, uom: pcs, aliases: [zip, zipper, zip baju, zip seluar]}
+  - {item_key: button_set, uom: set, aliases: [button set, buttons, butang, set butang]}
+  - {item_key: thread_reel, uom: pcs, aliases: [thread, thread reel, benang, gelung benang]}
+  - {item_key: curtain_track_m, uom: m, aliases: [curtain track, track, rel langsir, landasan langsir]}
+rate_card:            # RM/hour
+  labour_hour: 15.00
+recipes:
+  baju_kurung_mto:
+    description: Baju kurung, made to measure (tempahan baju kurung)
+    uom: set
+    markup_pct: 40
+    bom:
+      - {item_key: batik_fabric_m, qty: 4}
+      - {item_key: lining_fabric_m, qty: 1}
+      - {item_key: zip, qty: 1}
+      - {item_key: button_set, qty: 1}
+      - {item_key: thread_reel, qty: 1}
+    hours: {labour_hour: 6}   # cost 4x18 + 6 + 3 + 2 + 4 = 87 + 6x15 = 177, +40% = RM247.80 (batik RM18/m, lining RM6/m, zip RM3, buttons RM2, thread RM4)
+  trouser_hem:
+    description: Trouser hem (ubah seluar, potong kaki seluar)
+    uom: pcs
+    markup_pct: 50
+    bom:
+      - {item_key: thread_reel, qty: 0.1}
+    hours: {labour_hour: 0.5}
+  zip_replacement:
+    description: Zip replacement (tukar zip)
+    uom: pcs
+    markup_pct: 50
+    bom:
+      - {item_key: zip, qty: 1}
+      - {item_key: thread_reel, qty: 0.1}
+    hours: {labour_hour: 0.75}
+  curtain_pair:
+    description: Curtain pair with lining and track (sepasang langsir)
+    uom: pair
+    markup_pct: 40
+    bom:
+      - {item_key: cotton_fabric_m, qty: 6}
+      - {item_key: lining_fabric_m, qty: 6}
+      - {item_key: curtain_track_m, qty: 2}
+      - {item_key: thread_reel, qty: 1}
+    hours: {labour_hour: 3}
+  school_uniform_set:
+    description: School uniform set (baju sekolah)
+    uom: set
+    markup_pct: 45
+    bom:
+      - {item_key: cotton_fabric_m, qty: 2.5}
+      - {item_key: button_set, qty: 1}
+      - {item_key: zip, qty: 1}
+      - {item_key: thread_reel, qty: 1}
+    hours: {labour_hour: 3}
+fields:
+  - {key: measurements, label: Measurements or size, type: text, applies_to: [in, out]}
+  - {key: fitting_date, label: Fitting date, type: date, applies_to: [in]}

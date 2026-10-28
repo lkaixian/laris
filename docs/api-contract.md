@@ -177,3 +177,24 @@ Every screen and message says: "Simulated signature for demonstration; not a leg
 | `GET /api/public/quote/{token}` | no login. `{simulated: true, notice, issuer: {name, logo_url}, quote: {doc_no, valid_until, status, currency: "RM", total, note, lines: [{description, qty, uom, unit_price, line_total}]}, can_accept, decided: {decision: "accepted"\|"declined", at, name} \| null}`. First view moves sent to read. Unknown, revoked, expired or closed link: one 404 `not_found`. 429 `rate_limited` (30 a minute per IP) |
 | `POST /api/public/quote/{token}/accept` | no login. `{name (2-80 after trim), agree: true}` returns `{status: "accepted", job_created: true, simulated: true}` and creates the job once; the same call again returns the same body. 422 `bad_name` / `must_agree`, 404 `not_found`, 409 `already_decided` (`error.decided`) if it was declined, 429 `rate_limited` (10 decisions an hour per IP and per link) |
 | `POST /api/public/quote/{token}/decline` | no login. `{reason?: <= 300}` returns `{status: "rejected", simulated: true}`; same errors. The owner's timeline reads "Accepted by <name> via link (simulated e-signature)" or "Declined by customer via link (simulated)" |
+
+## AI guide (optional, default off; see docs/privacy-and-breach-runbook.md, "AI guide")
+
+| Route | Notes |
+|---|---|
+| `GET /api/settings/ai` | owner. `{mode: "off"\|"guide"\|"guide_data", provider: "ilmu"\|"custom", custom: {base_url, model, has_key}, consent: {at, by (name), version}, disclosure: {version, text}, available: {ilmu: bool}, legacy_assistant: bool}`. `legacy_assistant` is true while no choice has been saved: the Assistant keeps working as before. The key is never returned |
+| `POST /api/settings/ai` | owner, audited. `{mode, provider?, custom?: {base_url, model, api_key?}, accept_disclosure}` returns the same view. 422 `disclosure_required` (turning on, or changing provider or server host while on, without `accept_disclosure: true`; off never needs it), `secret_key_unset`, `custom_incomplete` (address, model and key all needed; key may be omitted to keep the old one), `bad_url` (https only, port 443 or 8443, no user info, every resolved address public). Choosing `ilmu` wipes the stored custom server and key |
+| `POST /api/settings/ai/test` | owner. `{ok: bool, message: str}`; sends "Reply with the word OK". The message is a plain sentence, never the provider's error or the key |
+| `POST /api/assistant/guide` | any signed-in user. `{question 2-300, lang?: "en"\|"ms", candidates: [{id <=60, label <=80, path <=120, href <=120 and starting "#/"}] (1-8)}` returns `{answer (<= 400, plain text), links: [{label, href}]}`; links are only candidates the model picked, with the supplied label and href. 403 `ai_off` (mode off or no choice saved), 429 (20 a minute per user), 503 `ai_unavailable`. The question is redacted before it leaves and is never stored or logged; only a `usage_events` count (kind `guide`) is kept |
+| `POST /api/assistant` | now 403 `ai_off` ("The Assistant is switched off in AI settings.") unless mode is `guide_data`, or no choice has been saved yet. With a custom server the intent pick goes to that server instead of ILMU |
+
+Health adds `ai_not_reviewed` (info) while no choice has been saved.
+
+## Customer privacy requests (made in the chat with /forget; see docs/privacy-and-breach-runbook.md, "Privacy in the chat")
+
+| Route | Notes |
+|---|---|
+| `GET /api/privacy/requests` | owner. A JSON array, pending first then newest first (at most 500): `[{id, party_id, party_name, kind: "erase"\|"export", status: "pending"\|"done"\|"dismissed", channel: "telegram"\|"whatsapp", requested_at, decided_at}]`. `party_name` is the customer record name (for example `telegram 123456`), not a verified identity |
+| `POST /api/privacy/requests/{id}` | owner, audited. `{action: "erase"\|"dismiss"}` returns the updated row (same shape as above). `erase` runs `POST /api/parties/{id}/erase` for that customer, marks it `done`, then tells the customer "Your data has been erased." on the same channel (best effort: a failed send never fails the request). `dismiss` marks it `dismissed` and tells the customer the business could not erase it, with the data protection contact if set. 404 `not_found`, 409 `already_decided`, 409 `not_customer` (from the erase), 422 `bad_action` |
+
+Health adds `privacy_requests_waiting` (warn) when a request has been pending more than 3 days.

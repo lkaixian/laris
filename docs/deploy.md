@@ -348,3 +348,7 @@ Redeploy the previous version from the Deployments history. **UNVERIFIED:** Repl
 ## Customer accept links
 
 `db/accept.sql` (applied on every start) adds `quote_accept_links` (forced row-level security; only the SHA-256 of each token is stored) and two SECURITY DEFINER functions, `accept_link_open` and `accept_link_decide`, with EXECUTE for `laris_app` only. They are the one path by which a customer (no account) moves a quote to accepted or rejected; the owner-only guard in `transitions.sql` is unchanged. Set `APP_PUBLIC_URL` or no link is made. Set `TRUST_PROXY=1` behind a proxy so the per-IP limits see real addresses. The token is in the URL path, so make sure your proxy and uvicorn access logs for `/api/public/quote/` are not kept (or mask the path). The signature is a simulation for demonstration, not a legal e-signature.
+
+## AI guide
+
+`db/aiguide.sql` (applied on every start) adds `tenant_ai` (settings, forced row-level security) and `ai_consent_log` (append-only; a trigger refuses UPDATE and DELETE). Default is off. A business that wants its own AI server needs `SECRET_KEY` set (the key is stored encrypted with it; changing `SECRET_KEY` makes saved keys unreadable, so enter them again). Your server must be public https on port 443 or 8443; private, loopback and link-local addresses are refused, redirects are not followed, and the connection goes to the address checked just before the call. Hosted ILMU needs `ILMU_API_KEY` as before.

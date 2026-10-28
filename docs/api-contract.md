@@ -76,9 +76,11 @@ The default staff role holds `manage_contacts`, `upload_documents`, `ask_supplie
 A job row exists from the moment an outgoing quote is accepted (`status` todo, no due date, no assignee). `job_created` stays a valid owner step for people who still use it; it never makes a second job. A job's reminder email is described in `docs/deploy.md`.
 | `GET /api/followups`, `POST /api/followups/{id}` | both `manage_followups` | Suggested chase messages; `{"action": "send" \| "skip"}` |
 | `GET /api/reports/margin?days=N` | `view_reports` | Margin report. Without `view_costs` the response also drops `cost`, `margin`, `margin_pct`, `lowest_margin`, `stale_quotes` and `stale_margin_lost` |
-| `GET /api/settings/telegram` | owner | `{helper:{configured, username, link}, bot:{connected, username, name, webhook_ok, last_error, source: "dashboard"\|"environment"\|null}, staff:[{user_id, name, role, linked}]}`. `webhook_ok` / `last_error` are live from Telegram (cached 30 s; null when Telegram cannot be asked). `source: "environment"` = the env bot of this business (`TELEGRAM_TENANT_ID` or the only business) |
+| `GET /api/settings/telegram` | owner | `{helper:{configured, username, link}, bot:{connected, username, name, webhook_ok, last_error, source: "dashboard"\|"environment"\|null, create_link: string\|null, create_blocked: "link_first"\|"unavailable"\|null}, staff:[{user_id, name, role, linked}]}`. `webhook_ok` / `last_error` are live from Telegram (cached 30 s; null when Telegram cannot be asked). `source: "environment"` = the env bot of this business (`TELEGRAM_TENANT_ID` or the only business) |
 | `POST /api/settings/telegram/connect` | owner | `{token}` -> the `bot` object. 422 `bad_token` (bad shape or refused by Telegram), `secret_key_unset`, `public_url_unset`; 502 `telegram_unreachable`; 409 `bot_in_use` (never says which business). Registers the webhook `{APP_PUBLIC_URL}/webhooks/telegram/b/<key>`; replaces this business's previous bot. The token is encrypted and never returned |
 | `POST /api/settings/telegram/disconnect` | owner | deletes the webhook (best effort) and the saved bot -> the `bot` object |
+| (one-tap bot creation) | owner, then the helper webhook | `bot.create_link` is `https://t.me/newbot/<helper>/<suggested>_laris_bot?name=<business name>` (Telegram Managed Bots, Bot API 9.6): the owner opens it and confirms; Telegram sends the helper a `managed_bot` update, and the server (matching the creator only through a linked OWNER chat of exactly one business) fetches the token with `getManagedBotToken` and runs the same path as `/connect`, then tells the owner in the helper chat. `create_blocked`: `unavailable` = helper not configured or `getMe.can_manage_bots` is false; `link_first` = this owner has not linked Telegram to the helper yet; null = ready. Failures reach the owner as a plain sentence in the helper chat |
+| `GET/POST /api/settings/telegram/bot-settings` | owner | Customer-bot customisation. GET -> `{welcome, help, language: auto\|en\|ms, quick_replies:[str], after_hours:{enabled, message, open:"HH:MM", close:"HH:MM", days:[1..7]}, reactions, defaults:{welcome, help, after_hours_message}}` (welcome/help: stored text or the default). `days` are ISO weekdays, Monday = 1 .. Sunday = 7; a day not listed counts as closed; open after close is an overnight window (Malaysia time). POST takes any subset of those keys (not `defaults`; unknown keys 422) and returns the same view. Limits: welcome 600, help 1000, quick_replies at most 4 of 1-40 chars, after_hours.message 300; control characters are stripped; 422 names the field; `""` for welcome/help = default. Audited (field names only). Applies to the business bot and the env bot: `/start` sends the welcome and a persistent reply keyboard from `quick_replies` (a tap sends its label as text), `/help` the help text, the after-hours note is appended to the enquiry and "Noted" confirmations, `language` picks en/ms for the fixed replies (`auto`: Malay when the customer's text has common Malay words), `reactions:false` turns off the reaction and typing indicator. Plain text, no parse_mode |
 | `POST /api/users/{id}/telegram-link`, `POST /api/me/telegram-link` | owner for others (404 for a user of another business), any user for themselves | `{url, code, expires_at}`: `https://t.me/<helper>?start=link_<code>`, 8 characters, single use, 15 minutes, a new code voids the older ones. 409 `helper_not_configured` |
 | `DELETE /api/users/{id}/telegram-link`, `DELETE /api/me/telegram-link` | same | clears a `tg:` handle -> `{ok:true}` (audited) |
 | `GET/POST /api/settings/channels` | owner | GET returns `{wa_phone_number_id, whatsapp_mapped, telegram_mapped, tenants_total_hint}`. POST `{wa_phone_number_id: "<5-32 digits>" \| null}` sets or clears this business's WhatsApp `phone_number_id` (audited). 409 `number_in_use` when another business has it (never says which); 422 for a bad value. `whatsapp_mapped`: a number is set or `WHATSAPP_TENANT_ID` names this business; `telegram_mapped`: `TELEGRAM_TENANT_ID` names this business; `tenants_total_hint`: true when more than one business exists on the deployment. Show a warning when it is true and the channel in use is not mapped: messages from unknown senders are dropped. |
@@ -132,3 +134,46 @@ Web issuer page (docs/licensing.md "Issuing from the web page"). `/api/license/a
 `GET /api/license` also returns `offer: {plan, seats, expires_at} \| null` (owners only; never the token).
 
 Enforcement (only while enforced and status is `missing`, `expired`, `invalid` or `clock_unverified`): every write through the signed-in API returns `402 {error:{code:"license_required", message}}`, outbound sends and follow-ups included. Reads and `/webhooks/*` (inbound capture) keep working. Writes that stay open: login, logout, signup, password forgot / reset / change, `/api/me/sessions*`, `/api/license*`. `POST /api/users` and reactivating a user return `409 seat_limit` once the licensed seats are all in use.
+
+## Privacy (PDPA), owner only, audited
+
+| Route | Notes |
+|---|---|
+| `GET /api/settings/privacy` | `{dpo_name, dpo_email, dpo_phone, notice_version, configured}`; `configured` = a name plus an email or phone |
+| `POST /api/settings/privacy` | same fields, all optional; email shape checked (422); `notice_version` changes only when sent. The audit event names no value |
+| `GET /api/privacy/breaches` | `{incidents, rule_note}` newest first. Each incident: `id, detected_at, summary, data_types, people_affected, significant_harm, commissioner_notified_at, subjects_notified_at, status, notes, created_at` plus `notifiable` (significant harm or over 1,000 people), `commissioner_due` (+72 h), `subjects_due` (+7 days after the Commissioner notice, significant harm only), `commissioner_overdue`, `subjects_overdue`, `hours_left` (next open deadline, negative when late, null when none), `rule_note` |
+| `POST /api/privacy/breaches` | `{detected_at (with time zone), summary <=1000, data_types[], people_affected, significant_harm, commissioner_notified_at?, subjects_notified_at?, notes <=2000}`; 201 returns the incident |
+| `POST /api/privacy/breaches/{id}` | any of the same fields plus `status: open or closed`; 404 `not_found`; 422 `empty` / `bad_value`. No delete route, and the database refuses DELETE |
+| `GET /api/parties/{id}/export` | `{party, enquiries, messages: [{direction, channel, text, transcript, created_at}], quotes: [{number, status, dates, lines: [{description, qty, uom, price, discount_pct}]}], replies, truncated}`; no cost or margin; each list at most 5000 rows |
+| `POST /api/parties/{id}/erase` | now also clears email, notes, document extraction and storage key, supplier reply text; returns `{id, messages_erased, replies_erased}` |
+
+Health adds `privacy_dpo_missing` (warn) and `breach_overdue` (critical).
+
+## Tour progress (any signed-in user, own row only)
+
+| Route | Notes |
+|---|---|
+| `GET /api/me/onboarding` | `{tour: "owner"\|"staff", state: "new"\|"in_progress"\|"done"\|"skipped"\|"later", step, later_count}`. No row yet: `new`, step 0, tour by role class |
+| `POST /api/me/onboarding` | `{state: "in_progress"\|"done"\|"skipped"\|"later", step?: 0-50, tour?}` returns the same view. `later` counts; the second one is stored as `skipped`. `done` and `skipped` are final until the client sends `in_progress` (restart from Help, resets `later_count`). Unknown keys 422 |
+
+## Usage, API keys and the price API (see docs/reusable-api.md)
+
+| Route | Notes |
+|---|---|
+| `GET /api/usage` | owner. `{period: "YYYY-MM" (Kuala Lumpur month), approved_quotes, quotes_sent, api_calls, free_allowance (env USAGE_FREE_QUOTES, default 20), over_allowance, note}`. Planning only, nothing is billed |
+| `GET /api/settings/api-keys` | owner. `[{id, name, key_prefix, created_at, last_used_at, revoked}]`, never the key |
+| `POST /api/settings/api-keys` | owner, audited. `{name 1-60}` returns 201 `{id, name, key: "lar_...", note}`; the key is shown once, only its SHA-256 and an 8-character prefix are stored |
+| `DELETE /api/settings/api-keys/{id}` | owner, audited. Revokes (the row stays); 404 `not_found` |
+| `GET /api/v1/recipes` | API key (`X-API-Key` or Bearer), not a session. `[{recipe_key, description, uom, fixed_rate?}]` |
+| `POST /api/v1/quote-price` | API key. `{items: [{recipe_key, qty}] (1-50), customer?}` returns `{lines: [{recipe_key, description, qty, uom, unit_price, line_total}], total, below_margin_floor, needs_review, ai_used: false, currency: "RM"}`. Read-only, no cost or margin. 401 `bad_key`, 413, 422 `unknown_recipe` (`error.unknown`), 429 (60 a minute per key) |
+
+## Customer accept link (simulated e-signature)
+
+Every screen and message says: "Simulated signature for demonstration; not a legal e-signature." Money and quantities are strings, as elsewhere. Selling prices only.
+
+| Call | Notes |
+|---|---|
+| `POST /api/documents/{id}/accept-link` | owner only (403 `owner_only`), quote approved / sent / read (409 `not_linkable`), needs `APP_PUBLIC_URL` (409 `public_url_missing`). Returns `{url: "<APP_PUBLIC_URL>/#/q/<token>", expires_at}`. Expiry is the end of `valid_until` (Asia/Kuala_Lumpur), else 30 days. Older unused links for the quote stop working. Sending the quote (email, WhatsApp, Telegram, or moving it to sent) also makes a link and includes it when `APP_PUBLIC_URL` is set |
+| `GET /api/public/quote/{token}` | no login. `{simulated: true, notice, issuer: {name, logo_url}, quote: {doc_no, valid_until, status, currency: "RM", total, note, lines: [{description, qty, uom, unit_price, line_total}]}, can_accept, decided: {decision: "accepted"\|"declined", at, name} \| null}`. First view moves sent to read. Unknown, revoked, expired or closed link: one 404 `not_found`. 429 `rate_limited` (30 a minute per IP) |
+| `POST /api/public/quote/{token}/accept` | no login. `{name (2-80 after trim), agree: true}` returns `{status: "accepted", job_created: true, simulated: true}` and creates the job once; the same call again returns the same body. 422 `bad_name` / `must_agree`, 404 `not_found`, 409 `already_decided` (`error.decided`) if it was declined, 429 `rate_limited` (10 decisions an hour per IP and per link) |
+| `POST /api/public/quote/{token}/decline` | no login. `{reason?: <= 300}` returns `{status: "rejected", simulated: true}`; same errors. The owner's timeline reads "Accepted by <name> via link (simulated e-signature)" or "Declined by customer via link (simulated)" |

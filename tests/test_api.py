@@ -694,7 +694,7 @@ def test_whatsapp_number_decides_the_tenant(env, monkeypatch):
         msg["entry"][0]["changes"][0]["value"]["metadata"] = {"phone_number_id": pn}
         n = len(e.svc.sent)
         assert wa_post(e, msg).status_code == 200
-        return e.svc.sent[n:] if len(e.svc.sent) > n else []
+        return [m for m in e.svc.sent[n:] if not m[2].startswith("Privacy notice")]  # first contact gets the notice first
 
     ok = send("PN1", "wamid.a")
     assert ok and "received your enquiry" in ok[0][2]
@@ -1047,3 +1047,12 @@ def test_me_reports_whether_telegram_is_linked(env):
     assert e.c.get("/api/me", headers=e.O).json()["telegram_linked"] is True
     e.sql("update users set channel_handle='+60 12-999 0001' where role='owner'")  # a phone number is not a Telegram link
     assert e.c.get("/api/me", headers=e.O).json()["telegram_linked"] is False
+
+
+def test_me_reports_whether_the_ai_guide_is_on(env):
+    e = env
+    assert e.c.get("/api/me", headers=e.S).json()["ai_guide"] is False  # no row yet: off
+    e.sql("insert into tenant_ai(tenant_id, mode) select id, 'guide' from tenants")
+    assert e.c.get("/api/me", headers=e.S).json()["ai_guide"] is True  # staff can see that it is on, not the settings
+    e.sql("update tenant_ai set mode='off'")
+    assert e.c.get("/api/me", headers=e.S).json()["ai_guide"] is False

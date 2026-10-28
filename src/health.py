@@ -138,8 +138,20 @@ def breach_overdue(ctx):
                      "Owner: notify the Commissioner now (confirm the rule at pdp.gov.my) and record the time in the breach register.")
 
 
+def ai_not_reviewed(ctx):
+    if not ctx.conn.execute("select 1 from tenant_ai where tenant_id=%s", (ctx.tenant_id,)).fetchone():
+        return _item("info", "ai_not_reviewed", "The Assistant still works in its old mode because AI settings have not been reviewed.", "Owner: review AI settings and choose Off, Guide only, or Guide plus my data.")
+
+
+def privacy_requests_waiting(ctx):
+    n = ctx.conn.execute("select count(*) as n from data_requests where tenant_id=%s and status='pending' and requested_at < now() - interval '3 days'",
+                         (ctx.tenant_id,)).fetchone()["n"]
+    if n:
+        return _item("warn", "privacy_requests_waiting", f"{n} customer privacy request(s) have waited more than 3 days.", "Owner: open Settings, Privacy, and erase or dismiss each request.")
+
+
 CHECKS = (email_off, email_sandbox, rls_bypass, demo_mode, scheduler_off, scheduler_failing, ntp_offline, licence, ilmu_not_set, vision_not_set,
-          whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email, privacy_dpo_missing, breach_overdue)
+          whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email, privacy_dpo_missing, breach_overdue, privacy_requests_waiting, ai_not_reviewed)
 
 
 def report(ctx) -> dict:

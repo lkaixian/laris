@@ -25,6 +25,7 @@ OPEN = {
     ("POST", "/api/me/onboarding"),  # a person's own tour progress, tests/test_onboarding.py
     ("POST", "/api/v1/quote-price"),  # no user session at all: an owner-issued API key (X-API-Key) is the credential; read-only pricing, tests/test_public_api.py
     ("POST", "/api/public/quote/{token}/accept"), ("POST", "/api/public/quote/{token}/decline"),  # the customer's own link, tests/test_accept.py
+    ("POST", "/api/assistant/guide"),  # navigation help for any signed-in user; 403 ai_off unless the owner turned it on, tests/test_ai_guide.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
 }
 ID = str(uuid4())
@@ -67,8 +68,11 @@ REQ = {
     ("POST", "/api/settings/privacy"): {"json": {"dpo_name": "x"}},
     ("POST", "/api/privacy/breaches"): {"json": {"detected_at": "2026-01-01T00:00:00+00:00", "summary": "x"}},
     ("POST", "/api/privacy/breaches/{bid}"): {"json": {"notes": "x"}},
+    ("POST", "/api/privacy/requests/{rid}"): {"json": {"action": "dismiss"}},
     ("POST", "/api/settings/api-keys"): {"json": {"name": "ERP"}},
     ("DELETE", "/api/settings/api-keys/{kid}"): {},
+    ("POST", "/api/settings/ai"): {"json": {"mode": "off"}},
+    ("POST", "/api/settings/ai/test"): {},
     ("POST", "/api/license"): {"json": {"key": "x"}},
     ("POST", "/api/license/accept-offer"): {},
     ("POST", "/api/license/request"): {"json": {"plan": "starter", "seats": 1}},

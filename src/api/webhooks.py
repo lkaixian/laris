@@ -25,7 +25,7 @@ from ..errors import ApiError
 from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
-from . import listings
+from . import listings, privacy
 from .deps import HITS, JR, Ctx, throttle
 
 log = logging.getLogger("laris")
@@ -37,6 +37,8 @@ SENDER_LIMIT = 30  # messages per (business, sender) per 10 minutes on the suppl
 MAX_BODY = 1_000_000  # webhook payloads are a few KB; refuse bulk before hashing/parsing
 CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 HELP_CMD = re.compile(r"\s*/(start|help)(@\w+)?\s*$", re.I)
+RIGHTS_CMD = re.compile(r"\s*/(privacy|mydata|forget)(@\w+)?\s*$", re.I)  # a customer's PDPA commands
+RIGHTS_LIMIT = 5  # rights commands per (business, sender) per 10 minutes
 HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 kg PLA, how much?\", and we will send you a quote.\n"
         "Staff: forward a supplier PDF or photo to record its prices, or send a product photo with the caption /catalog.")
 SORRY = "Sorry, we could not process that message. Our team will follow up."
@@ -47,7 +49,17 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
             "received": "Received {doc}; it is queued for review.", "doc": "your document",
             "thanks": "Thanks, we received your enquiry ({doc}). We will send your quote shortly.",
             "clarify": "Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity.",
-            "after": "We are closed right now. We will reply when we open."},
+            "after": "We are closed right now. We will reply when we open.",
+            "notice": "Privacy notice: we keep the messages you send us and the quotes we prepare for you, so we can serve you. Voice notes are transcribed "
+                      "and the audio is not kept. The business and its team can see this, and the services that run our chat and AI reading process it for us.{dpo}\n"
+                      "By continuing to message us you accept this. Send /privacy to read this again, /mydata to get a copy of your data, "
+                      "or /forget to ask us to erase it.",
+            "dpo": " For questions, contact our data protection contact: {who}.",
+            "forget": "We received your request. The business will confirm after checking quotes it must keep.",
+            "erased": "Your data has been erased.",
+            "kept": "The business could not erase your data because it must keep some records.{dpo}",
+            "mydata": "A copy of the data we hold about you.",
+            "mydata_fail": "Sorry, we could not send your data file. Please try again later or contact the business."},
      "ms": {"welcome": "Hai! Hantar apa yang anda perlukan dalam mesej atau nota suara, contohnya \"50 kg PLA, berapa harga?\", dan kami akan hantar sebut harga.\n"
                        "Staf: majukan PDF atau gambar pembekal untuk merekod harganya, atau hantar gambar produk dengan kapsyen /catalog.",
             "sorry": "Maaf, kami tidak dapat memproses mesej itu. Pasukan kami akan menghubungi anda.",
@@ -56,7 +68,18 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
             "received": "{doc} telah diterima dan sedang menunggu semakan.", "doc": "Dokumen anda",
             "thanks": "Terima kasih, pertanyaan anda ({doc}) telah kami terima. Kami akan hantar sebut harga tidak lama lagi.",
             "clarify": "Maaf, kami tidak pasti apa yang anda perlukan atau berapa banyak. Kami beri sebut harga untuk: {names}. Sila balas dengan item dan kuantiti.",
-            "after": "Kami sudah tutup sekarang. Kami akan balas apabila kedai dibuka semula."}}
+            "after": "Kami sudah tutup sekarang. Kami akan balas apabila kedai dibuka semula.",
+            "notice": "Notis privasi: kami menyimpan mesej yang anda hantar dan sebut harga yang kami sediakan untuk anda, supaya kami dapat melayan anda. "
+                      "Nota suara ditranskripsi dan audio tidak disimpan. Perniagaan ini dan pasukannya boleh melihatnya, dan perkhidmatan yang menjalankan "
+                      "sembang dan bacaan AI kami memprosesnya bagi pihak kami.{dpo}\n"
+                      "Dengan terus menghantar mesej kepada kami, anda bersetuju. Hantar /privacy untuk baca semula, /mydata untuk salinan data anda, "
+                      "atau /forget untuk meminta kami memadamnya.",
+            "dpo": " Untuk pertanyaan, hubungi pegawai perlindungan data kami: {who}.",
+            "forget": "Kami telah menerima permintaan anda. Perniagaan akan mengesahkan selepas menyemak sebut harga yang mesti disimpan.",
+            "erased": "Data anda telah dipadam.",
+            "kept": "Perniagaan tidak dapat memadam data anda kerana ada rekod yang mesti disimpan.{dpo}",
+            "mydata": "Salinan data anda yang kami simpan.",
+            "mydata_fail": "Maaf, kami tidak dapat menghantar fail data anda. Sila cuba lagi nanti atau hubungi perniagaan."}}
 T["ms"]["help"] = T["ms"]["welcome"]
 SORRYS = {t[k] for t in T.values() for k in ("sorry", "voice")}
 MALAY = {"nak", "ada", "tak", "tidak", "berapa", "tolong", "harga", "boleh", "saya", "kita", "kami", "terima", "kasih", "mahu", "hendak", "tempah", "sila", "untuk"}
@@ -65,8 +88,10 @@ NO_ROW = {"welcome": None, "help": None, "language": "auto", "quick_replies": []
 
 
 class Reply(str):
-    """Reply text that also carries a Telegram reply keyboard (the /start welcome)."""
+    """Reply text that also carries a Telegram reply keyboard (the /start welcome), or a file to send with the text as its caption
+    (document = (bytes, file name, text to send instead if the file cannot be sent))."""
     markup = None
+    document = None
 
 
 def bot_settings(conn, tid) -> dict:
@@ -83,6 +108,42 @@ def _lang(cfg, text) -> str:
     if cfg["language"] != "auto":
         return cfg["language"]
     return "ms" if MALAY & set(re.findall(r"[a-z]+", (text or "").lower())) else "en"
+
+
+def dpo_line(conn, tid, lang) -> str:
+    """The data protection contact for a customer-facing text, or "" when the owner has not set one."""
+    row = conn.execute("select dpo_name, dpo_email, dpo_phone from tenant_privacy where tenant_id=%s", (tid,)).fetchone()
+    who = ", ".join(x for x in (row or {}).values() if x)
+    return T[lang]["dpo"].format(who=who) if who else ""
+
+
+def _rights(conn, tid, pid, m, cfg, digits):
+    """A customer's PDPA side of the chat. The first message records that the notice was shown (m.notice carries its text, sent as its own
+    message before the reply); /privacy, /mydata and /forget answer from here. -> reply text, or None to carry on with the message."""
+    lang = _lang(cfg, m.text)
+    first = conn.execute("""insert into customer_consent(tenant_id, party_id, channel, notice_version)
+                            values (%s, %s, %s, coalesce((select notice_version from tenant_privacy where tenant_id=%s), 1)) on conflict do nothing returning party_id""",
+                         (tid, pid, m.channel, tid)).fetchone() is not None
+    notice = T[lang]["notice"].format(dpo=dpo_line(conn, tid, lang))
+    cmd = RIGHTS_CMD.match(m.text) if m.text and not m.media_kind else None
+    cmd = cmd and cmd.group(1).lower()
+    if first and cmd != "privacy":  # /privacy below answers with the notice itself
+        m.notice = notice
+    if not cmd:
+        return None
+    if _limited(f"rights:{tid}:{m.channel}:{digits}", RIGHTS_LIMIT):
+        log.warning("inbound from %s rate-limited (rights command)", _h(digits))
+        return ""  # nothing to send, and the message is not an enquiry
+    if cmd == "privacy":
+        return notice
+    if cmd == "mydata":  # the sender's own party only; the same export the owner gets, which never carries a cost or margin
+        out = Reply(T[lang]["mydata"])
+        out.document = (json.dumps(privacy.export_data(conn, tid, pid), default=str, indent=2, ensure_ascii=False).encode(), "my-data.json", T[lang]["mydata_fail"])
+        return out
+    if conn.execute("""insert into data_requests(tenant_id, party_id, kind, channel) values (%s, %s, 'erase', %s)
+                       on conflict do nothing returning id""", (tid, pid, m.channel)).fetchone() is not None:  # one pending request at a time
+        conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:webhook','parties',%s,'erase requested in chat')", (tid, pid))
+    return T[lang]["forget"]  # nothing is erased here: the owner decides
 
 
 def _closed(cfg, lang) -> str:
@@ -250,6 +311,8 @@ def _handle(conn, s, m):
         return None
     if p is None:
         p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
+    if p["role"] == "customer" and (out := _rights(conn, tid, p["id"], m, cfg, digits)) is not None:  # never staff or suppliers
+        return out
     if p["role"] == "supplier":
         if actor is None and (send := pipeline.rfq_send_for(conn, p["id"], m.reply_to, m.media_kind)) and send["tenant_id"] == tid:
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
@@ -334,10 +397,11 @@ def _process(s, msgs, statuses=()):
                                 from messages m where m.document_id = d.id and m.external_id = %s and m.direction = 'out'""",
                              (at, wamid))
         for m in msgs:
-            failed = False
+            failed, note = False, None
             try:
                 with conn.transaction():  # savepoint per message
                     text = _handle(conn, s, m)
+                note = getattr(m, "notice", None)  # only when the consent row was kept
             except ApiError as e:
                 log.warning("inbound %s rejected: %s", _h(m.external_id), e.message)
                 text = _sorry(conn, m)
@@ -349,6 +413,8 @@ def _process(s, msgs, statuses=()):
                 log.exception("inbound %s failed", _h(m.external_id))
                 text, failed = None, True
                 _trace(conn, m, type(e).__name__)
+            if note:
+                replies.append((m.channel, m.sender, note, m.to))
             if isinstance(text, Catalog):
                 later.append(text)
             elif text:
@@ -362,7 +428,17 @@ def _process(s, msgs, statuses=()):
             replies.append((j.m.channel, j.m.sender, text, j.m.to))
     for ch, to, text, via in replies:  # after commit; a send failure never loses the stored document
         try:
-            if getattr(text, "markup", None):  # the /start keyboard: only Telegram has one
+            if getattr(text, "document", None):  # /mydata: the file, with the text as its caption
+                data, name, bad = text.document
+                try:
+                    if ch == "telegram":
+                        telegram.send_document(to, data, "application/json", name, text, client=s.http, token=via)
+                    else:
+                        whatsapp.send_document(to, data, "application/json", name, text, client=s.http, phone_id=via)
+                except Exception as e:
+                    log.warning("data file to %s failed: %s", _h(to), type(e).__name__)
+                    s.send(ch, to, bad, via)
+            elif getattr(text, "markup", None):  # the /start keyboard: only Telegram has one
                 telegram.send_message(to, text, client=s.http, token=via, reply_markup=text.markup)
             else:
                 s.send(ch, to, text, via)  # answer from the number the customer wrote to

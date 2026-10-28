@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field
 
 from .. import ilmu, pipeline
 from ..errors import ApiError
+from .ai_guide import ai_row, ask_json
 from .contacts import list_contacts, like
-from .deps import Ctx, read_ctx, reply, svc, throttle, write_ctx
+from .deps import Ctx, read_ctx, reply, throttle, write_ctx
 from .routes import SUMMARY, summary
 
 log = logging.getLogger("laris")
@@ -156,10 +157,13 @@ class Ask(BaseModel, extra="forbid"):
 
 @r.post("/assistant")
 def assistant(body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
+    row = ai_row(ctx)
+    if row and row["mode"] != "guide_data":  # no row = not reviewed yet: the Assistant keeps working as before
+        raise ApiError(403, "ai_off", "The Assistant is switched off in AI settings.")
     throttle(f"assistant:{ctx.tenant_id}", LIMIT, WINDOW, "Too many questions in a minute. Wait a moment.", _HITS)
     source = "model"
     try:
-        out = ilmu.extract_json(pipeline.redact(body.message), SCHEMA, client=svc(request).ilmu)
+        out = ask_json(request, row, pipeline.redact(body.message), SCHEMA)
     except ilmu.IlmuError:
         log.warning("assistant: model unavailable, using keywords")
         out, source = fallback(body.message), "keywords"

@@ -47,7 +47,7 @@ def apply_schema(seed: bool | None = None) -> None:
             with c.transaction():  # a failure in the second or third file must not leave the first one installed
                 run("schema.sql", "transitions.sql", "functions.sql")
         run("tiers.sql", "views.sql", "auth.sql", "rls.sql", "rfq.sql", "listings.sql", "rbac.sql", "license.sql", "signup.sql", "multi.sql",
-            "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "track.sql", "privacy.sql", "onboarding.sql", "accept.sql", "apiaccess.sql")
+            "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "track.sql", "privacy.sql", "onboarding.sql", "accept.sql", "apiaccess.sql", "aiguide.sql", "consent.sql")
         if (os.environ.get("SEED") == "1" if seed is None else seed) and                 not c.execute("select 1 from tenants limit 1").fetchone():
             run("seed_made_to_order.sql")
         if owner:  # new tables and views need their grants for laris_app

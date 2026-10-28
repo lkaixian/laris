@@ -97,10 +97,11 @@ def line_json(ctx: Ctx, l: dict, doc: dict, hide: set) -> dict:
 def me(ctx: Ctx = Depends(read_ctx)):
     t = ctx.conn.execute("select coalesce(display_name, name) as name, brand_color, logo_data_url from tenants where id=%s", (ctx.tenant_id,)).fetchone()
     ro = ctx.conn.execute("select r.key, r.name, coalesce(u.channel_handle,'') ~* '^\\s*(tg|telegram):' as tg from users u left join roles r on r.id = u.role_id where u.id=%s", (ctx.user_id,)).fetchone()
+    ai = ctx.conn.execute("select mode from tenant_ai where tenant_id=%s", (ctx.tenant_id,)).fetchone()  # the guide chat shows only when the owner switched it on
     # role = the class (owner|staff) for older UI code; role_key / role_name / permissions drive the new UI. logo_url is a data URL
     # (usable as <img src>), else the ORG_LOGO_URL env, else null (UI shows initials)
     return reply(ctx, {"role": ctx.role, "role_key": ro["key"] or ctx.role, "role_name": ro["name"] or ctx.role.title(),
-                       "permissions": sorted(ctx.perms), "name": ctx.name, "id": ctx.user_id, "telegram_linked": bool(ro["tg"]),
+                       "permissions": sorted(ctx.perms), "name": ctx.name, "id": ctx.user_id, "telegram_linked": bool(ro["tg"]), "ai_guide": bool(ai and ai["mode"] != "off"),
                        "org": {"name": t["name"], "brand_color": t["brand_color"],
                                "logo_url": t["logo_data_url"] or os.environ.get("ORG_LOGO_URL") or None}})
 

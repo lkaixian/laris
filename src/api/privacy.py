@@ -1,13 +1,19 @@
 """PDPA tools, all owner-only and audited: the data protection officer contact, the breach register, and a per-person export."""
+import logging
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 
+from .. import pipeline, tgbots
 from ..errors import ApiError
-from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, write_ctx
+from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, svc, write_ctx
+from .routes import erase_party
+
+log = logging.getLogger("laris")
 
 r = APIRouter(prefix="/api")
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -152,11 +158,9 @@ def edit_breach(bid: UUID, body: BreachEdit, ctx: Ctx = Depends(write_ctx)):
 
 
 # ---- per-person export -------------------------------------------------------------------------------------------
-@r.get("/parties/{pid}/export")
-def export_party(pid: UUID, ctx: Ctx = Depends(read_ctx)):
-    """Access / portability: everything held about one contact. Sold prices only, never a cost or margin figure. Each list holds at most CAP rows."""
-    require_owner(ctx)
-    c, t = ctx.conn, ctx.tenant_id
+def export_data(c, t, pid: UUID) -> dict:
+    """Everything held about one contact. Sold prices only, never a cost or margin figure. Each list holds at most CAP rows. Shared by the
+    owner endpoint below and the customer's /mydata chat command (which passes only the sender's own party)."""
     p = c.execute("select id, role, name, contact, email, attention, ssm_no, sst_no, address, notes from parties where id=%s and tenant_id=%s", (pid, t)).fetchone()
     if not p:
         raise ApiError(404, "not_found", "party not found")
@@ -172,6 +176,63 @@ def export_party(pid: UUID, ctx: Ctx = Depends(read_ctx)):
         d["lines"] = [{k: v for k, v in x.items() if k != "document_id"} for x in lines if x["document_id"] == d["id"]]
     replies = c.execute("""select rr.message_text as text, rr.unit_price as price, rr.min_qty, rr.status, rr.created_at from rfq_replies rr
                            join rfq_sends s on s.id = rr.send_id where s.supplier_id=%s and rr.tenant_id=%s order by rr.created_at limit %s""", (pid, t, CAP)).fetchall()
-    audit(ctx, "parties", pid, "personal data exported", None, {"enquiries": len(enq), "messages": len(msgs), "documents": len(docs), "replies": len(replies)})
-    return reply(ctx, {"party": p, "enquiries": enq, "messages": msgs, "quotes": docs, "replies": replies,
-                       "truncated": any(len(x) >= CAP for x in (enq, msgs, docs, replies))})
+    return {"party": p, "enquiries": enq, "messages": msgs, "quotes": docs, "replies": replies,
+            "truncated": any(len(x) >= CAP for x in (enq, msgs, docs, replies))}
+
+
+@r.get("/parties/{pid}/export")
+def export_party(pid: UUID, ctx: Ctx = Depends(read_ctx)):
+    """Access / portability for the owner."""
+    require_owner(ctx)
+    out = export_data(ctx.conn, ctx.tenant_id, pid)
+    audit(ctx, "parties", pid, "personal data exported", None, {"enquiries": len(out["enquiries"]), "messages": len(out["messages"]), "documents": len(out["quotes"]), "replies": len(out["replies"])})
+    return reply(ctx, out)
+
+
+# ---- customer requests made in the chat (/forget): nothing is erased until the owner decides -------------------------
+REQ_SQL = """select q.id, q.party_id, p.name as party_name, q.kind, q.status, q.channel, q.requested_at, q.decided_at
+             from data_requests q join parties p on p.id = q.party_id where """
+
+
+class RequestAct(BaseModel, extra="forbid"):
+    action: Literal["erase", "dismiss"]
+
+
+@r.get("/privacy/requests")
+def list_requests(ctx: Ctx = Depends(read_ctx)):
+    require_owner(ctx)
+    return reply(ctx, ctx.conn.execute(
+        REQ_SQL + """q.tenant_id = %s
+           order by (q.status = 'pending') desc, q.requested_at desc limit 500""", (ctx.tenant_id,)).fetchall())
+
+
+@r.post("/privacy/requests/{rid}")
+def decide_request(rid: UUID, body: RequestAct, request: Request, ctx: Ctx = Depends(write_ctx)):
+    require_owner(ctx)
+    from . import webhooks  # here, not at the top: webhooks imports this module
+    c, t = ctx.conn, ctx.tenant_id
+    q = c.execute("select id, party_id, kind, status, channel from data_requests where id=%s and tenant_id=%s for update", (rid, t)).fetchone()
+    if not q:
+        raise ApiError(404, "not_found", "request not found")
+    if q["status"] != "pending":
+        raise ApiError(409, "already_decided", "this request was already decided")
+    if body.action == "erase" and q["kind"] != "erase":
+        raise ApiError(422, "bad_action", "only an erase request can be erased")
+    p = c.execute("select contact, email from parties where id=%s and tenant_id=%s", (q["party_id"], t)).fetchone()
+    to = pipeline.recipient(p, q["channel"]) if p and q["channel"] in ("telegram", "whatsapp") else None  # the contact is gone after the erase
+    if to is None and p and q["channel"] == "telegram" and re.fullmatch(r"-?\d+", p["contact"] or ""):
+        to = p["contact"]  # the chat webhook stores a Telegram customer's bare chat id
+    if body.action == "erase":
+        erase_party(q["party_id"], ctx)
+    c.execute("update data_requests set status=%s, decided_at=now(), decided_by=%s where id=%s",
+              ("done" if body.action == "erase" else "dismissed", ctx.user_id, rid))
+    audit(ctx, "data_requests", rid, f"privacy request {body.action}")
+    if to:  # best effort: the decision stands even if the customer cannot be reached
+        try:
+            lang = webhooks._lang(webhooks.bot_settings(c, t) if q["channel"] == "telegram" else webhooks.NO_ROW, None)
+            text = webhooks.T[lang]["erased"] if body.action == "erase" else webhooks.T[lang]["kept"].format(dpo=webhooks.dpo_line(c, t, lang))
+            pn = c.execute("select wa_phone_number_id from tenants where id=%s", (t,)).fetchone()["wa_phone_number_id"]
+            svc(request).send(q["channel"], to, text.strip(), tgbots.via(c, t, q["channel"], pn))
+        except Exception as e:
+            log.warning("privacy request %s: customer not told (%s)", rid, type(e).__name__)
+    return reply(ctx, c.execute(REQ_SQL + "q.id = %s and q.tenant_id = %s", (rid, t)).fetchone())

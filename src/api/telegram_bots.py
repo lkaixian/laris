@@ -38,8 +38,9 @@ def _http(request):
 
 def _me(tok, request) -> dict:
     """The bot's getMe, cached 1 h (a failure, or a helper that cannot manage bots yet, is retried after a minute); {} when Telegram cannot be asked."""
-    at, me = _HELPER.get(tok, (0, {}))
-    if time.monotonic() - at > 3600:
+    hit = _HELPER.get(tok)  # not (0, {}): a machine up for under an hour has monotonic() < 3600, which would pass an empty entry off as fresh
+    at, me = hit if hit else (0, {})
+    if hit is None or time.monotonic() - at > 3600:
         try:
             me = telegram.get_me(tok, client=_http(request))
         except Exception as e:

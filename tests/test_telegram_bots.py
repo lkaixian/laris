@@ -314,3 +314,11 @@ def test_a_linked_staff_catalog_photo_through_the_helper_reaches_the_catalog_pat
     assert "2 product(s)" in e.svc.sent[-1][2] and e.svc.via[-1] == HELPER and e.svc.dl_tokens == [HELPER]
     assert e.tg.of("sendChatAction") or e.tg.of("setMessageReaction")
     assert all(t == HELPER for t, _ in e.tg.of("setMessageReaction"))
+
+
+def test_the_helper_username_is_fetched_on_a_freshly_booted_machine(tge, monkeypatch):
+    # time.monotonic() counts from boot: on a new container it is under an hour, which used to make an empty cache look fresh
+    monkeypatch.setattr(telegram_bots.time, "monotonic", lambda: 120.0)
+    telegram_bots._HELPER.clear()
+    h = tge.c.get("/api/settings/telegram", headers=tge.O).json()["helper"]
+    assert h["configured"] is True and h["username"] and h["link"] == f"https://t.me/{h['username']}"

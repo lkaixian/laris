@@ -94,7 +94,7 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
       <Async s={s} empty={false} rows={4} shape="cards">
         {d && <>
           <GetStarted d={d} owner={owner} />
-          <section aria-labelledby="att">
+          <section aria-labelledby="att" data-tour="home-stats">
             <h2 id="att" className="mb-2 text-lg font-semibold">Needs a person</h2>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat title="Documents to review" value={d.needs_review} href="#/tracker/review" warn={d.needs_review > 0} />

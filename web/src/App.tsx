@@ -26,6 +26,10 @@ import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
 import { StatusView, HealthBanner } from './Status'
 import { CatalogView } from './Listings'
+import { HelpView } from './Help'
+import { PrivacyView } from './Privacy'
+import { ApiAccessView } from './ApiAccess'
+import { TourHost } from './Tour'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -739,6 +743,8 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   jobs: { title: 'Jobs', render: c => <JobsView me={c.me} /> },
   settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} /> },
   team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
+  privacy: { title: 'Privacy and data', render: () => <PrivacyView /> },
+  'api-access': { title: 'API access', render: () => <ApiAccessView /> },
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
   account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} /> },
   activity: { title: 'Activity log', render: () => <ActivityView /> },
@@ -746,6 +752,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
   issuer: { title: 'Issue licences', render: () => <IssuerView /> },
   purchase: { title: 'Get a licence', render: c => <PurchaseView owner={c.owner} backHref="#/licence" /> },
+  help: { title: 'Help', render: c => <HelpView arg={c.arg} /> },
   doc: { title: 'Document', render: c => c.arg ? <DetailView id={c.arg} owner={c.owner} /> : <NotFound /> },
 }
 
@@ -890,6 +897,7 @@ function AppShell() {
           </div>
         )}
       </Shell>
+      {me && <TourHost me={me} owner={owner} />}
       {!MOCK && getAccount() && <IdleGuard />}
     </OrgCtx>
     </LicenseProvider>

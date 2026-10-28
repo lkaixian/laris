@@ -5,6 +5,7 @@ import type { DocSummary } from './api'
 import { useWriteGate } from './Licence'
 import { Async, EmptyState, PageHeader, Status, TableRegion, msg, rm, useFetch } from './ui'
 import { useToast } from './Toast'
+import { PersonData } from './Privacy'
 
 type Kind = 'customer' | 'supplier' | 'contractor'
 interface Contact {
@@ -209,6 +210,7 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
               </ul>
             )}
           </section>
+          <PersonData id={id} name={c.name} customer={c.role === 'customer'} onDone={s.reload} />
         </>}
       </Async>
     </>

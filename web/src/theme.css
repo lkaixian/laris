@@ -11,6 +11,10 @@
   --line: #6a7d72; --soft: #dce7e0; --tint: #e1f0e8;
   --accent: #0f5c47; --accent-hover: #0a4434; --on-accent: #ffffff;
   --warn: #8f2a1a; --warn-bg: #fbeeea;
+  /* hairline = decorative dividers/card edges only; --line stays the form-control border (3:1). */
+  --hairline: #d5e0d9; --surface-2: #eef5f0; --ink-2: #2c3d34; --skeleton: #e6eee9;
+  --elev-2: 0 4px 12px rgb(22 35 29 / 0.10); --elev-3: 0 12px 32px rgb(22 35 29 / 0.16);
+  --control-h: 36px; --control-h-sm: 28px;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -18,7 +22,10 @@
   --line: #6f8a7d; --soft: #244036; --tint: #1a3a2f;
   --accent: #45b98d; --accent-hover: #68cca6; --on-accent: #06140f;
   --warn: #ffa391; --warn-bg: #3a1b16;
+  --hairline: #2d4a3f; --surface-2: #18302a; --ink-2: #d4dcd5; --skeleton: #1d352c;
+  --elev-2: 0 4px 12px rgb(0 0 0 / 0.40); --elev-3: 0 12px 32px rgb(0 0 0 / 0.55);
 }
+@media (pointer: coarse), (max-width: 767px) { :root { --control-h: 44px; --control-h-sm: 44px; } }
 
 @theme inline {
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -35,7 +42,25 @@
   --color-amber: var(--amber);
   --color-warn: var(--warn);
   --color-warn-bg: var(--warn-bg);
-  --radius-ui: 4px;
+  --color-hairline: var(--hairline);
+  --color-surface-2: var(--surface-2);
+  --color-ink-2: var(--ink-2);
+  --color-skeleton: var(--skeleton);
+  --radius-xs: 3px;
+  --radius-ui: 6px;
+  --radius-card: 8px;
+  --shadow-2: var(--elev-2);
+  --shadow-3: var(--elev-3);
+  /* Existing shadow-lg / shadow-xl callers (Shell menu, drawer) get the flat elevation levels. */
+  --shadow-lg: var(--elev-2);
+  --shadow-xl: var(--elev-3);
+  /* Type scale: 12/13/14/16/20/24 px. text-2xl and up keep Tailwind defaults. */
+  --text-xs: 0.75rem; --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem; --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem; --text-base--line-height: 1.375rem;
+  --text-md: 1rem; --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem; --text-lg--line-height: 1.75rem; --text-lg--letter-spacing: -0.01em;
+  --text-xl: 1.5rem; --text-xl--line-height: 2rem; --text-xl--letter-spacing: -0.01em;
 }
 
 @layer base {
@@ -45,31 +70,65 @@
 }
 
 @layer components {
-  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:cursor-wait aria-disabled:opacity-50; }
+  .btn { @apply inline-flex items-center justify-center rounded-ui border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-tint disabled:opacity-50 aria-disabled:cursor-wait aria-disabled:opacity-50; min-height: var(--control-h); }
   .btn[data-locked] { @apply cursor-not-allowed; }
   /* --brand, --brand-hover, --on-brand are set from the organisation colour (applyBrand in ui.tsx); unset keeps the accent. */
   .btn-primary { border-color: var(--brand, var(--accent)); background-color: var(--brand, var(--accent)); color: var(--on-brand, var(--on-accent)); }
   .btn-primary:hover { border-color: var(--brand-hover, var(--accent-hover)); background-color: var(--brand-hover, var(--accent-hover)); }
+  .btn-quiet { @apply border-transparent bg-transparent hover:bg-surface-2; }
+  .btn-sm { @apply px-3; min-height: var(--control-h-sm); }
   .btn-danger { @apply border-warn text-warn hover:bg-warn-bg; }
-  .input { @apply min-h-11 rounded-ui border border-line bg-surface px-3 text-sm text-ink; }
-  .card { @apply rounded-ui border border-soft bg-surface p-4; }
-  .badge { @apply inline-block rounded-ui border border-line px-2 py-0.5 text-xs font-semibold text-ink; }
+  /* 16px under md stops iOS zoom on focus; 14px from md up. */
+  .input { @apply rounded-ui border border-line bg-surface px-3 text-ink; min-height: var(--control-h); font-size: 1rem; }
+  @media (min-width: 48rem) { .input { font-size: 0.875rem; } }
+  .card { @apply rounded-card border border-hairline bg-surface p-4; }
+  .badge { @apply inline-block rounded-xs border border-hairline px-2 py-0.5 text-xs font-medium text-ink; }
+  /* Status chips: label always present; the dot SHAPE differs per status so colour is never the only signal. */
+  .chip { @apply inline-flex items-center gap-1.5 rounded-xs px-2 text-xs font-medium whitespace-nowrap; min-height: 1.25rem; background: var(--chip-bg); color: var(--chip-fg); }
+  .chip::before { content: ""; box-sizing: border-box; flex: none; width: 8px; height: 8px; background: currentColor; }
+  .chip-draft::before, .chip-approved::before, .chip-sent::before, .chip-read::before, .chip-expired::before { border-radius: 50%; }
+  .chip-draft::before { background: transparent; border: 1.5px solid currentColor; }
+  .chip-approved::before { background: transparent; border: 1.5px solid currentColor; box-shadow: inset 4px 0 0 currentColor; }
+  .chip-read::before { outline: 1.5px solid currentColor; outline-offset: 1.5px; margin: 0 1.5px; }
+  .chip-accepted::before { clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%); }
+  .chip-job_created::before { border-radius: 1px; }
+  .chip-rejected::before { clip-path: polygon(20% 0, 0 20%, 30% 50%, 0 80%, 20% 100%, 50% 70%, 80% 100%, 100% 80%, 70% 50%, 100% 20%, 80% 0, 50% 30%); }
+  .chip-expired { box-shadow: inset 0 0 0 1px var(--line); }
+  .chip-expired::before { background: transparent; border: 1.5px dashed currentColor; }
+  .chip-draft { --chip-fg: #3b4a42; --chip-bg: #eceff0; }
+  .chip-approved { --chip-fg: #0a4434; --chip-bg: #e1f0e8; }
+  .chip-sent { --chip-fg: #0a4434; --chip-bg: #cfe6da; }
+  .chip-read { --chip-fg: #ffffff; --chip-bg: #2f6b58; }
+  .chip-accepted { --chip-fg: #ffffff; --chip-bg: #0f5c47; }
+  .chip-job_created { --chip-fg: #ffffff; --chip-bg: #0a3d2f; }
+  .chip-rejected { --chip-fg: #8f2a1a; --chip-bg: #fbeeea; }
+  .chip-expired { --chip-fg: #475a50; --chip-bg: #ffffff; }
+  :root[data-theme="dark"] .chip-draft { --chip-fg: #c3d0c9; --chip-bg: #1d2f28; }
+  :root[data-theme="dark"] .chip-approved { --chip-fg: #bfe8d6; --chip-bg: #1a3a2f; }
+  :root[data-theme="dark"] .chip-sent { --chip-fg: #d3f0e2; --chip-bg: #245244; }
+  :root[data-theme="dark"] .chip-read { --chip-fg: #06140f; --chip-bg: #68cca6; }
+  :root[data-theme="dark"] .chip-accepted { --chip-fg: #06140f; --chip-bg: #45b98d; }
+  :root[data-theme="dark"] .chip-job_created { --chip-fg: #06140f; --chip-bg: #7fd6b5; }
+  :root[data-theme="dark"] .chip-rejected { --chip-fg: #ffa391; --chip-bg: #3a1b16; }
+  :root[data-theme="dark"] .chip-expired { --chip-fg: #a9bbb1; --chip-bg: #12251e; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
   .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }
   /* App shell navigation. Active item = bold text + tinted background + a bar on the left (never colour alone). */
-  .sidelink { @apply relative flex min-h-11 items-center gap-3 rounded-ui px-3 text-sm font-medium text-muted transition-colors hover:bg-tint hover:text-ink; }
+  .sidelink { @apply relative flex items-center gap-3 rounded-ui px-3 text-sm font-medium text-muted transition-colors hover:bg-tint hover:text-ink; min-height: var(--control-h); }
   .sidelink[aria-current="page"] { @apply bg-tint font-bold text-ink; box-shadow: inset 3px 0 0 var(--brand, var(--accent)); }
   .sidegroup { @apply px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted; }
   /* Loading placeholder: static block, pulses only when motion is allowed. */
-  .skeleton { @apply rounded-ui bg-soft; animation: pulse-soft 1.4s ease-in-out infinite; }
-  .toast { @apply flex w-full items-start gap-2 rounded-ui border border-line bg-surface px-3 py-2 text-sm text-ink shadow-lg; border-left: 4px solid var(--brand, var(--accent)); animation: page-in 150ms ease-out; }
+  .skeleton { @apply rounded-ui bg-skeleton; animation: pulse-soft 1.4s ease-in-out infinite; }
+  .toast { @apply flex w-full items-start gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink shadow-2; border-left: 4px solid var(--brand, var(--accent)); animation: page-in 150ms ease-out; }
   .toast-err { border-left-color: var(--warn); }
   .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
   .page-in { animation: page-in 150ms ease-out; }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
-  th { @apply px-3 py-2 text-left text-xs font-semibold text-muted; }
-  td { @apply px-3 py-2 align-top text-sm; }
-  tbody tr { @apply border-t border-soft; }
+  th { @apply bg-surface-2 px-3 py-2 text-left text-xs font-medium text-muted; }
+  td { @apply px-3 py-2 align-top text-sm text-ink-2; }
+  tbody tr { @apply border-t border-hairline; }
+  tbody tr:hover { @apply bg-surface-2; }
 }
 
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

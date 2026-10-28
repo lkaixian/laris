@@ -108,9 +108,9 @@ const isDenied = (e: unknown) => e instanceof ApiError && e.status === 403 && (e
 // A 403 may mean the role changed since /me was read: ask the shell to re-read it, at most once every 10 s.
 let lastPerms = 0
 const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
-// Pages that need a permission. Team, Roles and Settings are owner-class only (docs/roles.md, "Owner only, not assignable").
+// Pages that need a permission. Team, Roles, Settings, Privacy and API access are owner-class only (docs/roles.md, "Owner only, not assignable").
 const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status'].includes(route) ? owner : !NEED[route] || can(NEED[route])
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access'].includes(route) ? owner : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
@@ -280,3 +280,10 @@ export async function imageUrl(path: string, opts?: ReqOpts): Promise<string> {
 }
 
 export const api = <T,>(method: Method, path: string, body?: unknown, opts?: ReqOpts) => call<T>(method, path, role, body, true, opts)
+
+// ---- Telegram bot settings (GET/POST /settings/telegram/bot-settings). days: ISO weekdays, 1 = Monday ... 7 = Sunday.
+export interface BotSettingsView {
+  welcome: string; help: string; language: 'auto' | 'en' | 'ms'; quick_replies: string[]; reactions: boolean
+  after_hours: { enabled: boolean; message: string; open: string; close: string; days: number[] }
+  defaults: { welcome: string; help: string; after_hours_message: string }
+}

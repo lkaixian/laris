@@ -14,7 +14,7 @@ import { useToast } from './Toast'
 const MIN_PASSWORD = 10
 const KEY = 'laris.pending'
 const BAD_CODE = 'That code is wrong or has expired. Check the email, or ask for a new code.'
-const TEMPLATES = [['made_to_order', 'Made to order (signage, printing, fabrication)'], ['fnb_catering', 'Food and catering']]
+const TEMPLATES = [['made_to_order', 'Made to order (signage, printing, fabrication)'], ['fnb_catering', 'Food and catering'], ['tailoring', 'Tailoring and alterations'], ['aircon_service', 'Aircon servicing and installation']]
 type Pending = { kind: 'signup' | 'reset'; email: string }
 const readPending = (kind: Pending['kind']): string => { try { const p = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as Pending | null; return p?.kind === kind ? p.email : '' } catch { return '' } }
 const savePending = (p: Pending | null) => { try { if (p) sessionStorage.setItem(KEY, JSON.stringify(p)); else sessionStorage.removeItem(KEY) } catch { /* storage blocked: a reload restarts the form */ } }

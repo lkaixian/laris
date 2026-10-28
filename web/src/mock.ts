@@ -2,10 +2,13 @@
 // Mirrors docs/demo-script.md and db/seed_made_to_order.sql: acrylic RM100/sheet (SAMPLE-A-001), quote SAMPLE-QT-0001
 // (40 signboards at RM60 = RM2,400, sent). Upload a newer acrylic quote (RM140), approve it and add it to the cost
 // book: the quote goes stale, margin down RM400. Staff never get cost, margin or owner_only attrs.
+import { applyOnb } from './tours'
+import type { Onb } from './tours'
 import { ApiError, NEXT } from './api'
 import type { Role, DocDetail, DocSummary, Line, Field, Proposal, AuditEvent, Alert, Provenance } from './api'
 
 import { mockListings } from './mockListings'
+import { mockPrivacy } from './mockPrivacy'
 import { mockTrack, jobStats, dashTrack, extraMembers } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
@@ -198,7 +201,10 @@ const roles = [
 const Q = new URLSearchParams(location.search)
 const permsOf = (r: { key: string; permissions: string[] }) => (Q.get('perms') === 'none' && r.key !== 'owner' ? [] : r.permissions)
 const channels = { wa: Q.get('wa') === '1' ? '60123456789' : null as string | null }
-const tg = { on: null as boolean | null, linked: new Set(['sample-owner']) }
+const tg = { on: null as boolean | null, linked: new Set(['sample-owner']), gets: 0 }
+const BOT_DEFAULTS = { welcome: 'Hi! Thanks for messaging us. Tell us what you need and we will get back to you.', help: 'Send us a message, a photo or a voice note. We will reply as soon as we can.', after_hours_message: 'We are closed right now. We will reply when we open.' }
+const botSettings = { welcome: BOT_DEFAULTS.welcome, help: BOT_DEFAULTS.help, language: 'auto', quick_replies: ['Get a quote', 'Opening hours'], reactions: true,
+  after_hours: { enabled: true, message: BOT_DEFAULTS.after_hours_message, open: '09:00', close: '18:00', days: [1, 2, 3, 4, 5] } }
 const members = [
   { id: 'sample-owner', name: 'SAMPLE Owner', username: 'owner', role: 'owner', role_id: 'r-owner', role_key: 'owner', role_name: 'Owner', active: true, has_password: true, sessions: 1 },
   { id: 'sample-staff', name: 'SAMPLE Staff', username: 'staff', role: 'staff', role_id: 'r-staff', role_key: 'staff', role_name: 'Staff', active: true, has_password: true, sessions: 0 },
@@ -241,7 +247,7 @@ const devCode = () => (flag === 'nodev' ? {} : { dev_code: '123456' })
 function mockPublic(method: string, p: string, body: any): unknown {
   const email = String(body?.email ?? '').trim()
   if (method === 'POST' && p === '/signup') {
-    if (!['made_to_order', 'fnb_catering'].includes(body.trade_template)) throw new ApiError(422, 'unknown_template', 'That business type is not available.')
+    if (!['made_to_order', 'fnb_catering', 'tailoring', 'aircon_service'].includes(body.trade_template)) throw new ApiError(422, 'unknown_template', 'That business type is not available.')
     if (String(body.password).length < 10) throw new ApiError(422, 'weak_password', 'That password is too weak. Use at least 10 characters.')
     if (/^(password|1234567890)/i.test(String(body.password))) throw new ApiError(422, 'weak_password', 'That password is too common. Pick a longer, less guessable one.')
     return { ok: true, message: NEUTRAL, ...devCode() }
@@ -352,6 +358,8 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     const items = k === 'ok' ? [] : all.filter(i => rank.indexOf(i.level) <= rank.indexOf(k))
     return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items }
   }
+  if (p === '/me/onboarding') return mockOnboarding(method, owner, body)
+  { const r = mockPrivacy(method, p, owner, body); if (r !== undefined) return r }
   if (p === '/me') {
     const r = roleOf(role)!
     return { id: owner ? 'sample-owner' : 'sample-staff', role, role_key: r.key, role_name: r.name, permissions: permsOf(r), name: who,
@@ -562,15 +570,29 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { ...r, users: members.filter(x => x.role_id === r.id).length }
   }
   { const r = mockTrack(method, p, q, { owner, me: owner ? 'sample-owner' : 'sample-staff', perm, people: members.filter(x => x.active).map(x => x.id), doc: id => docs[id]?.doc }, body); if (r !== undefined) return r }
-  // Telegram. Switches: ?tg=1 connected, ?tg=attention, ?tg=env, ?tg=checking, ?helper=off. Token "bad", "inuse", "down", "nourl", "nokey" give each error.
+  // Telegram. Switches: ?tg=1 connected, ?tg=none (or no switch) shows one-tap create and flips to connected after about 3 polls, ?tg=link_first, ?tg=unavailable, ?tg=attention, ?tg=env, ?tg=checking, ?helper=off. Token "bad", "inuse", "down", "nourl", "nokey" give each error.
   if (p === '/settings/telegram') {
     need()
     const src = Q.get('tg') === 'env' ? 'environment' : 'dashboard'
     if (tg.on === null) tg.on = ['1', 'attention', 'env', 'checking'].includes(Q.get('tg') ?? '')
     const bot = tg.on ? { connected: true, username: 'acme_shop_bot', name: 'Acme Shop', webhook_ok: Q.get('tg') === 'attention' ? false : Q.get('tg') === 'checking' ? null : true, last_error: Q.get('tg') === 'attention' ? 'Wrong response from the webhook: 502' : null, source: src }
       : { connected: false, username: null, name: null, webhook_ok: null, last_error: null, source: null }
+    const t = Q.get('tg')
+    Object.assign(bot, { create_link: t === 'unavailable' || t === 'link_first' ? null : 'https://t.me/newbot/laris_helper_bot/acme_shop_bot?name=Acme+Shop', create_blocked: t === 'link_first' || t === 'unavailable' ? t : null })
+    if (!tg.on && t === 'none' && ++tg.gets >= 5) tg.on = true  // load + 3 polls, then the owner "tapped Create"
     return { helper: Q.get('helper') === 'off' ? { configured: false, username: null, link: null } : { configured: true, username: 'laris_helper_bot', link: 'https://t.me/laris_helper_bot' }, bot,
       staff: members.map(x => ({ user_id: x.id, name: x.name, role: x.role_name, linked: tg.linked.has(x.id) })) }
+  }
+  if (p === '/settings/telegram/bot-settings') {
+    need()
+    if (method === 'POST') {
+      const b = body ?? {}, bad = (field: string, message: string) => { const e = new ApiError(422, 'invalid', message); e.fields = [{ field, message }]; throw e }
+      if (typeof b.welcome === 'string' && !b.welcome.trim()) bad('welcome', 'cannot be empty')
+      if (typeof b.help === 'string' && b.help.length > 1000) bad('help', 'must be 1000 characters or fewer')
+      if (Array.isArray(b.quick_replies) && b.quick_replies.some((x: string) => x.length < 1 || x.length > 40)) bad('quick_replies', 'each button must be 1 to 40 characters')
+      Object.assign(botSettings, b, b.after_hours ? { after_hours: { ...botSettings.after_hours, ...b.after_hours } } : {})
+    }
+    return { ...botSettings, defaults: BOT_DEFAULTS }
   }
   if (p === '/settings/telegram/connect' || p === '/settings/telegram/disconnect') {
     need()
@@ -642,4 +664,13 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return audit.filter(e => e.id > after)
   }
   throw new ApiError(404, 'not_found', `No mock route for ${method} ${p}`)
+}
+
+// Guided tour state (GET/POST /me/onboarding). Switches: ?tour=new (first-timer, default is done), ?tour=staff (first-timer, staff tour), ?tour=done.
+let onb: Onb | undefined
+function mockOnboarding(method: string, owner: boolean, body: any): Onb {
+  const sw = Q.get('tour')
+  onb ??= { tour: sw === 'staff' || !owner ? 'staff' : 'owner', state: sw === 'new' || sw === 'staff' ? 'new' : 'done', step: 0, later_count: 0 }
+  if (method === 'POST') onb = applyOnb(onb, body)
+  return onb
 }

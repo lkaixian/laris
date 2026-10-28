@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { MOCK, canOpen, getToken, logout } from './api'
+import { Palette } from './Palette'
+import { setLang, t, useLang } from './i18n'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
 import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
@@ -8,6 +10,8 @@ import { Icon } from './icons'
 import type { IconName } from './icons'
 import { useToast } from './Toast'
 import { licenceOn, issuerOn, useIssuerProbe } from './Licence'
+import { articleForNav } from './help/articles'
+import { startTour } from './Tour'
 
 /*
   App shell: grouped sidebar (>= md, collapsible to icons), top bar + slide-over drawer (< md), header with org mark,
@@ -40,6 +44,8 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'team', label: 'Team', icon: 'team' },
     { key: 'roles', label: 'Roles', icon: 'roles' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
+    { key: 'privacy', label: 'Privacy and data', icon: 'roles' },
+    { key: 'api-access', label: 'API access', icon: 'key' },
     { key: 'status', label: 'System status', icon: 'warn' },
     { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
     { key: 'issuer', label: 'Issue licences', icon: 'key', when: () => issuerOn() },
@@ -65,11 +71,16 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{g.label}</p>
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
-                <li key={i.key}>
-                  <a className="sidelink" href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? i.label : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                <li key={i.key} className="group relative">
+                  <a className={`sidelink ${!collapsed && articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? i.label : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{i.label}</span>
                   </a>
+                  {!collapsed && (a => a && (
+                    <a href={`#/help/${a.id}`} aria-label={`Help: ${i.label}`} onClick={() => onNavigate?.(`#/help/${a.id}`)}
+                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:size-11">
+                      <span aria-hidden="true">?</span>
+                    </a>))(articleForNav(i.key))}
                 </li>
               ))}
             </ul>
@@ -92,6 +103,15 @@ function RolePicker({ role, onRole }: { role: Role; onRole: (r: Role) => void })
 }
 
 // Avatar button + small panel (disclosure pattern): account link and sign out. Closes on Escape, outside click, focus leaving, route change.
+function LangSwitch() {
+  const [lang] = useLang()
+  return (
+    <div role="group" aria-label="Language / Bahasa" className="flex gap-1 px-2 py-1">
+      {([['en', 'English'], ['ms', 'Bahasa Melayu']] as const).map(([l, n]) => <button key={l} type="button" lang={l} className="btn min-h-11 flex-1 px-2 text-sm aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={lang === l} onClick={() => setLang(l)}>{n}</button>)}
+    </div>
+  )
+}
+
 function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: string }) {
   const [open, setOpen] = useState(false)
   const btn = useRef<HTMLButtonElement>(null)
@@ -118,6 +138,9 @@ function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: stri
         <div id="user-panel" className="card absolute right-0 top-full z-50 mt-1 w-64 p-2 shadow-lg">
           <p className="px-2 py-1"><span className="block truncate font-semibold">{me.name}</span><span className="block text-sm text-muted">{me.role_name ?? me.role}</span></p>
           <a className="sidelink" href="#/account"><Icon name="user" />Account</a>
+          <a className="sidelink" href="#/help"><Icon name="ask" />Help</a>
+          <button type="button" className="sidelink w-full text-left" onClick={() => { setOpen(false); startTour() }}><Icon name="check" />Take the tour</button>
+          <LangSwitch />
           {signedIn && <button type="button" className="sidelink w-full text-left" onClick={async () => { setOpen(false); await logout(); toast('You have been signed out.') }}><Icon name="logout" />Sign out</button>}
         </div>
       )}
@@ -160,9 +183,10 @@ export interface ShellProps {
 export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, banner, children }: ShellProps) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
-  const [q, setQ] = useState('')
+  const [pal, setPal] = useState(false)
+  const [lang] = useLang()
+  const toast = useToast()
   const menuBtn = useRef<HTMLButtonElement>(null)
-  const searchBox = useRef<HTMLInputElement>(null)
   const signedIn = !!getToken()
   useIssuerProbe()
   const groups = visibleNav(me, owner)
@@ -174,18 +198,30 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
     const m = matchMedia('(min-width: 768px)'), h = () => m.matches && setDrawer(false)
     m.addEventListener('change', h); return () => m.removeEventListener('change', h)
   }, [])
-  useEffect(() => {  // "/" jumps to the search box, like most list tools
-    const k = (e: globalThis.KeyboardEvent) => { if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); searchBox.current?.focus() } }
+  useEffect(() => {  // "/" (not while typing) or Ctrl/Cmd+K opens the palette
+    const k = (e: globalThis.KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setPal(true) }
+      else if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !el.isContentEditable && !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) { e.preventDefault(); setPal(true) }
+    }
     addEventListener('keydown', k); return () => removeEventListener('keydown', k)
   }, [])
-  const runSearch = () => { const t = q.trim(); if (t) location.hash = `#/search/${encodeURIComponent(t)}` }
+  const act = async (a: 'theme' | 'signout' | 'tour') => {
+    if (a === 'tour') return startTour()
+    if (a === 'signout') { await logout(); toast('You have been signed out.'); return }
+    const next = dark ? 'light' : 'dark'
+    document.documentElement.dataset.theme = next
+    try { localStorage.setItem('theme', next) } catch { /* storage blocked: choice lasts for this visit only */ }
+    setDark(!dark)
+  }
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform)
   const picker = !signedIn && <RolePicker role={role} onRole={onRole} />
 
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-[70] focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
       <div className="md:flex">
-        <div role="region" aria-label="Sidebar" className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-soft bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-16' : 'w-60'}`}>
+        <div role="region" aria-label="Sidebar" inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-soft bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-16' : 'w-60'}`}>
           <div className="flex h-16 shrink-0 items-center justify-center border-b border-soft px-3">
             <a href="#/home" className="inline-flex min-h-11 items-center" aria-label="LARIS home">
               {collapsed ? <img src="/brand/laris-mark.png" alt="" className="size-8 object-contain" /> : <Brand dark={dark} />}
@@ -199,21 +235,21 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
           </div>
         </div>
 
-        <div className="min-w-0 flex-1" inert={drawer || undefined}>
+        <div className="min-w-0 flex-1" inert={drawer || pal || undefined}>
           <header className="z-30 border-b border-soft bg-surface md:sticky md:top-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 md:flex-nowrap md:px-6 md:py-0 md:h-16">
               <button ref={menuBtn} type="button" className="btn size-11 px-0 md:hidden" aria-label="Open menu" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" /></button>
               <span className="shrink-0 md:hidden"><Brand dark={dark} /></span>
               {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line md:hidden" /><div className="min-w-0 flex-1 md:max-w-52 md:flex-none lg:max-w-64"><OrgMark org={me.org} /></div></>}
               {!me && <span className="flex-1" />}
-              <form role="search" className="relative order-last basis-full md:order-none md:ml-4 md:max-w-xl md:flex-1 md:basis-auto" onSubmit={e => { e.preventDefault(); runSearch() }}>
-                <label className="sr-only" htmlFor="gs">Search everything</label>
-                <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"><Icon name="search" className="size-4" /></span>
-                <input id="gs" ref={searchBox} type="search" enterKeyHint="search" aria-keyshortcuts="/" className="input w-full pl-9 pr-9" placeholder="Search quotes, contacts, items"
-                  value={q} onChange={e => setQ(e.target.value)} />
-                {!q && <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-ui border border-soft px-1.5 text-xs text-muted md:block">/</kbd>}
-              </form>
-              <div className="ml-auto hidden md:block">{picker}</div>
+              <div className="order-last hidden md:order-none md:ml-4 md:block md:max-w-xl md:flex-1">
+                <button type="button" className="input flex w-full items-center gap-2 text-left text-muted" aria-keyshortcuts="/ Control+K Meta+K" onClick={() => setPal(true)}>
+                  <Icon name="search" className="size-4" /><span className="flex-1 truncate">{t({ en: 'Search or jump to...', ms: 'Cari atau pergi ke...' }, lang)}</span>
+                  <kbd aria-hidden="true" className="rounded-ui border border-soft px-1.5 text-xs">{mac ? '⌘ K' : 'Ctrl K'}</kbd>
+                </button>
+              </div>
+              <button type="button" className="btn ml-auto size-11 px-0 md:hidden" aria-label={t({ en: 'Search', ms: 'Carian' }, lang)} aria-keyshortcuts="/" onClick={() => setPal(true)}><Icon name="search" /></button>
+              <div className="hidden md:ml-auto md:block">{picker}</div>
               <ThemeToggle dark={dark} setDark={setDark} compact />
               <UserMenu me={me} signedIn={signedIn} loc={hash} />
             </div>
@@ -224,6 +260,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
         </div>
       </div>
 
+      {pal && <Palette ctx={{ me, owner, signedIn }} onClose={() => setPal(false)} onAction={act} />}
       {drawer && (
         <Drawer onClose={closeDrawer}>
           <div className="flex h-16 shrink-0 items-center justify-between border-b border-soft px-3">

@@ -3,6 +3,7 @@ import { api, ApiError } from './api'
 import { Hint, msg, useFetch } from './ui'
 import { Icon } from './icons'
 import { useToast } from './Toast'
+import { BotSettings } from './BotSettings'
 
 interface Channels { wa_phone_number_id: string | null; whatsapp_mapped: boolean; telegram_mapped: boolean; tenants_total_hint: boolean }
 
@@ -60,7 +61,7 @@ export function ChannelsCard() {
   )
 }
 
-interface Bot { connected: boolean; username: string | null; name: string | null; webhook_ok: boolean | null; last_error: string | null; source: 'dashboard' | 'environment' | null }
+interface Bot { connected: boolean; username: string | null; name: string | null; webhook_ok: boolean | null; last_error: string | null; source: 'dashboard' | 'environment' | null; create_link?: string | null; create_blocked?: 'link_first' | 'unavailable' | null }
 interface Tg { helper: { configured: boolean; username: string | null; link: string | null }; bot: Bot }
 
 const CONNECT_ERR: Record<string, string> = {
@@ -79,7 +80,17 @@ function TelegramCards() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [ask, setAsk] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const [gaveUp, setGaveUp] = useState(false)
   const toast = useToast()
+  const connected = s.data?.bot.connected
+  // After the owner taps Create in Telegram: look again every 4 s for up to 2 minutes.
+  useEffect(() => {
+    if (!waiting) return
+    if (connected) { setWaiting(false); toast('Customer bot connected.'); return }
+    const i = setInterval(s.reload, 4000), t = setTimeout(() => { setWaiting(false); setGaveUp(true) }, 120_000)
+    return () => { clearInterval(i); clearTimeout(t) }
+  }, [waiting, connected]) // eslint-disable-line react-hooks/exhaustive-deps
   const act = async (path: string, body: unknown, done: string) => {
     if (busy) return
     setErr(''); setBusy(true)
@@ -90,9 +101,26 @@ function TelegramCards() {
   const b = s.data?.bot, h = s.data?.helper
   const wait = <div role="status" aria-busy="true" className="skeleton h-16"><span className="sr-only">Loading...</span></div>
   const fail = <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>
+  const manual = (
+        <form className="grid gap-3" onSubmit={e => { e.preventDefault(); if (token.trim()) act('/settings/telegram/connect', { token: token.trim() }, 'Customer bot connected.') }}>
+          <ol className="list-decimal pl-5 text-sm">
+            <li>Open <a className="link" href="https://t.me/BotFather" target="_blank" rel="noreferrer">BotFather</a> in Telegram.</li>
+            <li>Send /newbot and pick a name for your shop's bot.</li>
+            <li>Copy the token it gives you and paste it below.</li>
+          </ol>
+          <label className="flex flex-col gap-1 text-sm font-semibold">Bot token
+            <span className="flex gap-2">
+              <input className="input min-w-0 flex-1 font-normal" type={show ? 'text' : 'password'} autoComplete="off" autoCapitalize="none" spellCheck={false} value={token}
+                aria-invalid={!!err || undefined} aria-describedby={err ? 'tg-err' : undefined} onChange={e => { setToken(e.target.value); setErr('') }} />
+              <button type="button" className="btn" aria-pressed={show} onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}<span className="sr-only"> token</span></button>
+            </span></label>
+          {err && <p id="tg-err" role="alert" className="text-sm text-warn">{err}</p>}
+          <div><button type="submit" className="btn btn-primary" aria-disabled={busy || !token.trim() || undefined}>{busy ? 'Connecting...' : 'Connect bot'}</button></div>
+        </form>
+  )
   return (
     <>
-      <section className="card mt-8 max-w-xl" aria-labelledby="tgb">
+      <section className="card mt-8 max-w-xl" aria-labelledby="tgb" data-tour="bot-card">
         <h2 id="tgb" className="text-lg font-semibold">Your customer bot</h2>
         <p className="mb-3 text-sm text-muted">A Telegram bot with your shop's name, so customers can message you there and get replies.</p>
         {s.error ? fail : !b ? wait : b.connected ? (
@@ -114,23 +142,24 @@ function TelegramCards() {
             {err && <p role="alert" className="text-sm text-warn">{err}</p>}
           </div>
         ) : (
-          <form className="grid gap-3" onSubmit={e => { e.preventDefault(); if (token.trim()) act('/settings/telegram/connect', { token: token.trim() }, 'Customer bot connected.') }}>
-            <ol className="list-decimal pl-5 text-sm">
-              <li>Open <a className="link" href="https://t.me/BotFather" target="_blank" rel="noreferrer">BotFather</a> in Telegram.</li>
-              <li>Send /newbot and pick a name for your shop's bot.</li>
-              <li>Copy the token it gives you and paste it below.</li>
-            </ol>
-            <label className="flex flex-col gap-1 text-sm font-semibold">Bot token
-              <span className="flex gap-2">
-                <input className="input min-w-0 flex-1 font-normal" type={show ? 'text' : 'password'} autoComplete="off" autoCapitalize="none" spellCheck={false} value={token}
-                  aria-invalid={!!err || undefined} aria-describedby={err ? 'tg-err' : undefined} onChange={e => { setToken(e.target.value); setErr('') }} />
-                <button type="button" className="btn" aria-pressed={show} onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}<span className="sr-only"> token</span></button>
-              </span></label>
-            {err && <p id="tg-err" role="alert" className="text-sm text-warn">{err}</p>}
-            <div><button type="submit" className="btn btn-primary" aria-disabled={busy || !token.trim() || undefined}>{busy ? 'Connecting...' : 'Connect bot'}</button></div>
-          </form>
+          <div className="grid gap-3">
+            {b.create_link && <>
+              <p className="text-sm">Telegram will show a confirmation screen with a name already filled in. Tap Create, then come back here.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <a className="btn btn-primary" data-tour="bot-create" href={b.create_link}target="_blank" rel="noopener noreferrer" onClick={() => { setWaiting(true); setGaveUp(false) }}>Create my bot in Telegram<span className="sr-only"> (opens Telegram)</span></a>
+                {waiting && <><span role="status" className="text-sm text-muted">Waiting for Telegram...</span><button type="button" className="btn" onClick={() => setWaiting(false)}>Cancel</button></>}
+              </div>
+              {gaveUp && <p role="status" className="text-sm text-muted">We did not see your bot yet. If you tapped Create, wait a moment and reload this page.</p>}
+            </>}
+            {!b.create_link && b.create_blocked === 'link_first' && (
+              <p className="text-sm">Link your own Telegram first (Account &gt; Link my Telegram) so LARIS knows the bot is yours. <a className="link" href="#/account">Go to Account</a></p>)}
+            {b.create_link || b.create_blocked === 'link_first'
+              ? <details><summary className="cursor-pointer text-sm font-semibold">Create it myself instead</summary><div className="mt-3">{manual}</div></details>
+              : manual}
+          </div>
         )}
       </section>
+      {b && (b.connected || b.source === 'environment') && <BotSettings />}
       <section className="card mt-8 max-w-xl" aria-labelledby="tgh">
         <h2 id="tgh" className="text-lg font-semibold">LARIS helper bot (for you and your staff)</h2>
         <p className="mb-3 text-sm text-muted">You and your staff link your own account to this bot. Then you can send product photos with /catalog and supplier price lists straight from Telegram. Link people on the Team page, or yours on the Account page.</p>

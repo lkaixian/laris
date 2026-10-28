@@ -32,7 +32,7 @@ function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; on
     try { await fn(); toast(done); s.reload() } catch (e) { setRowErr(msg(e)); if (e instanceof ApiError && e.status === 409) s.reload() } finally { setBusyId(''); setConfirm('') }  // 409: it changed meanwhile, show the current list
   }
   return (
-    <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv">
+    <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv" data-tour="team-invite">
       <h2 id="inv" className="text-base font-semibold">Invite by email</h2>
       <p className="mb-2 text-sm text-muted">We email a link. The person chooses their own username and password, so you never see it.</p>
       <form className="card grid max-w-xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" noValidate onSubmit={e => { e.preventDefault(); send() }}>
@@ -286,7 +286,7 @@ export function AccountView({ name, role }: { name: string; role: string }) {
         {err && <p role="alert" className="text-sm text-warn">{err}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Changing...' : 'Change password'}</button></div>
       </form>
-      <section className="mt-8 max-w-xl border-t border-soft pt-6" aria-labelledby="tgme">
+      <section className="mt-8 max-w-xl border-t border-soft pt-6" aria-labelledby="tgme" data-tour="account-telegram">
         <h2 id="tgme" className="text-base font-semibold">Telegram</h2>
         <p className="mb-3 text-sm text-muted">Link your Telegram to send product photos and supplier price lists to LARIS from your phone.</p>
         <div className="flex flex-wrap items-center gap-2"><TelegramLinkControls base="/me" who="yourself" /></div>

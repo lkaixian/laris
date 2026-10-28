@@ -169,6 +169,9 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
     if ctx.costs:
         st = c.execute("select count(distinct quote_id) n, coalesce(sum(margin_delta), 0) lost from v_stale_alerts where tenant_id=%s", (t,)).fetchone()
         out["stale_quotes"], out["stale_margin_lost"] = st["n"], st["lost"]
+        qs = c.execute("""select count(*) n, round((percentile_cont(0.5) within group (order by extract(epoch from sent_at - created_at) / 60))::numeric, 1)::float8 m
+                          from documents where tenant_id=%s and direction='out' and sent_at >= now() - interval '30 days'""", (t,)).fetchone()
+        out["quote_speed"] = {"median_minutes": qs["m"], "quotes": qs["n"], "days": 30}
     if "manage_followups" in ctx.perms:
         out["followups_pending"] = c.execute("""select count(*) n from followups f join documents d on d.id=f.document_id
                                                 where d.tenant_id=%s and f.state='pending' and d.direction='out'""", (t,)).fetchone()["n"]

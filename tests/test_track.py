@@ -425,6 +425,19 @@ def test_track_runs_a_constant_number_of_queries(env, monkeypatch):
 
 
 # ---------------------------------------------------------------- dashboard
+def test_dashboard_quote_speed_median_and_null(env):
+    e = env
+    o = other_tenant(e)  # empty tenant: no demo seed to skew the median
+    assert get(e, o, path="/api/dashboard")["quote_speed"] == {"median_minutes": None, "quotes": 0, "days": 30}
+    t = e.sql("select tenant_id from users where id=%s", (o["X-User"],))[0]["tenant_id"]
+    p = e.sql("insert into parties(tenant_id,role,name) values (%s,'customer','QS Cust') returning id", (t,))[0]["id"]
+    for no, mins in (("QS-1", 10), ("QS-2", 31)):
+        e.sql("""insert into documents(tenant_id,direction,kind,party_id,doc_no,status,issued_on,approved_by,approved_at,created_at,sent_at)
+                 values (%s,'out','quotation',%s,%s,'sent',current_date,%s,now(), now() - interval '1 day', now() - interval '1 day' + %s * interval '1 minute')""", (t, p, no, o["X-User"], mins))
+    assert get(e, o, path="/api/dashboard")["quote_speed"] == {"median_minutes": 20.5, "quotes": 2, "days": 30}
+    assert "quote_speed" not in get(e, e.S, path="/api/dashboard")
+
+
 def test_dashboard_track_counters_and_failure_isolation(env, monkeypatch):
     e = env
     base = get(e, e.O, path="/api/dashboard")["track"]

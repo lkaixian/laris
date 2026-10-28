@@ -483,7 +483,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
       open_quotes: all.filter(d => d.direction === 'out').length, ...jobStats(), track: dashTrack(),
       recent_contacts: contacts().slice(0, 3).map(c => ({ id: c.id, name: c.name, role: c.role, last_activity: new Date().toISOString() })),
       recent_documents: all.slice(0, 5).map(d => (owner || d.direction === 'out' ? d : { ...d, total: null })),
-      ...(owner ? { stale_quotes: stale.length, stale_margin_lost: '-400', followups_pending: 0 } : {}) }
+      ...(owner ? { stale_quotes: stale.length, stale_margin_lost: '-400', followups_pending: 0, quote_speed: { median_minutes: 4.5, quotes: 6, days: 30 } } : {}) }
   }
   if (p === '/assistant/suggestions') return ['What needs my attention?', 'Find the acrylic supplier']
   if (p === '/assistant' && method === 'POST') {

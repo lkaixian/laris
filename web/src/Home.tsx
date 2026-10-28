@@ -15,6 +15,7 @@ interface Dash {
   customer_replies: { document_id: string; doc_no: string; customer: string; text: string; at: string; kind: 'accept' | 'decline' | null }[]
   stale_quotes?: number; stale_margin_lost?: string; followups_pending?: number
   jobs_overdue?: number | null; jobs_due_today?: number | null
+  quote_speed?: { median_minutes: number | null; quotes: number; days: number }
   track?: { overdue?: number | null; waiting_supplier?: number | null; waiting_approval?: number | null } | null
 }
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
@@ -103,6 +104,19 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
               {can('manage_followups') && <Stat title="Waiting for a reply" value={d.followups_pending ?? 0} href="#/followups" warn={(d.followups_pending ?? 0) > 0} />}
             </div>
           </section>
+
+          {owner && d.quote_speed && (
+            <section className="mt-8" aria-labelledby="qs">
+              <h2 id="qs" className="mb-2 text-lg font-semibold">Speed to quote</h2>
+              {num(d.quote_speed.median_minutes) ? (
+                <div className="card max-w-sm">
+                  <span className="block text-sm text-muted">Median time to send a quote</span>
+                  <span className="block text-3xl font-semibold tabular-nums">{d.quote_speed.median_minutes} min</span>
+                  <span className="block text-sm">median of {d.quote_speed.quotes} {d.quote_speed.quotes === 1 ? 'quote' : 'quotes'} sent in the last {d.quote_speed.days} days</span>
+                </div>
+              ) : <p className="text-sm text-muted">No quotes sent in the last {d.quote_speed.days} days yet.</p>}
+            </section>
+          )}
 
           {d.customer_replies.length > 0 && (
             <section className="mt-8" aria-labelledby="cr">

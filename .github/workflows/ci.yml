@@ -35,11 +35,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pytest -q -rs 2>&1 | tee pytest.out || {
-            code=$?
+          # one process per file group: a single run of every PGlite test gets killed for memory (exit 143)
+          rc=0
+          for g in 'tests/test_[a-c]*.py' 'tests/test_[d-l]*.py' 'tests/test_[m-r]*.py' 'tests/test_[s-z]*.py'; do
+            pytest -q -rs $g 2>&1 | tee -a pytest.out || rc=1
+          done
+          if [ $rc -ne 0 ]; then
             grep -E "^(E  |ERROR|FAILED|SKIPPED)" pytest.out | head -15 | while read -r l; do echo "::error::${l:0:200}"; done # annotations are readable without log access
-            exit $code
-          }
+            exit 1
+          fi
       - run: node tests/schema_check.mjs
       - run: node tests/db_check.mjs
       - run: node tests/roles_check.mjs

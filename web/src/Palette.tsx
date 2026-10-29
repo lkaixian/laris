@@ -17,14 +17,14 @@ interface Found { contacts: { id: string; name: string; role: string }[]; docume
 
 const S = {
   placeholder: { en: 'Search or jump to...', ms: 'Cari atau pergi ke...', zh: '搜索或跳转...', ta: 'தேடு அல்லது செல்...' },
-  fns: { en: 'Functions', ms: 'Fungsi' }, recs: { en: 'Records', ms: 'Rekod' }, recent: { en: 'Recent', ms: 'Terkini' },
-  try: { en: 'Try: invite, export, approve', ms: 'Cuba: jemput, eksport, lulus' },
-  none: { en: 'Nothing matches', ms: 'Tiada padanan untuk' }, tryNone: { en: 'Try: invite, export, quote.', ms: 'Cuba: jemput, eksport, sebut harga.' },
-  searchRecs: { en: 'Search records for', ms: 'Cari rekod untuk' }, close: { en: 'Close search', ms: 'Tutup carian' },
-  hints: { en: 'Up/Down to move, Enter to open, Esc to close', ms: 'Atas/Bawah untuk bergerak, Enter untuk buka, Esc untuk tutup' },
-  results: { en: 'results', ms: 'hasil' }, noRes: { en: 'No results', ms: 'Tiada hasil' }, label: { en: 'Search', ms: 'Carian' },
-  ask: { en: 'Ask the AI guide', ms: 'Tanya panduan AI' }, aiGroup: { en: 'AI guide', ms: 'Panduan AI' },
-  noDoc: { en: 'No document number', ms: 'Tiada nombor dokumen' },
+  fns: { en: 'Functions', ms: 'Fungsi', zh: '功能', ta: 'செயல்பாடுகள்' }, recs: { en: 'Records', ms: 'Rekod', zh: '记录', ta: 'பதிவுகள்' }, recent: { en: 'Recent', ms: 'Terkini', zh: '最近', ta: 'சமீபத்தியவை' },
+  try: { en: 'Try: invite, export, approve', ms: 'Cuba: jemput, eksport, lulus', zh: '试试：邀请、导出、批准', ta: 'முயற்சிக்கவும்: அழை, ஏற்றுமதி, அங்கீகரி' },
+  none: { en: 'Nothing matches', ms: 'Tiada padanan untuk', zh: '没有匹配项', ta: 'பொருத்தம் எதுவும் இல்லை' }, tryNone: { en: 'Try: invite, export, quote.', ms: 'Cuba: jemput, eksport, sebut harga.', zh: '试试：邀请、导出、报价。', ta: 'முயற்சிக்கவும்: அழை, ஏற்றுமதி, மேற்கோள்.' },
+  searchRecs: { en: 'Search records for', ms: 'Cari rekod untuk', zh: '在记录中搜索', ta: 'பதிவுகளில் தேடு' }, close: { en: 'Close search', ms: 'Tutup carian', zh: '关闭搜索', ta: 'தேடலை மூடு' },
+  hints: { en: 'Up/Down to move, Enter to open, Esc to close', ms: 'Atas/Bawah untuk bergerak, Enter untuk buka, Esc untuk tutup', zh: '上/下键移动，Enter 打开，Esc 关闭', ta: 'மேல்/கீழ் நகர்த்த, Enter திறக்க, Esc மூட' },
+  results: { en: 'results', ms: 'hasil', zh: '个结果', ta: 'முடிவுகள்' }, noRes: { en: 'No results', ms: 'Tiada hasil', zh: '没有结果', ta: 'முடிவுகள் இல்லை' }, label: { en: 'Search', ms: 'Carian', zh: '搜索', ta: 'தேடல்' },
+  ask: { en: 'Ask the AI guide', ms: 'Tanya panduan AI', zh: '询问 AI 向导', ta: 'AI வழிகாட்டியிடம் கேள்' }, aiGroup: { en: 'AI guide', ms: 'Panduan AI', zh: 'AI 向导', ta: 'AI வழிகாட்டி' },
+  noDoc: { en: 'No document number', ms: 'Tiada nombor dokumen', zh: '没有文档编号', ta: 'ஆவண எண் இல்லை' },
 } satisfies Record<string, Text>
 
 const RECENT = 'laris.recent'

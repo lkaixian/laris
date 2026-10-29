@@ -18,9 +18,26 @@ export interface Fn {
   href: string; action?: 'theme' | 'signout' | 'tour'; needs?: (c: Ctx) => boolean
 }
 
+// Chinese and Tamil labels by id (keywords stay en/ms: matchFns also searches the English words in zh and ta).
+const ZT: Record<string, [string, string]> = {
+  'nav-home': ['首页', 'முகப்பு'], 'nav-tracker': ['报价追踪', 'மேற்கோள் கண்காணிப்பு'], 'nav-track': ['进度', 'நிலை'], 'nav-jobs': ['工单', 'வேலைகள்'], 'nav-followups': ['跟进', 'பின்தொடர்வுகள்'],
+  'nav-contacts': ['联系人', 'தொடர்புகள்'], 'nav-ask': ['询问供应商', 'சப்ளையர்களிடம் கேள்'], 'nav-catalog': ['目录照片', 'பட்டியல் படங்கள்'], 'nav-alerts': ['过时成本', 'பழைய செலவுகள்'],
+  'nav-activity': ['审计日志', 'தணிக்கைப் பதிவு'], 'nav-assistant': ['询问 Laris', 'Laris இடம் கேள்'], 'nav-team': ['团队', 'குழு'], 'nav-roles': ['角色与权限', 'பங்குகளும் அனுமதிகளும்'],
+  'nav-settings': ['设置', 'அமைப்புகள்'], 'nav-privacy': ['隐私与数据', 'தனியுரிமை மற்றும் தரவு'], 'nav-api-access': ['API 访问', 'API அணுகல்'], 'nav-ai-settings': ['AI 设置', 'AI அமைப்புகள்'],
+  'nav-status': ['系统状态', 'அமைப்பு நிலை'], 'nav-licence': ['许可证', 'உரிமம்'], 'nav-issuer': ['签发许可证', 'உரிமங்களை வழங்கு'],
+  invite: ['邀请团队成员', 'குழு உறுப்பினரை அழை'], 'link-telegram-person': ['为成员绑定 Telegram', 'ஒருவருக்கு Telegram ஐ இணை'], 'link-telegram-me': ['绑定我的 Telegram', 'என் Telegram ஐ இணை'],
+  'customer-bot': ['连接客户机器人', 'வாடிக்கையாளர் போட்டை இணை'], 'customise-bot': ['自定义机器人', 'போட்டைத் தனிப்பயனாக்கு'], 'upload-quote': ['上传供应商报价', 'சப்ளையர் மேற்கோளைப் பதிவேற்று'],
+  'add-contact': ['添加联系人', 'தொடர்பைச் சேர்'], 'ask-suppliers': ['向供应商询价', 'சப்ளையர்களிடம் விலை கேள்'], 'catalog-photo': ['发送目录照片', 'பட்டியல் படத்தை அனுப்பு'],
+  'needs-review': ['打开需要审核的文档', 'மதிப்பாய்வு தேவைப்படும் ஆவணங்களைத் திற'], 'approve-send': ['批准并发送报价', 'மேற்கோளை அங்கீகரித்து அனுப்பு'],
+  'export-quote': ['导出报价 (PDF, XLSX, CSV)', 'மேற்கோளை ஏற்றுமதி செய் (PDF, XLSX, CSV)'], 'activity-log': ['查看活动记录', 'செயல்பாட்டுப் பதிவைக் காண்'],
+  'margin-report': ['利润率报告', 'மார்ஜின் அறிக்கை'], branding: ['品牌与标志', 'பிராண்டிங் மற்றும் லோகோ'], 'set-language': ['更改语言', 'மொழியை மாற்று'],
+  'set-theme': ['深色或浅色主题', 'இருண்ட அல்லது ஒளி தீம்'], 'business-details': ['报价用的企业资料', 'மேற்கோளுக்கான வணிக விவரங்கள்'], 'margin-floor': ['最低利润率', 'குறைந்தபட்ச மார்ஜின்'],
+  theme: ['切换深色/浅色主题', 'இருண்ட / ஒளி தீமுக்கு மாறு'], password: ['更改密码', 'கடவுச்சொல்லை மாற்று'], signout: ['退出登录', 'வெளியேறு'],
+  'help-center': ['帮助中心', 'உதவி மையம்'], 'take-tour': ['开始导览', 'சுற்றுப்பயணத்தைத் தொடங்கு'],
+}
 const kw = (en: string, ms: string) => ({ en: en.split('|'), ms: ms.split('|') })
 const fn = (id: string, icon: IconName, en: string, ms: string, kEn: string, kMs: string, path: string, href: string, needs?: Fn['needs'], action?: Fn['action']): Fn =>
-  ({ id, icon, label: { en, ms }, keywords: kw(kEn, kMs), path: path.split('>'), href, needs, action })
+  ({ id, icon, label: { en, ms, zh: ZT[id]?.[0], ta: ZT[id]?.[1] }, keywords: kw(kEn, kMs), path: path.split('>'), href, needs, action })
 const page = (key: string) => (c: Ctx) => canOpen(key, c.owner)
 const isOwner = (c: Ctx) => c.owner
 

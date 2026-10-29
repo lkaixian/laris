@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { publicApi, ApiError } from './api'
 import { rm, Skeleton } from './ui'
-import { useLang, t } from './i18n'
+import { useLang, t, locale, LANGS } from './i18n'
 
 /*
   Public customer page: #/q/<token>. Rendered by App before the shell, with no sign-in and no staff headers (publicApi sends none).
@@ -24,35 +24,34 @@ export const kindOf = (status: number, code: string): Kind =>
 const kindFrom = (e: unknown): Kind => (e instanceof ApiError ? kindOf(e.status, e.code) : 'other')
 
 const S = {
-  loading: { en: 'Loading your quotation', ms: 'Memuatkan sebut harga anda' },
-  quotation: { en: 'Quotation', ms: 'Sebut harga' },
-  from: { en: 'From', ms: 'Daripada' },
-  valid: { en: 'Valid until', ms: 'Sah sehingga' },
-  lines: { en: 'Items', ms: 'Senarai barang' },
-  desc: { en: 'Description', ms: 'Perihal' }, qty: { en: 'Qty', ms: 'Kuantiti' }, unit: { en: 'Unit', ms: 'Unit' },
-  price: { en: 'Unit price', ms: 'Harga seunit' }, amount: { en: 'Line total', ms: 'Jumlah baris' },
-  total: { en: 'Total', ms: 'Jumlah' },
-  terms: { en: 'Notes and terms', ms: 'Nota dan terma' },
-  sim: { en: 'Simulated signature for demonstration; not a legal e-signature.', ms: 'Tandatangan simulasi untuk demonstrasi; bukan tandatangan elektronik yang sah di sisi undang-undang.' },
-  nameL: { en: 'Type your full name to accept', ms: 'Taip nama penuh anda untuk menerima' },
-  agree: { en: 'I agree to this quotation', ms: 'Saya bersetuju dengan sebut harga ini' },
-  accept: { en: 'Accept quotation', ms: 'Terima sebut harga' }, working: { en: 'Working...', ms: 'Sedang diproses...' },
-  decline: { en: 'Decline', ms: 'Tolak' },
-  reason: { en: 'Reason (optional, up to 300 characters)', ms: 'Sebab (pilihan, sehingga 300 aksara)' },
-  sure: { en: 'Decline this quotation?', ms: 'Tolak sebut harga ini?' },
-  confirm: { en: 'Yes, decline', ms: 'Ya, tolak' }, back: { en: 'Go back', ms: 'Kembali' },
-  retry: { en: 'Try again', ms: 'Cuba lagi' },
-  gone: { en: 'This link is not valid or has expired. Ask the business for a new one.', ms: 'Pautan ini tidak sah atau telah tamat tempoh. Minta pautan baharu daripada perniagaan.' },
-  goneH: { en: 'This link cannot be used', ms: 'Pautan ini tidak boleh digunakan' },
-  rate: { en: 'Too many tries. Wait a minute and try again.', ms: 'Terlalu banyak percubaan. Tunggu seminit dan cuba lagi.' },
-  other: { en: 'Something went wrong. Check your connection and try again.', ms: 'Sesuatu tidak kena. Semak sambungan anda dan cuba lagi.' },
-  errH: { en: 'Could not load the quotation', ms: 'Tidak dapat memuatkan sebut harga' },
-  bad_name: { en: 'Type your full name (2 to 80 characters).', ms: 'Taip nama penuh anda (2 hingga 80 aksara).' },
-  must_agree: { en: 'Tick the box to confirm you accept this quotation.', ms: 'Tandakan kotak untuk mengesahkan anda menerima sebut harga ini.' },
-  decidedA: { en: 'This quotation was accepted', ms: 'Sebut harga ini telah diterima' },
-  decidedD: { en: 'This quotation was declined', ms: 'Sebut harga ini telah ditolak' },
-  by: { en: 'by', ms: 'oleh' }, on: { en: 'on', ms: 'pada' },
-  lang: { en: 'Bahasa Melayu', ms: 'English' },
+  loading: { en: 'Loading your quotation', ms: 'Memuatkan sebut harga anda', zh: '正在加载您的报价单', ta: 'உங்கள் மேற்கோளை ஏற்றுகிறது' },
+  quotation: { en: 'Quotation', ms: 'Sebut harga', zh: '报价单', ta: 'மேற்கோள்' },
+  from: { en: 'From', ms: 'Daripada', zh: '来自', ta: 'அனுப்புநர்' },
+  valid: { en: 'Valid until', ms: 'Sah sehingga', zh: '有效期至', ta: 'செல்லுபடியாகும் வரை' },
+  lines: { en: 'Items', ms: 'Senarai barang', zh: '项目', ta: 'பொருட்கள்' },
+  desc: { en: 'Description', ms: 'Perihal', zh: '说明', ta: 'விவரம்' }, qty: { en: 'Qty', ms: 'Kuantiti', zh: '数量', ta: 'அளவு' }, unit: { en: 'Unit', ms: 'Unit', zh: '单位', ta: 'அலகு' },
+  price: { en: 'Unit price', ms: 'Harga seunit', zh: '单价', ta: 'அலகு விலை' }, amount: { en: 'Line total', ms: 'Jumlah baris', zh: '行合计', ta: 'வரி மொத்தம்' },
+  total: { en: 'Total', ms: 'Jumlah', zh: '总计', ta: 'மொத்தம்' },
+  terms: { en: 'Notes and terms', ms: 'Nota dan terma', zh: '备注与条款', ta: 'குறிப்புகளும் விதிமுறைகளும்' },
+  sim: { en: 'Simulated signature for demonstration; not a legal e-signature.', ms: 'Tandatangan simulasi untuk demonstrasi; bukan tandatangan elektronik yang sah di sisi undang-undang.', zh: '此为演示用的模拟签名，不具法律效力的电子签名。', ta: 'செயல்விளக்கத்திற்கான உருவகப்படுத்தப்பட்ட கையொப்பம்; சட்டப்படி செல்லுபடியாகும் மின்னணுக் கையொப்பம் அல்ல.' },
+  nameL: { en: 'Type your full name to accept', ms: 'Taip nama penuh anda untuk menerima', zh: '请输入您的全名以接受', ta: 'ஏற்க உங்கள் முழுப் பெயரை உள்ளிடவும்' },
+  agree: { en: 'I agree to this quotation', ms: 'Saya bersetuju dengan sebut harga ini', zh: '我同意此报价单', ta: 'இந்த மேற்கோளுக்கு நான் ஒப்புக்கொள்கிறேன்' },
+  accept: { en: 'Accept quotation', ms: 'Terima sebut harga', zh: '接受报价单', ta: 'மேற்கோளை ஏற்கவும்' }, working: { en: 'Working...', ms: 'Sedang diproses...', zh: '处理中...', ta: 'செயலாக்குகிறது...' },
+  decline: { en: 'Decline', ms: 'Tolak', zh: '拒绝', ta: 'நிராகரி' },
+  reason: { en: 'Reason (optional, up to 300 characters)', ms: 'Sebab (pilihan, sehingga 300 aksara)', zh: '原因（可选，最多 300 个字符）', ta: 'காரணம் (விருப்பம், 300 எழுத்துகள் வரை)' },
+  sure: { en: 'Decline this quotation?', ms: 'Tolak sebut harga ini?', zh: '要拒绝此报价单吗？', ta: 'இந்த மேற்கோளை நிராகரிக்கவா?' },
+  confirm: { en: 'Yes, decline', ms: 'Ya, tolak', zh: '是，拒绝', ta: 'ஆம், நிராகரி' }, back: { en: 'Go back', ms: 'Kembali', zh: '返回', ta: 'திரும்பு' },
+  retry: { en: 'Try again', ms: 'Cuba lagi', zh: '重试', ta: 'மீண்டும் முயல்' },
+  gone: { en: 'This link is not valid or has expired. Ask the business for a new one.', ms: 'Pautan ini tidak sah atau telah tamat tempoh. Minta pautan baharu daripada perniagaan.', zh: '此链接无效或已过期。请向商家索取新链接。', ta: 'இந்த இணைப்பு செல்லாதது அல்லது காலாவதியாகிவிட்டது. வணிகரிடம் புதிய ஒன்றைக் கேளுங்கள்.' },
+  goneH: { en: 'This link cannot be used', ms: 'Pautan ini tidak boleh digunakan', zh: '此链接无法使用', ta: 'இந்த இணைப்பைப் பயன்படுத்த முடியாது' },
+  rate: { en: 'Too many tries. Wait a minute and try again.', ms: 'Terlalu banyak percubaan. Tunggu seminit dan cuba lagi.', zh: '尝试次数过多。请等一分钟后再试。', ta: 'பல முயற்சிகள். ஒரு நிமிடம் காத்திருந்து மீண்டும் முயலவும்.' },
+  other: { en: 'Something went wrong. Check your connection and try again.', ms: 'Sesuatu tidak kena. Semak sambungan anda dan cuba lagi.', zh: '出了点问题。请检查网络连接后重试。', ta: 'ஏதோ தவறு நடந்துவிட்டது. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.' },
+  errH: { en: 'Could not load the quotation', ms: 'Tidak dapat memuatkan sebut harga', zh: '无法加载报价单', ta: 'மேற்கோளை ஏற்ற முடியவில்லை' },
+  bad_name: { en: 'Type your full name (2 to 80 characters).', ms: 'Taip nama penuh anda (2 hingga 80 aksara).', zh: '请输入您的全名（2 至 80 个字符）。', ta: 'உங்கள் முழுப் பெயரை உள்ளிடவும் (2 முதல் 80 எழுத்துகள்).' },
+  must_agree: { en: 'Tick the box to confirm you accept this quotation.', ms: 'Tandakan kotak untuk mengesahkan anda menerima sebut harga ini.', zh: '请勾选方框，确认您接受此报价单。', ta: 'இந்த மேற்கோளை ஏற்பதை உறுதிப்படுத்த பெட்டியைத் தேர்வு செய்யவும்.' },
+  decidedA: { en: 'This quotation was accepted', ms: 'Sebut harga ini telah diterima', zh: '此报价单已被接受', ta: 'இந்த மேற்கோள் ஏற்கப்பட்டது' },
+  decidedD: { en: 'This quotation was declined', ms: 'Sebut harga ini telah ditolak', zh: '此报价单已被拒绝', ta: 'இந்த மேற்கோள் நிராகரிக்கப்பட்டது' },
+  by: { en: 'by', ms: 'oleh', zh: '由', ta: 'செய்தவர்' }, on: { en: 'on', ms: 'pada', zh: '于', ta: 'அன்று' },
 }
 const T = (k: keyof typeof S) => t(S[k])
 
@@ -114,7 +113,7 @@ export default function Accept({ token }: { token: string }) {
 
   const shell = (children: ReactNode) => (
     <main id="main" className="mx-auto grid min-h-screen max-w-3xl content-start gap-5 px-4 py-6">
-      <div className="flex justify-end"><button type="button" lang={lang === 'en' ? 'ms' : 'en'} className="btn" onClick={() => setLang(lang === 'en' ? 'ms' : 'en')}>{T('lang')}</button></div>
+      <div className="flex flex-wrap justify-end gap-2">{LANGS.filter(l => l[0] !== lang).map(l => <button key={l[0]} type="button" lang={l[0]} className="btn" onClick={() => setLang(l[0])}>{l[1]}</button>)}</div>
       {children}
     </main>
   )
@@ -127,12 +126,12 @@ export default function Accept({ token }: { token: string }) {
     </div>)
 
   const { issuer, quote: q } = v
-  const when = (s: string) => new Date(s).toLocaleDateString(lang === 'ms' ? 'ms-MY' : 'en-MY', { dateStyle: 'medium' })
-  const num = (s: string) => Number(s).toLocaleString('en-MY', { maximumFractionDigits: 4 })
+  const when = (s: string) => new Date(s).toLocaleDateString(locale(lang), { dateStyle: 'medium' })
+  const num = (s: string) => Number(s).toLocaleString(locale(lang), { maximumFractionDigits: 4 })
   const d = v.decided
-  const thanks = lang === 'ms'
-    ? (a: boolean, n: string) => a ? `Terima kasih, ${n}. Sebut harga ${q.doc_no} telah diterima. ${issuer.name} akan memulakan kerja anda.` : `Anda telah menolak sebut harga ${q.doc_no}. ${issuer.name} telah dimaklumkan.`
-    : (a: boolean, n: string) => a ? `Thank you, ${n}. Quote ${q.doc_no} is accepted. ${issuer.name} will start your job.` : `You declined quote ${q.doc_no}. ${issuer.name} has been told.`
+  const thanks = (a: boolean, n: string) => t(a
+    ? { en: `Thank you, ${n}. Quote ${q.doc_no} is accepted. ${issuer.name} will start your job.`, ms: `Terima kasih, ${n}. Sebut harga ${q.doc_no} telah diterima. ${issuer.name} akan memulakan kerja anda.`, zh: `谢谢您，${n}。报价单 ${q.doc_no} 已接受。${issuer.name} 将开始处理您的工作。`, ta: `நன்றி, ${n}. மேற்கோள் ${q.doc_no} ஏற்கப்பட்டது. ${issuer.name} உங்கள் வேலையைத் தொடங்கும்.` }
+    : { en: `You declined quote ${q.doc_no}. ${issuer.name} has been told.`, ms: `Anda telah menolak sebut harga ${q.doc_no}. ${issuer.name} telah dimaklumkan.`, zh: `您已拒绝报价单 ${q.doc_no}。已通知 ${issuer.name}。`, ta: `நீங்கள் மேற்கோள் ${q.doc_no} ஐ நிராகரித்தீர்கள். ${issuer.name} க்குத் தெரிவிக்கப்பட்டது.` })
   return shell(<>
     <header className="flex items-center gap-3">
       {issuer.logo_url && !logoBad
@@ -149,12 +148,12 @@ export default function Accept({ token }: { token: string }) {
       <p className="mt-1 text-sm text-muted">{T('valid')}: {q.valid_until ?? '-'}</p>
     </div>
 
-    <p role="note" className="card border-l-4 border-l-accent font-semibold">{lang === 'ms' ? T('sim') : v.notice}</p>
+    <p role="note" className="card border-l-4 border-l-accent font-semibold">{lang !== 'en' ? T('sim') : v.notice}</p>
 
     {done && (
       <section className="card border-l-4 border-l-accent" role="status">
         <h2 ref={doneH} tabIndex={-1} className="font-semibold">{thanks(done.accepted, done.name)}</h2>
-        <p className="mt-1 text-sm">{lang === 'ms' ? T('sim') : v.notice}</p>
+        <p className="mt-1 text-sm">{lang !== 'en' ? T('sim') : v.notice}</p>
       </section>
     )}
     {!done && d && (

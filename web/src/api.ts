@@ -1,3 +1,5 @@
+import { getLang, t } from './i18n'
+import type { Text } from './i18n'
 // Typed client for docs/api-contract.md (v0). Mock mode (VITE_MOCK=1) swaps fetch for src/mock.ts.
 export type Role = 'owner' | 'staff'
 export type Direction = 'in' | 'out'
@@ -101,11 +103,49 @@ export const PERM_LABEL: Record<string, string> = {
   upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
   export_data: 'Export data', view_audit: 'See the activity log', decide_quotes: 'Approve, accept, reject or send quotes',
 }
-export const why = (k: string) => `Needs the “${PERM_LABEL[k] ?? k}” permission`
+// Permission label (and description) by key in the current language; English and unknown keys show the server's own text. Used by the Roles page and why().
+type L = Omit<Text, 'en'>
+export const PERMS: Record<string, { label: L; description?: L }> = {
+  view_costs: { label: { ms: 'Lihat kos dan margin', zh: '查看成本和利润', ta: 'செலவுகளையும் லாபத்தையும் காண்' }, description: { ms: 'Harga pembekal, item kos, margin, amaran kos lapuk dan teks sembang pembekal. Tanpanya setiap respons dibersihkan daripada semua ini.', zh: '供应商价格、成本项目、利润、过时成本提醒和供应商聊天内容。没有此权限，所有响应都会隐去这些内容。', ta: 'சப்ளையர் விலைகள், செலவு உருப்படிகள், லாபம், பழைய செலவு எச்சரிக்கைகள், சப்ளையர் அரட்டை உரை. இல்லையெனில் ஒவ்வொரு பதிலிலிருந்தும் இவை நீக்கப்படும்.' } },
+  view_reports: { label: { ms: 'Lihat laporan margin', zh: '查看利润报表', ta: 'லாப அறிக்கையைக் காண்' }, description: { ms: 'Laporan margin (angka kos dan margin di dalamnya juga memerlukan Lihat kos dan margin).', zh: '利润报表（其中的成本和利润数字还需要“查看成本和利润”权限）。', ta: 'லாப அறிக்கை (அதிலுள்ள செலவு, லாப எண்களுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை).' } },
+  edit_supplier_contacts: { label: { ms: 'Tukar nama atau nombor pembekal', zh: '更改供应商的名称或号码', ta: 'சப்ளையரின் பெயர் அல்லது எண்ணை மாற்று' }, description: { ms: 'Tempat sembang pembekal dihalakan. Medan kenalan lain hanya memerlukan Urus kenalan.', zh: '供应商聊天的转接位置。其他联系人字段只需要“添加和编辑联系人”。', ta: 'சப்ளையர் அரட்டை எங்கே செல்கிறது என்பது. மற்ற தொடர்புப் புலங்களுக்கு தொடர்புகளைச் சேர் மற்றும் திருத்து மட்டும் போதும்.' } },
+  manage_contacts: { label: { ms: 'Tambah dan edit kenalan', zh: '添加和编辑联系人', ta: 'தொடர்புகளைச் சேர் மற்றும் திருத்து' }, description: { ms: 'Cipta dan edit pelanggan, pembekal dan kontraktor.', zh: '创建和编辑客户、供应商和承包商。', ta: 'வாடிக்கையாளர்கள், சப்ளையர்கள், ஒப்பந்ததாரர்களை உருவாக்கித் திருத்து.' } },
+  upload_documents: { label: { ms: 'Muat naik dokumen pembekal', zh: '上传供应商文档', ta: 'சப்ளையர் ஆவணங்களைப் பதிவேற்று' }, description: { ms: 'Masukkan fail pembekal atau teks yang ditampal, dan taip dokumen secara manual.', zh: '导入供应商文件或粘贴的文本，并手动录入文档。', ta: 'சப்ளையர் கோப்பு அல்லது ஒட்டிய உரையை உள்ளிடு, ஆவணத்தை கைமுறையாகப் பதிவு செய்.' } },
+  ask_suppliers: { label: { ms: 'Tanya harga daripada pembekal', zh: '向供应商询价', ta: 'சப்ளையர்களிடம் விலை கேள்' }, description: { ms: 'Hantar item yang difoto kepada pembekal melalui WhatsApp atau Telegram.', zh: '通过 WhatsApp 或 Telegram 把拍下的物品发给供应商。', ta: 'படம் எடுத்த பொருளை WhatsApp அல்லது Telegram மூலம் சப்ளையர்களுக்கு அனுப்பு.' } },
+  view_replies_prices: { label: { ms: 'Lihat balasan dan harga pembekal', zh: '查看供应商回复和价格', ta: 'சப்ளையர் பதில்களையும் விலைகளையும் காண்' }, description: { ms: 'Perkataan dan harga dalam balasan pembekal kepada pertanyaan.', zh: '供应商回复询价时的文字和价格。', ta: 'விசாரணைக்கு சப்ளையர்களின் பதில்களில் உள்ள சொற்களும் விலைகளும்.' } },
+  manage_followups: { label: { ms: 'Hantar atau langkau susulan', zh: '发送或跳过跟进', ta: 'பின்தொடர்வுகளை அனுப்பு அல்லது தவிர்' }, description: { ms: 'Hantar mesej susulan yang dicadangkan kepada pelanggan, atau langkaunya.', zh: '向客户发送建议的催促消息，或跳过。', ta: 'பரிந்துரைக்கப்பட்ட நினைவூட்டல் செய்தியை வாடிக்கையாளருக்கு அனுப்பு, அல்லது தவிர்.' } },
+  export_data: { label: { ms: 'Eksport data', zh: '导出数据', ta: 'தரவை ஏற்றுமதி செய்' }, description: { ms: 'CSV buku kenalan; eksport BOM dan PO juga memerlukan Lihat kos dan margin.', zh: '通讯录 CSV；BOM 和 PO 导出还需要“查看成本和利润”。', ta: 'தொடர்புப் புத்தக CSV; BOM, PO ஏற்றுமதிகளுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை.' } },
+  view_audit: { label: { ms: 'Lihat suapan aktiviti', zh: '查看活动动态', ta: 'செயல்பாட்டு ஊட்டத்தைக் காண்' }, description: { ms: 'Suapan audit (entri kos di dalamnya juga memerlukan Lihat kos dan margin).', zh: '审计动态（其中的成本条目还需要“查看成本和利润”）。', ta: 'தணிக்கை ஊட்டம் (அதிலுள்ள செலவு உள்ளீடுகளுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை).' } },
+  manage_team: { label: { ms: 'Tambah, edit dan nyahaktifkan orang', zh: '添加、编辑和停用成员', ta: 'நபர்களைச் சேர், திருத்து, செயலிழக்கச் செய்' } },
+  manage_roles: { label: { ms: 'Cipta dan edit peranan', zh: '创建和编辑角色', ta: 'பங்குகளை உருவாக்கு, திருத்து' } },
+  manage_settings: { label: { ms: 'Tetapan organisasi dan penjenamaan', zh: '组织设置和品牌', ta: 'நிறுவன அமைப்புகளும் பிராண்டிங்கும்' } },
+  approve_quotes: { label: { ms: 'Lulus, terima, tolak dan hantar sebut harga (perlindungan pangkalan data memerlukan pemilik)', zh: '批准、接受、拒绝和发送报价（数据库保护要求店主）', ta: 'விலைப்புள்ளிகளை அங்கீகரி, ஏற்று, நிராகரி, அனுப்பு (தரவுத்தளப் பாதுகாப்புக்கு உரிமையாளர் தேவை)' } },
+  decide_quotes: { label: { ms: 'Lulus, terima, tolak atau hantar sebut harga', zh: '批准、接受、拒绝或发送报价', ta: 'விலைப்புள்ளிகளை அங்கீகரி, ஏற்று, நிராகரி அல்லது அனுப்பு' } },
+  promote_to_cost_book: { label: { ms: 'Terima dokumen pembekal atau balasan tanya pembekal ke dalam buku kos', zh: '把供应商文档或询价回复收入成本册', ta: 'சப்ளையர் ஆவணம் அல்லது விசாரணைப் பதிலை செலவுப் புத்தகத்தில் ஏற்று' } },
+  erase_party: { label: { ms: 'Padam data peribadi pelanggan', zh: '删除客户的个人数据', ta: 'வாடிக்கையாளரின் தனிப்பட்ட தரவை அழி' } },
+  decide_field_proposals: { label: { ms: 'Lulus atau abaikan medan tambahan yang dicadangkan', zh: '批准或忽略建议的额外字段', ta: 'பரிந்துரைக்கப்பட்ட கூடுதல் புலங்களை அங்கீகரி அல்லது புறக்கணி' } },
+}
+export const PERM_GROUPS: Record<string, L> = {
+  'Costs and prices': { ms: 'Kos dan harga', zh: '成本和价格', ta: 'செலவுகளும் விலைகளும்' },
+  Contacts: { ms: 'Kenalan', zh: '联系人', ta: 'தொடர்புகள்' },
+  Documents: { ms: 'Dokumen', zh: '文档', ta: 'ஆவணங்கள்' },
+  Suppliers: { ms: 'Pembekal', zh: '供应商', ta: 'சப்ளையர்கள்' },
+  Quotes: { ms: 'Sebut harga', zh: '报价', ta: 'விலைப்புள்ளிகள்' },
+  Data: { ms: 'Data', zh: '数据', ta: 'தரவு' },
+  Activity: { ms: 'Aktiviti', zh: '活动', ta: 'செயல்பாடு' },
+}
+// `en` is the server's text: kept for English and for any key or group not listed above.
+export const permLabel = (k: string, en: string) => PERMS[k]?.label[getLang() as 'ms'] ?? en
+export const permDesc = (k: string, en: string) => PERMS[k]?.description?.[getLang() as 'ms'] ?? en
+export const permGroup = (g: string) => PERM_GROUPS[g]?.[getLang() as 'ms'] ?? g
+export const why = (k: string) => {
+  const n = getLang() === 'en' ? PERM_LABEL[k] ?? k : permLabel(k, PERM_LABEL[k] ?? k)
+  return t({ en: `Needs the “${n}” permission`, ms: `Memerlukan kebenaran “${n}”`, zh: `需要“${n}”权限`, ta: `“${n}” அனுமதி தேவை` })
+}
 // Spread on a button: `<button {...needs('manage_contacts', onClick)}>`. Without the permission it is aria-disabled, explains why in its title and does nothing.
 // Courtesy only: the server answers 403 either way.
 export const needs = (k: string, onClick?: () => void) => can(k) ? { onClick } : { 'aria-disabled': true as const, title: why(k), 'data-locked': true as const }
-export const DENIED = 'You do not have permission to do that. Ask the owner.'
+export const DENIED = 'You do not have permission to do that. Ask the owner.'   // English text; ui.tsx translates it when shown
 const isDenied = (e: unknown) => e instanceof ApiError && e.status === 403 && (e.code === 'permission_required' || e.code === 'owner_only')
 // A 403 may mean the role changed since /me was read: ask the shell to re-read it, at most once every 10 s.
 let lastPerms = 0

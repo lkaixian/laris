@@ -2,14 +2,33 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError, DENIED } from './api'
 import { tx, txOr } from './strings'
+import { t, useLang, locale } from './i18n'
+import type { Text } from './i18n'
 import { hasGuide, openGuide } from './Guide'
 import type { Me } from './api'
 import { Icon } from './icons'
 
+const S = {
+  notSet: { en: 'Not set', ms: 'Belum ditetapkan', zh: '未设置', ta: 'அமைக்கப்படவில்லை' },
+  wrong: { en: 'Something went wrong.', ms: 'Ada masalah berlaku.', zh: '出了点问题。', ta: 'ஏதோ தவறு ஏற்பட்டது.' },
+  denied: { en: DENIED, ms: 'Anda tiada kebenaran untuk berbuat demikian. Tanya pemilik.', zh: '您没有权限执行此操作。请询问老板。', ta: 'இதைச் செய்ய உங்களுக்கு அனுமதி இல்லை. உரிமையாளரிடம் கேளுங்கள்.' },
+  ai: { en: 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.', ms: 'Perkhidmatan bacaan AI tidak tersedia (ilmu_unavailable). Tiada apa yang disimpan.', zh: 'AI 读取服务暂时无法使用 (ilmu_unavailable)。没有保存任何内容。', ta: 'AI வாசிப்புச் சேவை கிடைக்கவில்லை (ilmu_unavailable). எதுவும் சேமிக்கப்படவில்லை.' },
+  ref: { en: 'Reference:', ms: 'Rujukan:', zh: '参考编号：', ta: 'குறிப்பு எண்:' },
+  again: { en: 'Try again', ms: 'Cuba lagi', zh: '重试', ta: 'மீண்டும் முயற்சிக்கவும்' },
+  nothing: { en: 'Nothing here yet.', ms: 'Belum ada apa-apa di sini.', zh: '这里还没有内容。', ta: 'இங்கே இன்னும் எதுவும் இல்லை.' },
+  loading: { en: 'Loading', ms: 'Memuatkan', zh: '加载中', ta: 'ஏற்றுகிறது' },
+  crumb: { en: 'Breadcrumb', ms: 'Jejak navigasi', zh: '导航路径', ta: 'வழிப் பாதை' },
+  scroll: { en: 'Scroll sideways to see more columns', ms: 'Tatal ke sisi untuk melihat lebih banyak lajur', zh: '向侧边滚动可查看更多列', ta: 'மேலும் நெடுவரிசைகளைக் காண பக்கவாட்டில் உருட்டவும்' },
+  dark: { en: 'Dark theme', ms: 'Tema gelap', zh: '深色主题', ta: 'இருண்ட தீம்' },
+  ages: { en: 'Age colours', ms: 'Warna umur', zh: '时长颜色', ta: 'வயது நிறங்கள்' },
+  offline: { en: 'You are offline. Changes cannot be saved until you reconnect.', ms: 'Anda di luar talian. Perubahan tidak dapat disimpan sehingga anda bersambung semula.', zh: '您已离线。重新连接后才能保存更改。', ta: 'நீங்கள் ஆஃப்லைனில் உள்ளீர்கள். மீண்டும் இணைக்கும் வரை மாற்றங்களைச் சேமிக்க முடியாது.' },
+  back: { en: 'Back online', ms: 'Kembali dalam talian', zh: '已重新联网', ta: 'மீண்டும் ஆன்லைனில்' },
+} satisfies Record<string, Text>
+
 // ---------- helpers ----------
-export const rm = (s: string | null | undefined) => (s == null ? 'Not set' : 'RM ' + Number(s).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+export const rm = (s: string | null | undefined) => (s == null ? t(S.notSet) : 'RM ' + Number(s).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 export const label = (s: string) => s.replace(/_/g, ' ')
-const errText = (e: unknown) => (e instanceof ApiError && e.status === 403 && (e.code === 'permission_required' || e.code === 'owner_only') ? DENIED : e instanceof Error ? e.message : 'Something went wrong.')
+const errText = (e: unknown) => (e instanceof ApiError && e.status === 403 && (e.code === 'permission_required' || e.code === 'owner_only') ? t(S.denied) : e instanceof Error ? (e.message === DENIED ? t(S.denied) : e.message) : t(S.wrong))
 // Text for putting an error in front of the user; marks it shown so api.ts does not also raise the global error toast for it.
 export const msg = (e: unknown) => { if (e instanceof ApiError) e.shown = true; return errText(e) }
 export const REVIEWABLE = ['received', 'parsed'] // 'in' statuses where the API still allows line edits (src/api/routes.py)
@@ -44,7 +63,7 @@ export function useAction() {
     setBusy(true); setErr(undefined)
     try { await fn() } catch (e) {
       const ai = e instanceof ApiError && e.code === 'ilmu_unavailable'
-      setErr({ text: ai ? 'The AI reading service is unavailable (ilmu_unavailable). Nothing was saved.' : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
+      setErr({ text: ai ? t(S.ai) : msg(e), retry: ai || (e instanceof ApiError && e.code === 'network') })
       if (e instanceof ApiError) e.shown = true
     } finally { setBusy(false) }
   }
@@ -67,25 +86,27 @@ export function Async({ s, empty, emptyText, emptyHint, emptyAction, rows, shape
   emptyHint?: string; emptyAction?: EmptyAction; rows?: number; shape?: SkeletonShape; children: ReactNode
 }) {
   useEffect(() => { if (s.err instanceof ApiError) s.err.shown = true }, [s.err])  // on screen here: no extra toast
+  useLang()
   if (s.error) return (
     <div role="alert" className="card border-warn bg-warn-bg text-warn">
       <p className="flex items-start gap-2"><Icon name="warn" className="mt-0.5 size-4 shrink-0" />{s.error}</p>
-      {s.err instanceof ApiError && s.err.requestId && <p className="mt-1 text-xs">Reference: {s.err.requestId}</p>}
-      <button className="btn mt-3" onClick={s.reload}>Try again</button>
+      {s.err instanceof ApiError && s.err.requestId && <p className="mt-1 text-xs">{t(S.ref)} {s.err.requestId}</p>}
+      <button className="btn mt-3" onClick={s.reload}>{t(S.again)}</button>
     </div>
   )
   if (s.loading && !s.data) return <Skeleton rows={rows} shape={shape} />
-  if (empty) return <EmptyState title={emptyText ?? 'Nothing here yet.'} hint={emptyHint} action={emptyAction} />
+  if (empty) return <EmptyState title={emptyText ?? t(S.nothing)} hint={emptyHint} action={emptyAction} />
   return <>{children}</>
 }
 
 // Placeholder bars while data loads. role=status + aria-busy so it is announced once; the pulse stops under prefers-reduced-motion.
 export type SkeletonShape = 'list' | 'cards' | 'text' | 'table' | 'tiles' | 'detail'
 export function Skeleton({ rows = 3, shape = 'list' }: { rows?: number; shape?: SkeletonShape }) {
+  useLang()
   // table: header bar plus 40px rows (the DataTable row height); tiles: 76px tiles in one strip; detail: title, key facts, panel.
   if (shape === 'table' || shape === 'tiles' || shape === 'detail') return (
     <div role="status" aria-busy="true" className="card overflow-hidden p-0">
-      <span className="sr-only">Loading...</span>
+      <span className="sr-only">{tx('common.loading')}</span>
       {shape === 'table' && <><div aria-hidden="true" className="skeleton h-9 rounded-none" />{Array.from({ length: rows }, (_, i) => <div key={i} aria-hidden="true" className="skeleton m-2 h-6" style={{ width: `${96 - ((i * 7) % 25)}%` }} />)}</>}
       {shape === 'tiles' && <div aria-hidden="true" className="grid grid-cols-2 md:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-[76px] rounded-none border-r border-surface" />)}</div>}
       {shape === 'detail' && <div aria-hidden="true" className="grid gap-3 p-4"><div className="skeleton h-7 w-1/2" /><div className="grid grid-cols-2 gap-3"><div className="skeleton h-10" /><div className="skeleton h-10" /></div><div className="skeleton h-32" /></div>}
@@ -94,7 +115,7 @@ export function Skeleton({ rows = 3, shape = 'list' }: { rows?: number; shape?: 
   const h = shape === 'cards' ? 'h-24' : shape === 'text' ? 'h-4' : 'h-16'
   return (
     <div role="status" aria-busy="true" className={`grid ${shape === 'cards' ? 'sm:grid-cols-2' : ''} gap-3`}>
-      <span className="sr-only">Loading...</span>
+      <span className="sr-only">{tx('common.loading')}</span>
       {Array.from({ length: rows }, (_, i) => <div key={i} aria-hidden="true" className={`skeleton ${h}`} style={shape === 'text' ? { width: `${95 - ((i * 17) % 40)}%` } : undefined} />)}
     </div>
   )
@@ -131,12 +152,13 @@ export function PageHeader({ title, description, meta, actions, back, crumbs, st
   title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }; crumbs?: Crumb[]; status?: ReactNode
 }) {
   const org = useContext(OrgCtx)
-  useEffect(() => { document.title = `${title ?? 'Loading'} · ${org}` }, [title, org])
+  const [lang] = useLang()
+  useEffect(() => { document.title = `${title ?? t(S.loading)} · ${org}` }, [title, org, lang])
   const trail = crumbs ?? (back ? [back] : undefined)  // `back` is a single crumb with an arrow; `crumbs` ends with the current page
   return (
     <div className="mb-5">
       {trail && (
-        <nav aria-label="Breadcrumb" className="mb-1 text-sm text-muted">
+        <nav aria-label={t(S.crumb)} className="mb-1 text-sm text-muted">
           <ol className="flex flex-wrap items-center">
             {trail.map((c, k) => {
               const last = !!crumbs && k === trail.length - 1
@@ -170,6 +192,7 @@ export function PageHeader({ title, description, meta, actions, back, crumbs, st
 
 // A wide table in its own horizontal scroll region (keyboard focusable), with a visible hint while columns are cut off.
 export function TableRegion({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
+  useLang()
   const box = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
   useEffect(() => {
@@ -184,7 +207,7 @@ export function TableRegion({ label, children, className = '' }: { label: string
   return (
     <div className="min-w-0 max-w-full">
       <div ref={box} className={`relative max-w-full overflow-x-auto ${className} rounded-card border border-hairline bg-surface`} role="region" aria-label={label} tabIndex={0}>{children}</div>
-      {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">Scroll sideways to see more columns</p>}
+      {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">{t(S.scroll)}</p>}
     </div>
   )
 }
@@ -196,6 +219,7 @@ export function Hint({ id, children }: { id: string; children: ReactNode }) {
 
 // compact = icon-only button for the app bar (same accessible name and aria-pressed). Default is the text button used on the sign-in screen.
 export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark: (d: boolean) => void; compact?: boolean }) {
+  useLang()
   const flip = () => {
     const t = dark ? 'light' : 'dark'
     document.documentElement.dataset.theme = t
@@ -203,8 +227,8 @@ export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark
     setDark(!dark)
   }
   return compact
-    ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label="Dark theme" title="Dark theme" onClick={flip}><Icon name="moon" /></button>
-    : <button className="btn" aria-pressed={dark} onClick={flip}>Dark theme</button>
+    ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label={t(S.dark)} title={t(S.dark)} onClick={flip}><Icon name="moon" /></button>
+    : <button className="btn" aria-pressed={dark} onClick={flip}>{t(S.dark)}</button>
 }
 
 // LARIS logo: laris-logo.png (light) or laris-logo-dark.png (dark); falls back to the text wordmark when no file is there.
@@ -271,8 +295,9 @@ const dayWord = (n: number) => tx('common.days', n)
 export const HeatChip = ({ heat, days }: { heat?: Heat | null; days: number }) =>
   heat ? <span className={`chip heat-${heat} tabular-nums`}>{`${heatName(heat)}, ${dayWord(days)}`}</span> : <span className="text-muted tabular-nums">{dayWord(days)}</span>
 export function HeatLegend({ counts }: { counts?: Partial<Record<Heat, number>> }) {
+  useLang()
   return (
-    <p className="flex flex-wrap items-center gap-2 text-sm text-muted" aria-label="Age colours">
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted" aria-label={t(S.ages)}>
       <span>{tx('heat.legend')}</span>
       {heatRows().map(([h, name, range]) => <span key={h} className={`chip heat-${h}`}>{`${name} ${range}${counts ? ` (${counts[h] ?? 0})` : ''}`}</span>)}
     </p>
@@ -283,6 +308,7 @@ export const OverdueChip = ({ reason }: { reason?: string | null }) => <span cla
 
 // Slim status line in the shell's banner slot. Offline: say changes cannot be saved. Back online: say so for 3 s and tell loaders that failed to try again ('laris:online').
 export function OfflineBanner() {
+  useLang()
   const [state, setState] = useState<'on' | 'off' | 'back'>(navigator.onLine ? 'on' : 'off')
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined
@@ -293,7 +319,7 @@ export function OfflineBanner() {
   }, [])
   return (
     <div role="status" className={state === 'on' ? undefined : `flex min-h-7 items-center justify-center px-4 text-xs ${state === 'off' ? 'bg-warn-bg text-warn' : 'bg-surface-2 text-ink'}`}>
-      {state === 'off' ? 'You are offline. Changes cannot be saved until you reconnect.' : state === 'back' ? 'Back online' : ''}
+      {state === 'off' ? t(S.offline) : state === 'back' ? t(S.back) : ''}
     </div>
   )
 }

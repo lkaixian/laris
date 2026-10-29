@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Icon } from './icons'
 import type { IconName } from './icons'
+import { locale } from './i18n'
 
 // Dashboard building blocks (Home). Styling lives in theme.css (.bento, .tile, .pipe, .gauge); motion is CSS only and
 // switched off by the global prefers-reduced-motion rule, so every block renders its final state without animation.
@@ -9,7 +10,7 @@ import type { IconName } from './icons'
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Counts up from the previous value to `value` with an ease-out. Screen readers get the final value only.
-export function CountUp({ value, format = n => Math.round(n).toLocaleString('en-MY') }: { value: number; format?: (n: number) => string }) {
+export function CountUp({ value, format = n => Math.round(n).toLocaleString(locale()) }: { value: number; format?: (n: number) => string }) {
   const [shown, setShown] = useState(reduced() ? value : 0)
   const from = useRef(shown)
   useEffect(() => {

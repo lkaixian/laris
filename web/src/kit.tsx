@@ -3,6 +3,7 @@ import { tx } from './strings'
 import type { ReactNode } from 'react'
 import { TableRegion } from './ui'
 import { Icon } from './icons'
+import { t, useLang } from './i18n'
 
 // Shared building blocks for the page layouts (docs/ui-polish-spec.md section C). Flat panels, hairlines, no new colours.
 
@@ -117,7 +118,8 @@ export function Tabs({ label, value, options, onChange }: { label: string; value
 
 // ---------- menu (disclosure, as in the user menu) ----------
 // Children are menu rows: <a className="sidelink"> or <button className="sidelink w-full text-left">. Closes on Escape, outside click, focus leaving.
-export function MoreMenu({ label = 'More', children, align = 'right' }: { label?: string; children: ReactNode; align?: 'left' | 'right' }) {
+export function MoreMenu({ label, children, align = 'right' }: { label?: string; children: ReactNode; align?: 'left' | 'right' }) {
+  useLang()
   const [open, setOpen] = useState(false)
   const btn = useRef<HTMLButtonElement>(null)
   const box = useRef<HTMLDivElement>(null)
@@ -130,7 +132,7 @@ export function MoreMenu({ label = 'More', children, align = 'right' }: { label?
   }, [open])
   return (
     <div ref={box} className="relative" onBlur={e => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) setOpen(false) }} onClick={e => { if ((e.target as HTMLElement).closest('a,button[data-close]')) setOpen(false) }}>
-      <button ref={btn} type="button" className="btn gap-1" aria-expanded={open} onClick={() => setOpen(!open)}>{label}<Icon name="down" className="size-4" /></button>
+      <button ref={btn} type="button" className="btn gap-1" aria-expanded={open} onClick={() => setOpen(!open)}>{label ?? t({ en: 'More', ms: 'Lagi', zh: '更多', ta: 'மேலும்' })}<Icon name="down" className="size-4" /></button>
       {open && <div className={`card absolute top-full z-40 mt-1 grid w-56 gap-0.5 p-1 shadow-2 ${align === 'right' ? 'right-0' : 'left-0'}`}>{children}</div>}
     </div>
   )

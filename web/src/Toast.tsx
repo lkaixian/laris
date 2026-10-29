@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from './icons'
+import { t, useLang } from './i18n'
 
 // Light toast system.
 //   const toast = useToast(); toast('Settings saved.')          confirmation: polite, gone after 5 s
@@ -18,9 +19,10 @@ export const useToast = () => useContext(Ctx)
 const MAX = 3
 const LIFE_MS = 5000
 const DEDUPE_MS = 10_000
-const GENERIC = 'Something went wrong. Reload the page if it keeps happening.'
+const generic = () => t({ en: 'Something went wrong. Reload the page if it keeps happening.', ms: 'Sesuatu tidak kena. Muat semula halaman jika ia berterusan.', zh: '出了点问题。如果问题持续出现，请重新加载页面。', ta: 'ஏதோ தவறு நடந்துவிட்டது. தொடர்ந்தால் பக்கத்தை மீண்டும் ஏற்றவும்.' })
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  useLang()
   const [list, setList] = useState<{ id: number; text: string; link?: Link; action?: Action; error?: boolean }[]>([])
   const n = useRef(0)
   const recent = useRef(new Map<string, number>())
@@ -44,21 +46,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return Object.assign((text: string, link?: Link | { action: Action }) => add(text, link), { error })
   }, [arm])
   useEffect(() => {
-    const ev = (e: Event) => push.error(String((e as CustomEvent).detail || GENERIC))  // api.ts: unhandled 5xx
+    const ev = (e: Event) => push.error(String((e as CustomEvent).detail || generic()))  // api.ts: unhandled 5xx
     const rej = (e: PromiseRejectionEvent) => {
       const r = e.reason
       if (r?.name === 'AbortError' || r?.toasted) return
-      push.error(typeof r?.status === 'number' && r.message ? String(r.message) : GENERIC)
+      push.error(typeof r?.status === 'number' && r.message ? String(r.message) : generic())
     }
-    const err = (e: ErrorEvent) => { if (!/ResizeObserver loop|^Script error/.test(e.message ?? '') && !/AbortError/.test(String(e.error?.name))) push.error(GENERIC) }
+    const err = (e: ErrorEvent) => { if (!/ResizeObserver loop|^Script error/.test(e.message ?? '') && !/AbortError/.test(String(e.error?.name))) push.error(generic()) }
     addEventListener('laris:error', ev); addEventListener('unhandledrejection', rej); addEventListener('error', err)
     return () => { removeEventListener('laris:error', ev); removeEventListener('unhandledrejection', rej); removeEventListener('error', err) }
   }, [push])
-  const row = (t: (typeof list)[number]) => (
-    <div key={t.id} className="toast pointer-events-auto" onMouseEnter={() => hold(t.id)} onMouseLeave={() => !t.error && arm(t.id)} onFocus={() => hold(t.id)} onBlur={() => !t.error && arm(t.id)}>
-      <Icon name={t.error ? 'warn' : 'check'} className={`mt-0.5 size-4 shrink-0 ${t.error ? 'text-warn' : 'text-accent'}`} />
-      <span className="min-w-0 flex-1 break-words">{t.text}{t.link && <> <a className="link" href={t.link.href}>{t.link.label}</a></>}{t.action && <> <button type="button" className="link font-semibold" onClick={() => { t.action!.onClick(); dismiss(t.id) }}>{t.action.label}</button></>}</span>
-      <button type="button" className="toast-x" aria-label={`Dismiss: ${t.text}`} onClick={() => dismiss(t.id)}><Icon name="close" className="size-4" /></button>
+  const row = (x: (typeof list)[number]) => (
+    <div key={x.id} className="toast pointer-events-auto" onMouseEnter={() => hold(x.id)} onMouseLeave={() => !x.error && arm(x.id)} onFocus={() => hold(x.id)} onBlur={() => !x.error && arm(x.id)}>
+      <Icon name={x.error ? 'warn' : 'check'} className={`mt-0.5 size-4 shrink-0 ${x.error ? 'text-warn' : 'text-accent'}`} />
+      <span className="min-w-0 flex-1 break-words">{x.text}{x.link && <> <a className="link" href={x.link.href}>{x.link.label}</a></>}{x.action && <> <button type="button" className="link font-semibold" onClick={() => { x.action!.onClick(); dismiss(x.id) }}>{x.action.label}</button></>}</span>
+      <button type="button" className="toast-x" aria-label={`${t({ en: 'Dismiss', ms: 'Tutup', zh: '关闭', ta: 'மூடு' })}: ${x.text}`} onClick={() => dismiss(x.id)}><Icon name="close" className="size-4" /></button>
     </div>
   )
   return (

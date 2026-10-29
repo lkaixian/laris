@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { MOCK, canOpen, getToken, logout } from './api'
 import { Palette } from './Palette'
 import { LANGS, setLang, t, useLang } from './i18n'
+import type { Text } from './i18n'
 import { tx, txOr } from './strings'
 import { hasGuide, startGuide } from './Guide'
 import type { Me, Role } from './api'
@@ -23,6 +24,16 @@ import { startTour } from './Tour'
   exist in PAGES in App.tsx. Access follows canOpen(key, owner) from api.ts, so a user never sees what they cannot open.
   `when` is for extra rules that depend on /api/me (see 'catalog').
 */
+const SH = {
+  skip: { en: 'Skip to content', ms: 'Langkau ke kandungan', zh: '跳到正文', ta: 'உள்ளடக்கத்துக்குச் செல்' },
+  sidebar: { en: 'Sidebar', ms: 'Bar sisi', zh: '侧边栏', ta: 'பக்கப்பட்டி' },
+  home: { en: 'LARIS home', ms: 'Laman utama LARIS', zh: 'LARIS 首页', ta: 'LARIS முகப்பு' },
+  expand: { en: 'Expand menu', ms: 'Kembangkan menu', zh: '展开菜单', ta: 'மெனுவை விரி' },
+  collapse: { en: 'Collapse menu', ms: 'Kuncupkan menu', zh: '收起菜单', ta: 'மெனுவைச் சுருக்கு' },
+  open: { en: 'Open menu', ms: 'Buka menu', zh: '打开菜单', ta: 'மெனுவைத் திற' },
+  menu: { en: 'Menu', ms: 'Menu', zh: '菜单', ta: 'மெனு' },
+  close: { en: 'Close menu', ms: 'Tutup menu', zh: '关闭菜单', ta: 'மெனுவை மூடு' },
+} satisfies Record<string, Text>
 export interface NavItem { key: string; label: string; icon: IconName; when?: (me?: Me) => boolean }
 export const NAV: { label: string; items: NavItem[] }[] = [
   { label: 'Work', items: [
@@ -178,7 +189,7 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
   return (
     <div className="fixed inset-0 z-50 md:hidden" onKeyDown={keys}>
       <div aria-hidden="true" className="absolute inset-0 bg-ink/50" style={{ animation: 'fade-in 150ms ease-out' }} onClick={onClose} />
-      <div ref={box} role="dialog" aria-modal="true" aria-label="Menu" className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface shadow-3" style={{ animation: 'drawer-in 160ms ease-out' }}>
+      <div ref={box} role="dialog" aria-modal="true" aria-label={t(SH.menu)} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface shadow-3" style={{ animation: 'drawer-in 160ms ease-out' }}>
         {children}
       </div>
     </div>
@@ -229,14 +240,14 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
 
   return (
     <>
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-[70] focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-[70] focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>{t(SH.skip)}</a>
       <div className="md:flex">
-        <div role="region" aria-label="Sidebar" inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-14' : 'w-58'}`}>
+        <div role="region" aria-label={t(SH.sidebar)} inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-14' : 'w-58'}`}>
           <div className={`flex shrink-0 items-center border-b border-hairline ${collapsed ? 'flex-col gap-1 px-1 py-2' : 'h-14 justify-between pl-4 pr-2'}`}>
-            <a href="#/home" className="inline-flex min-h-(--control-h) items-center" aria-label="LARIS home">
+            <a href="#/home" className="inline-flex min-h-(--control-h) items-center" aria-label={t(SH.home)}>
               {collapsed ? <img src="/brand/laris-mark.png" alt="" className="size-8 object-contain" /> : <Brand dark={dark} />}
             </a>
-            <button type="button" className="btn btn-quiet size-(--control-h) px-0" aria-expanded={!collapsed} aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} title={collapsed ? 'Expand menu' : 'Collapse menu'} onClick={toggleCollapsed}>
+            <button type="button" className="btn btn-quiet size-(--control-h) px-0" aria-expanded={!collapsed} aria-label={t(collapsed ? SH.expand : SH.collapse)} title={t(collapsed ? SH.expand : SH.collapse)} onClick={toggleCollapsed}>
               <Icon name={collapsed ? 'right' : 'left'} />
             </button>
           </div>
@@ -247,7 +258,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
         <div className="min-w-0 flex-1" inert={drawer || pal || undefined}>
           <header className="z-30 border-b border-hairline bg-surface md:sticky md:top-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 md:h-14 md:flex-nowrap md:px-6 md:py-0">
-              <button ref={menuBtn} type="button" className="btn size-11 px-0 md:hidden" aria-label="Open menu" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" /></button>
+              <button ref={menuBtn} type="button" className="btn size-11 px-0 md:hidden" aria-label={t(SH.open)} aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" /></button>
               <span className="shrink-0 md:hidden"><Brand dark={dark} /></span>
               {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line md:hidden" /><div className="min-w-0 flex-1 md:hidden"><OrgMark org={me.org} /></div></>}
               {!me && <span className="flex-1 md:hidden" />}
@@ -273,7 +284,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
       {drawer && (
         <Drawer onClose={closeDrawer}>
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-hairline px-3">
-            <button type="button" className="btn size-11 px-0" aria-label="Close menu" onClick={closeDrawer}><Icon name="close" /></button>
+            <button type="button" className="btn size-11 px-0" aria-label={t(SH.close)} onClick={closeDrawer}><Icon name="close" /></button>
             <Brand dark={dark} />
           </div>
           {me && <div className="border-b border-soft px-3 py-2"><OrgMark org={me.org} /></div>}

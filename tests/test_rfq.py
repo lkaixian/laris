@@ -123,7 +123,7 @@ def test_ask_records_sends_and_isolates_a_failure(env, monkeypatch):
                             {"supplier_id": sup["B"], "status": "failed", "error": "WhatsApp refused it (HTTP 400)"}]
     assert [c[0] for c in e.meta.calls].count("media") == 1  # uploaded once
     assert all(c[1].startswith("/v21.0/PN1/") for c in e.meta.calls)  # the tenant's own number
-    assert e.meta.calls[1][2]["image"]["caption"] == "How much for the circled one? Any MOQ or bulk price?"
+    assert e.meta.calls[1][2]["image"]["caption"] == "How much for the marked one? Any MOQ or bulk price?"
     rows = e.sql("select supplier_id::text s, status, wamid from rfq_sends order by status")
     assert [(x["status"], x["wamid"]) for x in rows] == [("failed", None), ("sent", f"wamid.out.2.{SA}.image")]
     assert e.sql("select count(*) n from rfq_replies where status='waiting'")[0]["n"] == 1  # only the sent one waits

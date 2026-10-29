@@ -176,13 +176,13 @@ const dot = (c: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns=
 const rp = (reply_id: string, supplier_id: string, supplier_name: string, text: string, p: Partial<{ unit_price: string; min_qty: string; tiers: { min_qty: string; unit_price: string }[]; status: string }> = {}) =>
   ({ reply_id, send_id: 's' + reply_id, supplier_id, supplier_name, text, unit_price: null as string | null, min_qty: null as string | null, tiers: [] as { min_qty: string; unit_price: string }[], status: 'waiting', ...p })
 const rfqs = [
-  { id: 'rfq-1', description: 'ballet flat, cream, strap', note: 'How much for the circled one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 36e5).toISOString(), image_url: dot('#e8dcc8'),
+  { id: 'rfq-1', description: 'ballet flat, cream, strap', note: 'How much for the marked one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 36e5).toISOString(), image_url: dot('#e8dcc8'),
     replies: [
       rp('r1', 'p1', supA.name, 'RM 18 each, min 12 pairs. 100 pairs or more RM 16.', { unit_price: '18.0000', min_qty: '12', tiers: [{ min_qty: '100', unit_price: '16.0000' }], status: 'ready' }),
       rp('r2', 'p4', 'SAMPLE Supplier B Footwear (synthetic)', 'RM 15.50 per pair, MOQ 24.', { unit_price: '15.5000', min_qty: '24', status: 'ready' }),
       rp('r3', 'p5', 'SAMPLE Supplier C Leather (synthetic)', ''),
     ] },
-  { id: 'rfq-2', description: 'brass buckle 25mm', note: 'How much for the circled one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 864e5).toISOString(), image_url: dot('#d6d9e0'),
+  { id: 'rfq-2', description: 'brass buckle 25mm', note: 'How much for the marked one? Any MOQ or bulk price?', created_at: new Date(Date.now() - 864e5).toISOString(), image_url: dot('#d6d9e0'),
     replies: [
       rp('r4', 'p4', 'SAMPLE Supplier B Footwear (synthetic)', 'RM 2.20 each, no MOQ.', { unit_price: '2.2000', min_qty: '1', status: 'needs_review' }),
       rp('r5', 'p5', 'SAMPLE Supplier C Leather (synthetic)', ''),

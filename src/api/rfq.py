@@ -21,7 +21,7 @@ from .routes import MAGIC, Transition, read_capped, transition
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
 
-DEFAULT_NOTE = "How much for the circled one? Any MOQ or bulk price?"
+DEFAULT_NOTE = "How much for the marked one? Any MOQ or bulk price?"
 MAX_IMAGE, MAX_SUPPLIERS = 8_000_000, 20
 IMAGES = ("image/jpeg", "image/png")  # WhatsApp image messages take nothing else (WebP is for stickers)
 

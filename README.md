@@ -158,7 +158,7 @@ python -m pytest -q
 npm ci && node tests/schema_check.mjs && node tests/db_check.mjs && node tests/roles_check.mjs
 ```
 
-The suite has 686 tests. GitHub Actions runs them on every push in four file groups, each in its own process, after one single-process run was killed for memory. The result of that CI change has not been read yet.
+The suite has 686 tests. GitHub Actions runs them on every push as parallel jobs: the backend tests in four file groups (a-c, d-l, m-r, s-z) on PGlite, the same four groups again against a real Postgres 16 service (`backend-pg`), a `checks` job (schema, db and roles checks, pip-audit) and the web build. Each group has its own runner, so no single process holds every test (one run of all of them was killed for memory). The result of this CI layout has not been read yet.
 
 ## How We Use Replit (Required)
 

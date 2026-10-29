@@ -36,7 +36,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - run: npm ci # PGlite for the Postgres-backed tests
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q -rs "tests/test_[${{ matrix.group }}]*.py"
+      - run: pytest -q -rs tests/test_[${{ matrix.group }}]*.py
 
   checks:
     runs-on: ubuntu-latest
@@ -86,7 +86,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q -rs "tests/test_[${{ matrix.group }}]*.py"
+      - run: pytest -q -rs tests/test_[${{ matrix.group }}]*.py
 
   web:
     runs-on: ubuntu-latest

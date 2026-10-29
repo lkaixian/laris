@@ -139,8 +139,8 @@ export function MarkPhoto({ img, canvasRef, onClear }: { img: HTMLImageElement; 
       <p role="status" className="sr-only">{announce}</p>
       {sel !== null && (
         <div className="flex items-center justify-between gap-6">
-          <button type="button" className="btn min-h-14 min-w-28 gap-2 border-warn text-lg font-bold text-warn" onClick={() => { setAnnounce(t(S.del)); remove(sel) }}><span aria-hidden="true">✕</span>{t(S.del)}</button>
-          <button type="button" className="btn btn-primary min-h-14 min-w-28 gap-2 text-lg font-bold" onClick={() => { setAnnounce(t(S.ok)); setSel(null) }}><span aria-hidden="true">✓</span>{t(S.ok)}</button>
+          <button type="button" className="btn min-h-11 min-w-24 gap-1.5 border-warn font-semibold text-warn" onClick={() => { setAnnounce(t(S.del)); remove(sel) }}><span aria-hidden="true">✕</span>{t(S.del)}</button>
+          <button type="button" className="btn btn-primary min-h-11 min-w-24 gap-1.5 font-semibold" onClick={() => { setAnnounce(t(S.ok)); setSel(null) }}><span aria-hidden="true">✓</span>{t(S.ok)}</button>
         </div>
       )}
     </div>

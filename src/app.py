@@ -32,6 +32,8 @@ RID = re.compile(r"[A-Za-z0-9._-]{8,64}")
 
 @asynccontextmanager
 async def lifespan(app):
+    if (os.environ.get("WEB_CONCURRENCY") or "1").strip() not in ("", "1"):
+        log.warning("WEB_CONCURRENCY is above 1: sign-in lockout and rate limits are kept per process, so each worker counts on its own")
     if os.environ.get("DATABASE_URL"):
         db.apply_schema()  # idempotent; SEED=1 loads the synthetic made-to-order demo
         with db.tx(tenant=db.ALL_TENANTS) as c:

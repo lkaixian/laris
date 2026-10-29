@@ -5,6 +5,7 @@ import { AuthPage } from './Login'
 import { msg } from './ui'
 import { Icon } from './icons'
 import { useToast } from './Toast'
+import { ConfirmDialog } from './kit'
 
 /*
   Self-service onboarding, all public (no session): #/register (form, then code), #/forgot (email, then code + new password).
@@ -211,16 +212,19 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
     } finally { inflight.current = false; setBusy(false) }
   }
 
-  const bar = <Progress step={step} />
+  const [leaving, setLeaving] = useState(false)  // confirm dialog for the logo link on steps 2 and 3
+  const onBrand = (e: { preventDefault: () => void }) => { if (step > 1) { e.preventDefault(); setLeaving(true) } }
+  const quit = () => { savePending(null); setLeaving(false); location.hash = '#/login' }
+  const bar = <><Progress step={step} /><ConfirmDialog open={leaving} title="Leave sign-up?" body="Your progress will be lost. If a code was already sent, you can start again later." confirmLabel="Leave" danger onConfirm={quit} onCancel={() => setLeaving(false)} /></>
   if (step === 3) return (
-    <AuthPage dark={dark} setDark={setDark}>
+    <AuthPage dark={dark} setDark={setDark} onBrand={onBrand}>
       {bar}
       <Card title="Enter your code" lead={<>{info || 'We sent a 6-digit code'} to <strong className="break-words text-ink">{pending}</strong>. It works for 10 minutes.</>} focusKey="code" onSubmit={() => code.length === 6 && verify(code)}>
         <DevCode code={dev} />
         <CodeField value={code} onChange={setCode} onComplete={verify} autoSubmit error={codeErr} />
         <button type="submit" className="btn btn-primary" aria-disabled={busy || code.length < 6 || undefined}>{busy ? 'Checking...' : 'Verify email'}</button>
         <Resend send={async () => { const r = await publicApi<{ dev_code?: string }>('POST', '/signup/resend', { email: pending }); setDev(r.dev_code) }} />
-        <button type="button" className="link justify-self-start text-sm" onClick={() => { savePending(null); setPending(''); setCode(''); setCodeErr(''); setInfo(''); setDev(undefined); setStep(2) }}>Use a different email</button>
+        <button type="button" className="link justify-self-start text-sm" onClick={() => { savePending(null); setPending(''); setCode(''); setCodeErr(''); setInfo(''); setDev(undefined); setStep(2) }}>‹ Back, use a different email</button>
       </Card>
     </AuthPage>
   )
@@ -228,7 +232,7 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
   if (step === 2) {
     const pwHelp = 'reg-pw-rules'
     return (
-      <AuthPage dark={dark} setDark={setDark}>
+      <AuthPage dark={dark} setDark={setDark} onBrand={onBrand}>
         {bar}
         <Card title="Your account" lead={<>Creating <strong className="break-words text-ink">{f.business_name.trim()}</strong>. We email a 6-digit code to confirm your address.</>} focusKey="account" onSubmit={step2}>
           <Field label="Your name" name="owner_name" autoComplete="name" maxLength={80} value={f.owner_name} onChange={set('owner_name')} error={errs.owner_name} />
@@ -240,7 +244,7 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
           {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
           <p className="text-xs text-muted">By creating an account you agree to use LARIS for your business and to keep your sign-in details private.</p>
           <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Please wait...' : 'Create account'}</button>
-          <button type="button" className="link justify-self-start text-sm" onClick={() => { setErrs({}); setFormErr(''); setAvail('idle'); setStep(1) }}>Back</button>
+          <button type="button" className="link justify-self-start text-sm" onClick={() => { setErrs({}); setFormErr(''); setAvail('idle'); setStep(1) }}>‹ Back</button>
         </Card>
         <Back />
       </AuthPage>
@@ -248,8 +252,9 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
   }
 
   return (
-    <AuthPage dark={dark} setDark={setDark}>
+    <AuthPage dark={dark} setDark={setDark} onBrand={onBrand}>
       {bar}
+      <a className="link inline-flex min-h-11 items-center justify-self-start text-sm" href="#/login">‹ Back to sign in</a>
       <Card title="Create a business account" lead="Start with your business name and type. We check the name is free." focusKey="business" onSubmit={step1}>
         <Field label="Business name" name="business_name" autoComplete="organization" minLength={2} maxLength={80} value={f.business_name} onChange={set('business_name')} error={errs.business_name} />
         <label className="flex flex-col gap-1 text-sm font-semibold">Type of business

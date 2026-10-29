@@ -13,7 +13,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 from .. import auth, db, mailer
 from ..errors import ApiError
 from ..templates import KEY_RE, TemplateError
-from .deps import svc, throttle
+from .deps import hit, svc, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from openpyxl import load_workbook
 
-from src import db, scheduler
+from src import db, pipeline, scheduler
 from src.api.deps import STAFF_HIDE
 from support.fixtures import env, pg_url  # noqa: F401
 
@@ -478,6 +478,21 @@ def test_junk_extraction_line_does_not_sink_document(env):
     r = e.c.post("/api/documents/ingest", data={"text": "junk"}, headers=e.S)
     assert r.status_code == 201
     assert e.sql("select issued_on from documents where doc_no='J-1'")[0]["issued_on"] is not None  # defaults to today
+
+
+def test_database_error_while_sending_keeps_sent_status(env, monkeypatch):
+    e = env
+    d = make_draft(e, headers=e.S)
+    tr(e, d, "reviewed", e.S)
+    tr(e, d, "approved")
+
+    def boom(conn, *a, **k):
+        conn.execute("select 1/0")  # a database error after the "message went out": aborts the transaction unless a savepoint contains it
+        return True
+    monkeypatch.setattr(pipeline, "send_quote", boom)
+    r = tr(e, d, "sent")
+    assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["delivery"] == "failed"
+    assert e.sql("select status from documents where id=%s", (d,))[0]["status"] == "sent"
 
 
 def test_send_failure_is_reported(env):

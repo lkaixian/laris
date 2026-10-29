@@ -12,11 +12,12 @@ const lastBiz = (email: string): string => { try { return JSON.parse(localStorag
 const rememberBiz = (email: string, id: string) => { try { const m = JSON.parse(localStorage.getItem(BIZ_KEY) ?? '{}'); m[email.toLowerCase()] = id; localStorage.setItem(BIZ_KEY, JSON.stringify(m)) } catch { /* storage blocked */ } }
 
 // Full-bleed centred page for sign-in, register, verify and reset: logo, theme toggle, then the card(s). No sidebar.
-export function AuthPage({ dark, setDark, children }: { dark: boolean; setDark: (d: boolean) => void; children: ReactNode }) {
+// The logo always links to sign-in; `onBrand` lets a page intercept the click (e.g. confirm before leaving a half-done sign-up).
+export function AuthPage({ dark, setDark, children, onBrand }: { dark: boolean; setDark: (d: boolean) => void; children: ReactNode; onBrand?: (e: { preventDefault: () => void }) => void }) {
   return (
     <main id="main" className="mx-auto grid min-h-screen max-w-md content-center gap-6 px-4 py-8">
       <div className="flex items-center justify-between gap-4">
-        <Brand dark={dark} />
+        <a href="#/login" aria-label="LARIS, go to sign in" onClick={onBrand} className="inline-flex min-h-11 items-center"><Brand dark={dark} /></a>
         <ThemeToggle dark={dark} setDark={setDark} />
       </div>
       {children}

@@ -234,7 +234,8 @@ def transition(doc_id: UUID, body: Transition, request: Request, ctx: Ctx = Depe
     out = summary(ctx, get_doc(ctx, doc_id))
     if to == "sent":
         try:  # the customer gets the SELLING price only; a send failure must not undo the owner's decision
-            out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request), doc_id, pipeline.new_link(c, doc_id, ctx.user_id)[0]) else "not_sent"
+            with c.transaction():  # a savepoint: a database error after the message went out must not roll back the `sent` status
+                out["delivery"] = "delivered" if pipeline.send_quote(c, svc(request), doc_id, pipeline.new_link(c, doc_id, ctx.user_id)[0]) else "not_sent"
         except Exception:
             log.exception("could not send quote %s", doc_id)
             out["delivery"] = "failed"  # surfaced so the owner can resend by hand
@@ -261,7 +262,8 @@ def send_quote(doc_id: UUID, body: SendQuote, request: Request, ctx: Ctx = Depen
     throttle(f"send:{ctx.tenant_id}", 20, 3600, "Too many quotes sent in an hour. Wait a while.")
     delivery = {"channel": body.channel, "status": "delivered"}
     try:
-        pipeline.deliver_quote(ctx.conn, svc(request), doc_id, body.channel, to, body.message, pipeline.new_link(ctx.conn, doc_id, ctx.user_id)[0])
+        with ctx.conn.transaction():  # savepoint: a database error while recording a delivered message must not poison the request
+            pipeline.deliver_quote(ctx.conn, svc(request), doc_id, body.channel, to, body.message, pipeline.new_link(ctx.conn, doc_id, ctx.user_id)[0])
     except Exception as e:  # the owner sees a plain reason; the address and provider text stay out of it
         log.warning("quote %s not sent on %s: %s", doc_id, body.channel, type(e).__name__)
         delivery = {"channel": body.channel, "status": "failed",

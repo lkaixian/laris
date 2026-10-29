@@ -26,7 +26,8 @@ from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
 from . import listings, privacy
-from .deps import HITS, JR, Ctx, hit, throttle
+from .bot_text import HELP, NO_ROW, SORRY, SORRYS, T, VOICE_SORRY, Reply, _lang, bot_settings, dpo_line  # noqa: F401  (re-exported)
+from .deps import JR, hit, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -39,82 +40,18 @@ CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 HELP_CMD = re.compile(r"\s*/(start|help)(@\w+)?\s*$", re.I)
 RIGHTS_CMD = re.compile(r"\s*/(privacy|mydata|forget)(@\w+)?\s*$", re.I)  # a customer's PDPA commands
 RIGHTS_LIMIT = 5  # rights commands per (business, sender) per 10 minutes
-HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 kg PLA, how much?\", and we will send you a quote.\n"
-        "Staff: forward a supplier PDF or photo to record its prices, or send a product photo with the caption /catalog.")
-SORRY = "Sorry, we could not process that message. Our team will follow up."
-VOICE_SORRY = "Sorry, I could not hear that clearly. Please send the voice note again, or type your request."
-# The fixed customer-facing strings, English and Malay (the owner picks the language, or "auto" follows the customer's words).
-T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
-            "noted": "Noted, thank you. We will confirm {doc} with you shortly.",
-            "received": "Received {doc}; it is queued for review.", "doc": "your document",
-            "thanks": "Thanks, we received your enquiry ({doc}). We will send your quote shortly.",
-            "clarify": "Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity.",
-            "after": "We are closed right now. We will reply when we open.",
-            "notice": "Privacy notice: we keep the messages you send us and the quotes we prepare for you, so we can serve you. Voice notes are transcribed "
-                      "and the audio is not kept. The business and its team can see this, and the services that run our chat and AI reading process it for us.{dpo}\n"
-                      "By continuing to message us you accept this. Send /privacy to read this again, /mydata to get a copy of your data, "
-                      "or /forget to ask us to erase it.",
-            "dpo": " For questions, contact our data protection contact: {who}.",
-            "forget": "We received your request. The business will confirm after checking quotes it must keep.",
-            "erased": "Your data has been erased.",
-            "kept": "The business could not erase your data because it must keep some records.{dpo}",
-            "mydata": "A copy of the data we hold about you.",
-            "mydata_fail": "Sorry, we could not send your data file. Please try again later or contact the business."},
-     "ms": {"welcome": "Hai! Hantar apa yang anda perlukan dalam mesej atau nota suara, contohnya \"50 kg PLA, berapa harga?\", dan kami akan hantar sebut harga.\n"
-                       "Staf: majukan PDF atau gambar pembekal untuk merekod harganya, atau hantar gambar produk dengan kapsyen /catalog.",
-            "sorry": "Maaf, kami tidak dapat memproses mesej itu. Pasukan kami akan menghubungi anda.",
-            "voice": "Maaf, saya tidak dapat mendengar nota suara itu dengan jelas. Sila hantar semula, atau taip permintaan anda.",
-            "noted": "Baik, terima kasih. Kami akan sahkan {doc} dengan anda tidak lama lagi.",
-            "received": "{doc} telah diterima dan sedang menunggu semakan.", "doc": "Dokumen anda",
-            "thanks": "Terima kasih, pertanyaan anda ({doc}) telah kami terima. Kami akan hantar sebut harga tidak lama lagi.",
-            "clarify": "Maaf, kami tidak pasti apa yang anda perlukan atau berapa banyak. Kami beri sebut harga untuk: {names}. Sila balas dengan item dan kuantiti.",
-            "after": "Kami sudah tutup sekarang. Kami akan balas apabila kedai dibuka semula.",
-            "notice": "Notis privasi: kami menyimpan mesej yang anda hantar dan sebut harga yang kami sediakan untuk anda, supaya kami dapat melayan anda. "
-                      "Nota suara ditranskripsi dan audio tidak disimpan. Perniagaan ini dan pasukannya boleh melihatnya, dan perkhidmatan yang menjalankan "
-                      "sembang dan bacaan AI kami memprosesnya bagi pihak kami.{dpo}\n"
-                      "Dengan terus menghantar mesej kepada kami, anda bersetuju. Hantar /privacy untuk baca semula, /mydata untuk salinan data anda, "
-                      "atau /forget untuk meminta kami memadamnya.",
-            "dpo": " Untuk pertanyaan, hubungi pegawai perlindungan data kami: {who}.",
-            "forget": "Kami telah menerima permintaan anda. Perniagaan akan mengesahkan selepas menyemak sebut harga yang mesti disimpan.",
-            "erased": "Data anda telah dipadam.",
-            "kept": "Perniagaan tidak dapat memadam data anda kerana ada rekod yang mesti disimpan.{dpo}",
-            "mydata": "Salinan data anda yang kami simpan.",
-            "mydata_fail": "Maaf, kami tidak dapat menghantar fail data anda. Sila cuba lagi nanti atau hubungi perniagaan."}}
-T["ms"]["help"] = T["ms"]["welcome"]
-SORRYS = {t[k] for t in T.values() for k in ("sorry", "voice")}
-MALAY = {"nak", "ada", "tak", "tidak", "berapa", "tolong", "harga", "boleh", "saya", "kita", "kami", "terima", "kasih", "mahu", "hendak", "tempah", "sila", "untuk"}
-AH = {"enabled": False, "message": "", "open": "09:00", "close": "18:00", "days": [1, 2, 3, 4, 5, 6, 7]}  # days: ISO weekdays, Monday = 1
-NO_ROW = {"welcome": None, "help": None, "language": "auto", "quick_replies": [], "after_hours": AH, "reactions": True}
 
 
-class Reply(str):
-    """Reply text that also carries a Telegram reply keyboard (the /start welcome), or a file to send with the text as its caption
-    (document = (bytes, file name, text to send instead if the file cannot be sent))."""
-    markup = None
-    document = None
 
 
-def bot_settings(conn, tid) -> dict:
-    """The owner's customisation of the customer bot (tenant_bot_settings); no row = the defaults."""
-    row = conn.execute("select welcome, help, language, quick_replies, after_hours, reactions from tenant_bot_settings where tenant_id=%s", (tid,)).fetchone()
-    return {**row, "after_hours": {**AH, **row["after_hours"]}} if row else NO_ROW
 
 
 def _now() -> datetime:
     return datetime.now(pipeline.MY)
 
 
-def _lang(cfg, text) -> str:
-    if cfg["language"] != "auto":
-        return cfg["language"]
-    return "ms" if MALAY & set(re.findall(r"[a-z]+", (text or "").lower())) else "en"
 
 
-def dpo_line(conn, tid, lang) -> str:
-    """The data protection contact for a customer-facing text, or "" when the owner has not set one."""
-    row = conn.execute("select dpo_name, dpo_email, dpo_phone from tenant_privacy where tenant_id=%s", (tid,)).fetchone()
-    who = ", ".join(x for x in (row or {}).values() if x)
-    return T[lang]["dpo"].format(who=who) if who else ""
 
 
 def _rights(conn, tid, pid, m, cfg, digits):
@@ -563,99 +500,23 @@ HELPER_HELP = ("You are linked to LARIS. Send a product photo with the caption /
 HANDLE_Q = "lower(btrim(coalesce(channel_handle,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)"
 
 
-def _helper_link(conn, chat, code) -> tuple[str, bool]:
-    try:
-        throttle(f"helperlink:{chat}", 5, 3600, "too many tries", HITS)  # wrong guesses only: a success below gives the slot back
-    except ApiError:
-        return "Too many tries. Please wait an hour, or ask for a new link in the LARIS dashboard.", False
-    row = conn.execute("""select c.id, c.user_id, c.tenant_id, u.name uname, t.name tname from telegram_link_codes c
-                          join users u on u.id = c.user_id and u.active join tenants t on t.id = c.tenant_id
-                          where c.code_hash = %s and c.used_at is null and c.expires_at > now() for update of c""",
-                       (hashlib.sha256(code.upper().encode()).hexdigest(),)).fetchone()
-    if not row:
-        return BAD_CODE, False
-    HITS[f"helperlink:{chat}"].pop()
-    if conn.execute(f"select 1 from users where tenant_id=%(t)s and id <> %(u)s and active and {HANDLE_Q}", {"t": row["tenant_id"], "u": row["user_id"], "s": chat}).fetchone():
-        return f"This Telegram account is already linked to someone else at {row['tname']}. Send /unlink from it first.", False
-    conn.execute("update users set channel_handle = %s where id = %s", (f"tg:{chat}", row["user_id"]))
-    conn.execute("update telegram_link_codes set used_at = now() where id = %s", (row["id"],))
-    conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:helper','users',%s,'telegram linked')",
-                 (row["tenant_id"], row["user_id"]))
-    return (f"Linked to {row['tname']} as {row['uname']}. Staff: send a product photo with the caption /catalog, or forward a supplier "
-            "price list. Send /unlink to disconnect."), True
 
 
-def _helper(s, m, token):
-    """One helper-bot message -> [(message, ok)]. Nothing but the link commands and the guide runs for a chat that is not linked."""
-    m.to, m.external_id = token, f"h:{m.external_id}"
-    chat, cmd = m.sender, (m.text or "") if not m.media_kind else ""
-    reply, ok = None, True
-    with db.tx("staff", "system:helper", tenant=db.ALL_TENANTS) as conn:
-        who = conn.execute(STAFF_Q, {"ch": "telegram", "d": "".join(c for c in chat if c.isdigit()), "s": chat, "scope": None}).fetchall()
-        if lk := LINK_CMD.match(cmd):
-            reply, ok = _helper_link(conn, chat, lk.group(1))
-        elif UNLINK_CMD.match(cmd):
-            gone = conn.execute(f"update users set channel_handle = null where active and {HANDLE_Q} returning id, tenant_id", {"s": chat}).fetchall()
-            for u in gone:
-                conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,'system:helper','users',%s,'telegram unlinked')",
-                             (u["tenant_id"], u["id"]))
-            reply = "Disconnected. You can link again from the LARIS dashboard." if gone else NOT_LINKED
-        elif len(who) > 1:  # the same chat is linked in two businesses: never guess
-            log.warning("helper message from %s dropped: ambiguous_sender", _h(chat))
-            return [(m, False)]
-        elif not who:
-            reply, ok = NOT_LINKED, False
-        elif HELP_CMD.match(cmd):
-            reply = HELPER_HELP
-        else:
-            m.tenant_id = who[0]["tenant_id"]
-    if reply:
-        try:
-            s.send("telegram", chat, reply, token)
-        except Exception as e:
-            log.warning("helper reply to %s failed: %s", _h(chat), type(e).__name__)
-        return [(m, ok)]
-    return _process(s, [m])
 
 
 NOT_OWNER = ("We could not connect your new bot. Link your Telegram as the business owner from the LARIS dashboard (Team, Link Telegram), "
              "then create the bot again.")
 
 
-def _managed_bot(s, mb, token):
-    """One-tap bot creation: the owner confirmed a bot made through the helper (the manager bot). The business is found ONLY through the
-    creator's linked chat (a linked owner of exactly one business); anything else in the update is ignored. Failures: a plain sentence to the owner."""
-    from . import telegram_bots  # here, not at the top: telegram_bots imports this module
-    uid = str((mb.get("user") or {}).get("id") or "") if isinstance(mb, dict) else ""
-    bot = (mb.get("bot") or {}).get("id") if isinstance(mb, dict) else None
-    if not uid.isdigit() or not isinstance(bot, int):
-        return
-    try:
-        with db.tx("staff", "system:helper", tenant=db.ALL_TENANTS) as conn:
-            owners = conn.execute(f"select id, tenant_id from users where active and role = 'owner' and {HANDLE_Q}", {"s": uid}).fetchall()
-            if len(owners) != 1:
-                msg = NOT_OWNER
-            else:
-                new = telegram.managed_bot_token(bot, client=s.http, token=token)
-                me = telegram_bots.connect_bot(Ctx(conn, "owner", owners[0]["id"], owners[0]["tenant_id"], "", frozenset()), new, s.http)
-                msg = f"Your bot @{me.get('username')} is connected. Customers can message it now."
-    except ApiError as e:
-        msg = e.message
-    except Exception as e:  # never the exception text: it can carry a URL with a token
-        log.warning("managed bot from %s failed: %s", _h(uid), type(e).__name__)
-        msg = "Sorry, we could not connect your new bot. Please try again, or connect it from the LARIS dashboard (Settings, Telegram)."
-    try:
-        s.send("telegram", uid, msg, token)
-    except Exception as e:
-        log.warning("helper reply to %s failed: %s", _h(uid), type(e).__name__)
 
 
 @r.post("/telegram/helper")
 async def tg_helper(request: Request):
+    from . import helper_bot  # here, not at the top: helper_bot imports this module
     _tg_check(request, os.environ.get("LARIS_HELPER_WEBHOOK_SECRET", ""))
     token = os.environ.get("LARIS_HELPER_BOT_TOKEN", "")
     if token and isinstance(upd := await _json(request), dict) and "managed_bot" in upd:
-        await run_in_threadpool(_managed_bot, request.app.state.svc, upd["managed_bot"], token)
+        await run_in_threadpool(helper_bot._managed_bot, request.app.state.svc, upd["managed_bot"], token)
     elif token and (m := await _tg_update(request)):
-        await _tg_run(request, m, token, lambda: _helper(request.app.state.svc, m, token))
+        await _tg_run(request, m, token, lambda: helper_bot._helper(request.app.state.svc, m, token))
     return JR({"ok": True})

@@ -15,6 +15,8 @@
   --hairline: #d5e0d9; --surface-2: #eef5f0; --ink-2: #2c3d34; --skeleton: #e6eee9;
   --elev-2: 0 4px 12px rgb(22 35 29 / 0.10); --elev-3: 0 12px 32px rgb(22 35 29 / 0.16);
   --control-h: 36px; --control-h-sm: 28px;
+  --elev-1: 0 1px 2px rgb(22 35 29 / 0.05), 0 6px 18px rgb(22 35 29 / 0.06);
+  --pipe-1: #a8d5c2; --pipe-2: #3f8f72; --pipe-3: #0f5c47; --hero-wash: rgb(255 255 255 / 0.12);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -24,7 +26,10 @@
   --warn: #ffa391; --warn-bg: #3a1b16;
   --hairline: #2d4a3f; --surface-2: #18302a; --ink-2: #d4dcd5; --skeleton: #1d352c;
   --elev-2: 0 4px 12px rgb(0 0 0 / 0.40); --elev-3: 0 12px 32px rgb(0 0 0 / 0.55);
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.30), 0 6px 18px rgb(0 0 0 / 0.25);
+  --pipe-1: #2c5c4b; --pipe-2: #3d9a77; --pipe-3: #7fd6b5; --hero-wash: rgb(0 0 0 / 0.14);
 }
+:root { --ease-tile: cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (pointer: coarse), (max-width: 767px) { :root { --control-h: 44px; --control-h-sm: 44px; } }
 
 @theme inline {
@@ -49,6 +54,8 @@
   --radius-xs: 3px;
   --radius-ui: 6px;
   --radius-card: 8px;
+  --radius-tile: 14px;
+  --shadow-1: var(--elev-1);
   --shadow-2: var(--elev-2);
   --shadow-3: var(--elev-3);
   /* Existing shadow-lg / shadow-xl callers (Shell menu, drawer) get the flat elevation levels. */
@@ -130,8 +137,40 @@
   td { @apply px-3 py-2 align-top text-sm text-ink-2; }
   tbody tr { @apply border-t border-hairline; }
   tbody tr:hover { @apply bg-surface-2; }
+  /* Dashboard (dash.tsx). Depth comes from elevation steps, not borders; one solid hero tile per page.
+     Motion: tiles rise in with a stagger (--d), links lift on hover. All of it stops under prefers-reduced-motion. */
+  .bento { @apply grid grid-cols-12 gap-4; }
+  .tile { @apply relative col-span-12 flex min-w-0 flex-col rounded-tile border border-hairline/60 bg-surface p-5 text-ink shadow-1;
+    animation: tile-in 480ms var(--ease-tile) both; animation-delay: var(--d, 0ms);
+    transition: transform 220ms var(--ease-tile), box-shadow 220ms var(--ease-tile), background-color 200ms; }
+  .tile-link:hover, .tile-link:focus-visible { transform: translateY(-3px); box-shadow: var(--elev-3); }
+  .tile-hero { border-color: transparent; background: var(--brand, var(--accent)); color: var(--on-brand, var(--on-accent)); }
+  .tile-hero .metric-label, .tile-hero .metric-hint { color: color-mix(in srgb, currentColor 82%, transparent); }
+  .hero-cell { @apply flex min-h-11 flex-col rounded-ui px-3 py-2.5 transition-colors; background: var(--hero-wash); }
+  .hero-cell:hover { background: color-mix(in srgb, var(--hero-wash) 100%, currentColor 10%); }
+  .tile-icon { @apply mb-3 grid size-9 place-items-center rounded-ui bg-tint text-accent; }
+  .tile-icon-warn { @apply bg-warn-bg text-warn; }
+  .tile-more { @apply inline-flex min-h-8 items-center gap-1 text-sm font-semibold text-accent hover:text-accent-hover; }
+  .metric-label { @apply block text-sm font-medium text-muted; }
+  .metric { @apply block font-semibold leading-tight tracking-tight; }
+  .metric-md { @apply mt-1 text-3xl; }
+  .metric-lg { @apply mt-1 text-4xl; }
+  .metric-xl { @apply mt-2 text-6xl; }
+  .metric-hint { @apply mt-1 block text-sm text-muted; }
+  .pill { @apply mt-2 inline-flex w-fit items-center rounded-full bg-tint px-2 py-0.5 text-xs font-semibold text-accent; }
+  .pill-warn { @apply bg-warn-bg text-warn; }
+  .pipe { @apply flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-surface-2; }
+  .pipe > span { @apply block h-full; transition: width 900ms var(--ease-tile); }
+  .pipe-key { @apply inline-block size-2 rounded-xs; }
+  .pipe-1 { background: var(--pipe-1); } .pipe-2 { background: var(--pipe-2); } .pipe-3 { background: var(--pipe-3); }
+  .gauge circle { fill: none; stroke-width: 10; }
+  .gauge-track { stroke: var(--surface-2); }
+  .gauge-val { stroke: var(--brand, var(--accent)); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 1100ms var(--ease-tile); }
+  .stat-row { @apply flex min-h-11 items-center justify-between gap-3 rounded-ui px-2 text-sm text-ink-2 transition-colors hover:bg-surface-2; }
+  .doc-row { @apply -mx-2 flex items-center justify-between gap-3 rounded-ui px-2 py-2.5 transition-colors hover:bg-surface-2; }
 }
 
+@keyframes tile-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes pulse-soft { 50% { opacity: 0.55; } }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }

@@ -20,7 +20,7 @@ from test_rfq import other_tenant
 from test_roles import member, role
 
 TODAY = date(2026, 3, 11)  # a Wednesday
-COST_WORDS = ("1500", "margin", "cost", "supplier")
+COST_WORDS = (r"(?<!\d)1500(?!\d)", "margin", "cost", "supplier")  # 1500 as a whole number: a timestamp's microseconds (.315000) must not match
 
 
 def d(n: int, base: date = TODAY) -> str:
@@ -201,7 +201,7 @@ def test_permissions_and_scrubbed_reads(env):
     assert jobs(e, who=nobody)[0]["id"] == str(jid) and e.c.get("/api/jobs/agenda", headers=nobody).status_code == 200
     for who in (e.S, nobody):
         got = [jobs(e, who=who), e.c.get("/api/jobs/agenda", headers=who).json()]
-        assert not (keys(got) & STAFF_HIDE) and not any(w in json.dumps(got).lower() for w in COST_WORDS), who
+        assert not (keys(got) & STAFF_HIDE) and not any(re.search(w, json.dumps(got).lower()) for w in COST_WORDS), who
     assert Decimal(jobs(e, who=nobody)[0]["total"]) == 2400  # the selling total only
     assert post(e, jid, who=e.S, priority="low").status_code == 200  # staff default has manage_contacts
     assert e.c.post(f"/api/jobs/{jid}", json={"priority": "low"}).status_code == 401
@@ -255,7 +255,7 @@ def test_reminder_to_owners_lists_due_and_overdue_once_per_day(env, mails, monke
     assert "JB-DUE   A & <B> Sdn Bhd  due today" in text and "JB-LATE" in text and "3 days overdue" in text
     assert "JB-FUTURE" not in text and "JB-DONE" not in text and "JB-NODATE" not in text and "http" not in text
     assert "A &amp; &lt;B&gt; Sdn Bhd" in html and "<B>" not in html
-    assert not any(w in (text + re.sub(r"<style>.*?</style>|<[^>]+>", " ", html)).lower() for w in COST_WORDS)
+    assert not any(re.search(w, (text + re.sub(r"<style>.*?</style>|<[^>]+>", " ", html)).lower()) for w in COST_WORDS)
     assert sent_at(e, due) and sent_at(e, late)
     assert scheduler.run_once()["reminders"] == 0 and len(mails) == 1  # once per job per day
     midnight = datetime.combine(t, datetime.min.time(), pipeline.MY)

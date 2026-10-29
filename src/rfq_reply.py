@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from psycopg.types.json import Jsonb
 
-from . import ilmu
+from . import ai_log, ilmu
 from .parse_util import _dec, contact_names
 
 
@@ -70,7 +70,8 @@ def record_rfq_reply(conn, send, m, ilmu_client=None):
         text = (m.text or "")[:2000]
         cur = conn.execute("select currency from tenants where id=%s", (send["tenant_id"],)).fetchone()["currency"]
         try:
-            up, mq, tiers, clean = rfq_price(ilmu.extract_json(text, RFQ_SCHEMA, client=ilmu_client, names=contact_names(conn, send["tenant_id"])), cur)
+            with ai_log.logged(conn, send["tenant_id"], None, "rfq_reply"):
+                up, mq, tiers, clean = rfq_price(ilmu.extract_json(text, RFQ_SCHEMA, client=ilmu_client, names=contact_names(conn, send["tenant_id"])), cur)
         except ilmu.IlmuError:
             up, mq, tiers, clean = None, None, [], False
     vals = (text, m.external_id, up, mq, Jsonb([{"min_qty": f"{a:f}", "unit_price": f"{b:f}"} for a, b in tiers]),

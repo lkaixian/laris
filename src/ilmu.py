@@ -1,9 +1,11 @@
 import base64
 import json
 import os
+import time
 
 import httpx
 
+from . import ai_log
 from .parse_util import Mask
 
 BASE_URL = "https://api.ilmu.ai/v1"
@@ -63,6 +65,16 @@ def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None, name
         msgs += [{"role": "user", "content": u}, {"role": "assistant", "content": json.dumps(a)}]
     mask = Mask(names)  # every model call is masked here, so no caller can forget; the reply is unmasked before it is returned
     msgs.append({"role": "user", "content": mask(text)})
+    started, ok = time.perf_counter(), False
+    try:
+        out = _extract_loop(msgs, mask, client)
+        ok = True
+        return out
+    finally:
+        ai_log.note("ilmu", ok, started, mask)
+
+
+def _extract_loop(msgs, mask, client):
     err = None
     for _ in range(2):
         j = _post(client, _base() + "/chat/completions", json={

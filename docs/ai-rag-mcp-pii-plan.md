@@ -25,12 +25,16 @@ The full suite takes about 8 minutes locally, so it is not run per change. Run t
 | Step | Work | Done when |
 |---|---|---|
 | 1a | `parse_util.Mask`: reversible tokens for email, phone, NRIC and Luhn-valid card numbers. Applied inside `ilmu.extract_json` and the custom-server path of `ask_json`, so no caller can skip it. Call-site `redact()` removed | DONE 2026-10-30. Test: payload holds no seeded PII, reply is unmasked, prices and quote numbers pass |
-| 1b | Names: a per-request dictionary from the tenant's own `parties` rows (name and attention), whole-word and case-insensitive, replaced with `[NAME_n]`. No NER library. Addresses are not masked yet | DONE 2026-10-30, CI result pending. Unit test on ilmu; the call sites pass `contact_names(conn, tenant_id)` |
-| 1c | One leak test that drives every call site (enquiry, supplier document, RFQ reply, availability, assistant, guide) with a mocked transport and fails if any outbound body holds a seeded value. Add bank account numbers in context ("acct", "a/c") | Test fails if a new call site skips the mask |
+| 1b | Names: a per-request dictionary from the tenant's own `parties` rows (name and attention), whole-word and case-insensitive, replaced with `[NAME_n]`. No NER library. Addresses are not masked yet | DONE 2026-10-30, CI green. Unit test on ilmu; the call sites pass `contact_names(conn, tenant_id)` |
+| 1c | One leak test (`tests/test_pii_leak.py`) that drives the enquiry, supplier document and Assistant routes with a recording transport and fails if any outbound body holds a seeded name, email, phone or card. Bank account numbers in context ("acct", "a/c") still to do | DONE 2026-10-30 for the three routes; availability, RFQ reply and the guide are covered by the mask itself, not by this test |
 
 Limits kept on purpose: the model can drop or change a token in its reply, so an altered token stays as text; masking is regex plus the contacts dictionary, so a name that is not in contacts passes through.
 
 ## Stage 2: observability on the AI tab
+
+2a (backend) DONE 2026-10-30: `db/aicalls.sql`, `src/ai_log.py`, `GET /api/ai/activity`, 90-day purge. 2b (the AI tab UI) is next.
+
+Known limit: when a model call fails and the route then raises (supplier document and enquiry return 502), the request rolls back and the row with it. Failures that a route handles itself (Assistant, availability, RFQ reply) are kept.
 
 - Table `ai_calls` (tenant, user, role class, at, kind, provider, model, ms, ok, masked counts per kind, sources used, sources denied). **No prompt or reply text is stored**, only counts and ids, so the log itself holds no PII. Forced RLS like the other AI tables. Purge after 90 days with the existing retention job.
 - One recorder wraps both model doors, so every call is logged once.

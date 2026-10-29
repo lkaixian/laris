@@ -16,7 +16,7 @@ import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from .. import ilmu, tgbots
+from .. import ai_log, ilmu, tgbots
 from ..errors import ApiError
 from ..parse_util import Mask, contact_names
 from .deps import Ctx, audit, read_ctx, require_owner, svc, throttle, write_ctx
@@ -123,10 +123,14 @@ def ask_json(request: Request, row, text: str, schema: dict, names=()) -> dict:
         key = tgbots.decrypt(row["custom_key_enc"])
     except (RuntimeError, ApiError, TypeError):
         raise AiError("The saved key cannot be read. Enter it again in AI settings.") from None
-    mask = Mask(names)
+    mask, started, ok = Mask(names), time.perf_counter(), False
     msgs = [{"role": "system", "content": "Reply with ONLY a JSON object matching this JSON schema:\n" + json.dumps(schema)},
             {"role": "user", "content": mask(text)}]
-    out = chat(row["custom_base_url"], row["custom_model"], key, msgs, getattr(svc(request), "ai_http", None))
+    try:
+        out = chat(row["custom_base_url"], row["custom_model"], key, msgs, getattr(svc(request), "ai_http", None))
+        ok = True  # the server answered; whether the reply is usable is judged below
+    finally:
+        ai_log.note("custom", ok, started, mask)
     out = out.strip()
     if out.startswith("```"):
         out = out.strip("`").removeprefix("json").strip()
@@ -261,7 +265,8 @@ def guide(body: GuideIn, request: Request, ctx: Ctx = Depends(write_ctx)):
             "Use only the candidates; never invent a screen. Reply as JSON {\"answer\": string, \"ids\": [candidate ids]}.\n"
             + json.dumps({"question": clean(body.question), "candidates": [{"id": c.id, "label": c.label, "path": c.path} for c in body.candidates]}))
     try:
-        out = ask_json(request, row, text, GUIDE_SCHEMA, contact_names(ctx.conn, ctx.tenant_id))
+        with ai_log.logged(ctx.conn, ctx.tenant_id, ctx.user_id, "guide"):
+            out = ask_json(request, row, text, GUIDE_SCHEMA, contact_names(ctx.conn, ctx.tenant_id))
     except ilmu.IlmuError as e:
         log.warning("ai guide: provider failed: %s", type(e).__name__)  # the type only: its text could carry the question or a URL
         raise ApiError(503, "ai_unavailable", "The AI guide is not available right now. Use the menu or the search box.") from None

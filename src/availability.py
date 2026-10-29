@@ -6,7 +6,7 @@ import time
 from datetime import timedelta
 from decimal import Decimal
 
-from . import ilmu, pipeline, pricing
+from . import ai_log, ilmu, pipeline, pricing
 from .parse_util import contact_names
 
 log = logging.getLogger("laris")
@@ -196,7 +196,8 @@ def _quote(conn, tid, party_id, key, text, terms, qty, uom, channel, external_id
 
 
 def answer(conn, tid, party_id, text, ilmu_client=None, *, channel="web", external_id=None):
-    intent, terms, qty, uom = _parse(text, ilmu_client, contact_names(conn, tid))
+    with ai_log.logged(conn, tid, None, "availability"):
+        intent, terms, qty, uom = _parse(text, ilmu_client, contact_names(conn, tid))
     key = (str(tid), str(party_id))
     if intent == "quote_request":
         return _quote(conn, tid, party_id, key, text, terms, qty, uom, channel, external_id)

@@ -51,7 +51,7 @@ const useRoute = () => {
 const ctx = (bot: boolean) => ({ can, canOpen: (r: string) => canOpen(r, ownerFlag), bot })
 interface Box { x: number; y: number; w: number; h: number }
 
-const FADE = '@keyframes tourfade{from{opacity:0}to{opacity:1}}.tour-fade{animation:tourfade 150ms ease-out}'  // reduced motion: the global rule in theme.css turns it off
+const FADE = '@keyframes tourfade{from{opacity:0}to{opacity:1}}.tour-fade{animation:tourfade 150ms ease-out}.tour-glide{transition:top 320ms var(--ease-tile),left 320ms var(--ease-tile),width 320ms var(--ease-tile),height 320ms var(--ease-tile),right 320ms var(--ease-tile)}'  // reduced motion: the global rule in theme.css turns it off
 
 export function TourHost({ me, owner }: { me: Me; owner: boolean }) {
   useLang()
@@ -186,7 +186,7 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
   if (narrow) pos = { left: 0, right: 0, bottom: 0 }
   else if (r) pos = { width: W, left: Math.min(Math.max(8, r.x), innerWidth - W - 8),
     top: r.y + r.h + 12 + ch < innerHeight ? r.y + r.h + 12 : r.y - ch - 12 > 8 ? r.y - ch - 12 : Math.max(8, innerHeight - ch - 8) }
-  const dim = 'tour-fade fixed z-[80] bg-bg/75'
+  const dim = 'tour-fade tour-glide fixed z-[80] bg-bg/75'
   const hint = (k: string) => <span aria-hidden="true" className="ml-1 text-xs">({k})</span>
 
   return (
@@ -197,10 +197,10 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
         <div aria-hidden="true" className={dim} style={{ top: r.y + r.h, left: 0, right: 0, bottom: 0 }} />
         <div aria-hidden="true" className={dim} style={{ top: r.y, height: r.h, left: 0, width: r.x }} />
         <div aria-hidden="true" className={dim} style={{ top: r.y, height: r.h, left: r.x + r.w, right: 0 }} />
-        <div aria-hidden="true" className="pointer-events-none fixed z-[80] rounded-ui border-2 border-accent" style={{ top: r.y, left: r.x, width: r.w, height: r.h }} />
+        <div aria-hidden="true" className="tour-glide pointer-events-none fixed z-[80] rounded-ui border-2 border-accent" style={{ top: r.y, left: r.x, width: r.w, height: r.h }} />
       </> : <div aria-hidden="true" className={dim} style={{ inset: 0 }} />}
       <div ref={card} role="dialog" aria-modal="true" aria-label={t({ en: 'Guided tour', ms: 'Lawatan berpandu' })} tabIndex={-1} onKeyDown={keys}
-        className="tour-fade card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
+        className="tour-fade tour-glide card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
         <p aria-live="polite" className="sr-only">{`${idx + 1} / ${total}. ${title}. ${body}`}</p>
         <p className="text-sm font-semibold text-muted">{t({ en: `${idx + 1} of ${total}`, ms: `${idx + 1} daripada ${total}` })}</p>
         <h2 className="mt-1 text-lg font-semibold">{title}</h2>

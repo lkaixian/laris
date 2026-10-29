@@ -23,16 +23,21 @@ export function GuidePanel() {
   const [key, setKey] = useState<string | null>(null)
   const [i, setI] = useState(0)
   const [spot, setSpot] = useState<{ top: number; left: number; n: number; hole: { x: number; y: number; w: number; h: number } } | null>(null)
+  const [missing, setMissing] = useState(false)  // the step points at something that is not on the screen
+  const [glide, setGlide] = useState(false)  // the ring slides to the new part for a moment after a step change, then follows scrolling tightly
+  const [done, setDone] = useState(false)  // "Try it" clicked: tick shown for a beat before the next step
+  const dir = useRef(1)
   const box = useRef<HTMLElement>(null)
   const lastFocus = useRef<HTMLElement | null>(null)
   const guide = key ? guideFor(key) : null
 
   useEffect(() => {
-    const h = (e: Event) => { lastFocus.current = document.activeElement as HTMLElement; setKey((e as CustomEvent<string>).detail); setI(0) }
+    const h = (e: Event) => { lastFocus.current = document.activeElement as HTMLElement; setKey((e as CustomEvent<string>).detail); setI(0); dir.current = 1 }
     addEventListener(EVENT, h)
     return () => removeEventListener(EVENT, h)
   }, [])
   const close = () => { setKey(null); setSpot(null); lastFocus.current?.focus?.() }
+  const go = (n: number) => { dir.current = n >= i ? 1 : -1; setI(n) }
   // Going to another page ends the guide (the sidebar "?" for another page closes this one and opens that page's guide).
   useEffect(() => {
     if (!key) return
@@ -52,13 +57,15 @@ export function GuidePanel() {
 
   // Point at this step's part of the page: scroll it into view, ring it, and put the step number beside it.
   useEffect(() => {
-    document.querySelectorAll('.guide-spot').forEach(el => el.classList.remove('guide-spot'))
-    setSpot(null)
+    document.querySelectorAll('.guide-spot').forEach(el => el.classList.remove('guide-spot', 'guide-try'))
+    setDone(false); setGlide(true)
+    const gt = setTimeout(() => setGlide(false), 700)
     const target = guide?.steps[i]?.target
-    if (!target) return
-    const el = [...document.querySelectorAll<HTMLElement>(`[data-guide="${target}"]`)].find(x => x.offsetParent !== null)
-    if (!el) return
+    const el = target ? [...document.querySelectorAll<HTMLElement>(`[data-guide="${target}"]`)].find(x => x.offsetParent !== null) : undefined
+    setMissing(!!target && !el)
+    if (!el) { setSpot(null); return () => clearTimeout(gt) }  // otherwise the old ring stays until here, so it can slide to the next part
     el.classList.add('guide-spot')
+    if (guide!.steps[i].act) el.classList.add('guide-try')
     // On a phone the guide covers the lower half, so the part it points at goes to the top of the screen.
     const phone = matchMedia('(max-width: 639px)').matches
     el.style.scrollMarginTop = phone ? '72px' : ''
@@ -67,23 +74,28 @@ export function GuidePanel() {
       const r = el.getBoundingClientRect(), pad = 8
       setSpot({ top: Math.max(8, r.top - 14), left: Math.max(8, r.left - 14), n: i + 1, hole: { x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 } })
     }
+    place()
     const t1 = setTimeout(place, 400)
-    // "Try it" step: the person really clicks the ringed element, then the guide moves on.
-    const tryIt = (e: MouseEvent) => { if (guide!.steps[i].act && el.contains(e.target as Node)) setTimeout(() => setI(n => Math.min(n + 1, guide!.steps.length - 1)), 0) }
+    // "Try it" step: the person really clicks the ringed element, a tick shows, then the guide moves on.
+    let t2 = 0
+    const tryIt = (e: MouseEvent) => {
+      if (!guide!.steps[i].act || !el.contains(e.target as Node) || t2) return
+      setDone(true)
+      t2 = window.setTimeout(() => { dir.current = 1; setI(n => Math.min(n + 1, guide!.steps.length - 1)) }, 600)
+    }
     document.addEventListener('click', tryIt, true)
     addEventListener('scroll', place, true); addEventListener('resize', place)
-    return () => { clearTimeout(t1); removeEventListener('scroll', place, true); removeEventListener('resize', place); document.removeEventListener('click', tryIt, true); el.classList.remove('guide-spot') }
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(gt); removeEventListener('scroll', place, true); removeEventListener('resize', place); document.removeEventListener('click', tryIt, true); el.classList.remove('guide-spot', 'guide-try') }
   }, [key, i, guide])
 
   if (!guide) return null
   const n = guide.steps.length
   const step = guide.steps[i]
-  const missing = !!step.target && !spot
   // The mask goes straight under <body>: a blur only reaches what is behind it when no parent has its own filter or animation.
   return (
     <>
-      {spot && createPortal(<Mask hole={spot.hole} />, document.body)}
-      {spot && <span aria-hidden="true" className="guide-badge" style={{ top: spot.top, left: spot.left }}>{spot.n}</span>}
+      {spot && createPortal(<Mask hole={spot.hole} glide={glide} />, document.body)}
+      {spot && <span aria-hidden="true" className={`guide-badge ${glide ? 'guide-glide' : ''}`} style={{ top: spot.top, left: spot.left }}>{spot.n}</span>}
       <section ref={box} role="dialog" aria-modal="false" aria-labelledby="guide-h" className="guide-panel">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -95,27 +107,27 @@ export function GuidePanel() {
         <ol className="mt-3 flex gap-1" aria-label={tx('guide.progress', i + 1, n)}>
           {guide.steps.map((_, j) => (
             <li key={j} className="flex-1"><button type="button" aria-current={j === i ? 'step' : undefined} aria-label={tx('guide.goto', j + 1)}
-              className={`block h-2 w-full rounded-full ${j <= i ? 'bg-accent' : 'bg-hairline'}`} onClick={() => setI(j)} /></li>
+              className={`block h-2 w-full rounded-full transition-colors duration-300 ${j <= i ? 'bg-accent' : 'bg-hairline'}`} onClick={() => go(j)} /></li>
           ))}
         </ol>
         <p className="mt-3 text-sm font-semibold text-accent" aria-live="polite">{tx('guide.step', i + 1, n)}</p>
-        <div className="mt-1 flex gap-3">
-          <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-on-accent">{i + 1}</span>
+        <div key={i} className="guide-step mt-1 flex gap-3" style={{ '--dx': `${dir.current * 14}px` } as React.CSSProperties}>
+          <span aria-hidden="true" key={String(done)} className={`grid size-9 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-on-accent ${done ? 'guide-pop' : ''}`}>{done ? '✓' : i + 1}</span>
           <p className="text-base leading-relaxed">{t(step.text)}</p>
         </div>
         {step.target && <p className="mt-2 text-xs text-muted">{missing ? tx('guide.notHere') : tx('guide.pointing')}</p>}
-        {step.act && !missing && <p className="mt-2 rounded-ui border border-accent bg-tint p-2 text-sm font-semibold">{tx('guide.tryIt')}</p>}
+        {step.act && !missing && !done && <p className="guide-step mt-2 rounded-ui border border-accent bg-tint p-2 text-sm font-semibold">{tx('guide.tryIt')}</p>}
         {missing && step.sample && (
-          <div className="mt-3 rounded-ui border border-dashed border-line bg-tint p-3">
+          <div className="guide-step mt-3 rounded-ui border border-dashed border-line bg-tint p-3" style={{ '--dx': '0px' } as React.CSSProperties}>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">{tx('guide.example')}</p>
             <p className="mt-1 text-sm font-semibold">{t(step.sample.title)}</p>
             <ul className="mt-1 grid gap-1 text-sm">{step.sample.lines.map((l, j) => <li key={j}>{t(l)}</li>)}</ul>
           </div>
         )}
         <div className="mt-4 flex flex-wrap justify-between gap-2">
-          <button type="button" className="btn" aria-disabled={i === 0 || undefined} onClick={() => i > 0 && setI(i - 1)}>{tx('guide.back')}</button>
+          <button type="button" className="btn" aria-disabled={i === 0 || undefined} onClick={() => i > 0 && go(i - 1)}>{tx('guide.back')}</button>
           {i < n - 1
-            ? <button type="button" className="btn btn-primary" onClick={() => setI(i + 1)}>{tx('guide.next')}</button>
+            ? <button type="button" className="btn btn-primary" onClick={() => go(i + 1)}>{tx('guide.next')}</button>
             : <button type="button" className="btn btn-primary" onClick={close}>{tx('guide.done')}</button>}
         </div>
       </section>
@@ -125,15 +137,15 @@ export function GuidePanel() {
 
 // Blur and dim everything except the hole: four panels round it (top, bottom, left, right).
 // The panels take the clicks, so only this step's part of the page (and the guide itself) can be used.
-function Mask({ hole }: { hole: { x: number; y: number; w: number; h: number } }) {
+function Mask({ hole, glide }: { hole: { x: number; y: number; w: number; h: number }; glide: boolean }) {
   const { x, y, w, h } = hole
   return (
-    <>
+    <div className={glide ? 'guide-glide' : ''} style={{ display: 'contents' }}>
       <div aria-hidden="true" className="guide-mask" style={{ left: 0, right: 0, top: 0, height: Math.max(0, y) }} />
       <div aria-hidden="true" className="guide-mask" style={{ left: 0, right: 0, top: y + h, bottom: 0 }} />
       <div aria-hidden="true" className="guide-mask" style={{ left: 0, width: Math.max(0, x), top: y, height: h }} />
       <div aria-hidden="true" className="guide-mask" style={{ left: x + w, right: 0, top: y, height: h }} />
       <div aria-hidden="true" className="guide-hole" style={{ left: x, top: y, width: w, height: h }} />
-    </>
+    </div>
   )
 }

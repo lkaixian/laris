@@ -138,13 +138,23 @@
   .chip.heat-stale::before { border-radius: 1px; }
   .heat-edge { border-left: 4px solid var(--heat-fg, var(--hairline)); }
   /* "?" guide: a panel beside the page and a numbered ring on the part each step is about. */
-  .guide-panel { position: fixed; z-index: 45; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); width: min(26rem, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; border-radius: 16px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); padding: 16px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.18); }
+  .guide-panel { animation: guide-in 340ms var(--ease-tile) both; transform-origin: bottom right; position: fixed; z-index: 45; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); width: min(26rem, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; border-radius: 16px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); padding: 16px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.18); }
   .guide-spot { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 10px; animation: guide-pulse 1.4s ease-in-out infinite; position: relative; z-index: 1; }
   @keyframes guide-pulse { 0%, 100% { outline-color: var(--accent); } 50% { outline-color: transparent; } }
   .guide-badge { position: fixed; z-index: 46; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.25); pointer-events: none; }
-  .guide-mask { position: fixed; z-index: 44; background: rgb(6 20 15 / 0.30); backdrop-filter: blur(6px); }
+  .guide-mask { animation: guide-fade 280ms ease-out both; position: fixed; z-index: 44; background: rgb(6 20 15 / 0.30); backdrop-filter: blur(6px); }
   .guide-hole { position: fixed; z-index: 44; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px transparent; }
-  @media (prefers-reduced-motion: reduce) { .guide-spot { animation: none; } }
+  /* Motion: the panel rises in, the dimmed area fades in, the ring and number slide to the next part, each step slides in from the side
+     you came from, "Try it" ripples. All of it stops under prefers-reduced-motion (the rule at the top of this file). */
+  @keyframes guide-in { from { opacity: 0; transform: translateY(16px) scale(0.96); } }
+  @keyframes guide-fade { from { opacity: 0; } }
+  @keyframes guide-step { from { opacity: 0; transform: translateX(var(--dx, 12px)); } }
+  @keyframes guide-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  @keyframes guide-ripple { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
+  .guide-glide > *, .guide-glide.guide-badge { transition: top 420ms var(--ease-tile), left 420ms var(--ease-tile), width 420ms var(--ease-tile), height 420ms var(--ease-tile); }
+  .guide-step { animation: guide-step 280ms var(--ease-tile) both; }
+  .guide-pop { animation: guide-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .guide-try { animation: guide-pulse 1.4s ease-in-out infinite, guide-ripple 1.4s ease-out infinite; }
   .chip-warn::before { display: none; }
   .chip-warn { white-space: normal; max-width: 100%; height: auto; }  /* an overdue reason can be long, and longer in Malay or Tamil: let it wrap */
   .num { font-variant-numeric: tabular-nums; text-align: right; }

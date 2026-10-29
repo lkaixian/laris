@@ -117,6 +117,24 @@ def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
         c.execute("delete from tenants where id=%s", (u["tenant_id"],))
 
 
+class Check(BaseModel, extra="forbid"):
+    kind: str = Field(pattern="^(business|email)$")
+    value: str = Field(min_length=1, max_length=254)
+
+
+@r.post("/signup/check")
+def check(body: Check, request: Request):
+    """Is this business name / email free? Taken = an active (verified) account has it; an unverified attempt does not block."""
+    throttle(f"check:ip:{auth.client_ip(request)}", 60, 300, "Too many checks. Try again in a few minutes.")
+    with db.tx("owner", "signup") as c:
+        if body.kind == "business":
+            q = "select 1 from tenants t where (lower(display_name)=lower(%s) or lower(name)=lower(%s)) and exists (select 1 from users u where u.tenant_id=t.id and u.active)"
+            args = (_clean(body.value),) * 2
+        else:
+            q, args = "select 1 from users where lower(email)=%s and active", (_email(body.value),)
+        return {"available": not c.execute(q, args).fetchone()}
+
+
 @r.post("/signup", status_code=202)
 def signup(body: Signup, request: Request, bg: BackgroundTasks):
     _guard(request, "signup", body.email, 5, 3, 3600)

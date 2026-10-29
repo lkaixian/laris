@@ -248,6 +248,7 @@ const NEUTRAL = 'If this email can be used, we sent a 6-digit code'
 const devCode = () => (flag === 'nodev' ? {} : { dev_code: '123456' })
 function mockPublic(method: string, p: string, body: any): unknown {
   const email = String(body?.email ?? '').trim()
+  if (method === 'POST' && p === '/signup/check') return { available: !/^(taken|demo|acme)/i.test(String(body.value).trim()) }  // mock: names/emails starting taken, demo or acme are in use
   if (method === 'POST' && p === '/signup') {
     if (!['made_to_order', 'fnb_catering', 'tailoring', 'aircon_service'].includes(body.trade_template)) throw new ApiError(422, 'unknown_template', 'That business type is not available.')
     if (String(body.password).length < 10) throw new ApiError(422, 'weak_password', 'That password is too weak. Use at least 10 characters.')

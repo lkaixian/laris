@@ -16,7 +16,7 @@ from test_roles import member, role
 # Adding a route here is a security decision; every other write route must answer 403 to a zero-permission role.
 OPEN = {
     ("POST", "/api/login"), ("POST", "/api/logout"),
-    ("POST", "/api/signup"), ("POST", "/api/signup/verify"), ("POST", "/api/signup/resend"),
+    ("POST", "/api/signup"), ("POST", "/api/signup/verify"), ("POST", "/api/signup/resend"), ("POST", "/api/signup/check"),
     ("POST", "/api/password/forgot"), ("POST", "/api/password/reset"),
     ("POST", "/api/invites/preview"), ("POST", "/api/invites/accept"),
     ("POST", "/api/me/password"), ("POST", "/api/me/sessions/revoke-others"), ("DELETE", "/api/me/sessions/{sid}"),

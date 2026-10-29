@@ -529,3 +529,13 @@ def test_mailer_sandbox_url_payload_and_off(monkeypatch, caplog):
 def test_mail_templates_escape_html():
     _, text, html = mailer.verification_mail("123456")
     assert "123456" in text and "<script>" not in html and html.count("123456") == 1 and ">Hello,</p>" in html
+
+
+def test_check_availability(env):
+    def free(kind, value):
+        return env.c.post("/api/signup/check", json={"kind": kind, "value": value}).json()["available"]
+    assert free("business", "Acme Print") and free("email", "ann@example.com")
+    signup(env)  # unverified: does not block
+    assert free("business", "Acme Print") and free("email", "ann@example.com")
+    assert verify(env, last_code(env)).status_code == 200
+    assert not free("business", "acme PRINT") and not free("email", "ANN@example.com")

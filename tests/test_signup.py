@@ -579,10 +579,11 @@ def test_send_retry_tries_again_then_gives_up(monkeypatch):
     assert mailer.send_retry("a@b.co", "s", "t") is False and len(calls) == 1  # email off: no point retrying
 
 
-def test_migrations_apply_once(env, tmp_path, monkeypatch):
+def test_migrations_apply_once(env, pg_url, tmp_path, monkeypatch):
     (tmp_path / "0001_probe.sql").write_text("create table migration_probe (n int); insert into migration_probe values (1);")
     monkeypatch.setattr(db, "MIGRATIONS_DIR", tmp_path)
     db.apply_schema()
     db.apply_schema()  # the second start must not run it again (create table would fail)
-    assert env.sql("select count(*) n from migration_probe")[0]["n"] == 1
-    assert env.sql("select file from schema_migrations")[0]["file"] == "0001_probe.sql"
+    with psycopg.connect(pg_url, autocommit=True) as c:  # the probe table is made after roles.sql, so laris_app has no grant on it
+        assert c.execute("select count(*) from migration_probe").fetchone()[0] == 1
+        assert c.execute("select file from schema_migrations").fetchone()[0] == "0001_probe.sql"

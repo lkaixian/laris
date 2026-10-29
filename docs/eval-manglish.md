@@ -52,3 +52,21 @@ Text is lowercased and punctuation removed before comparing. WER counts word sub
 - `--fake` output is the tool testing itself. Never show it as a result.
 - Report the bad results too, with the fix we plan. Re-run and re-date after any model or prompt change.
 - Voice recordings of real people need their consent; use team members or consenting volunteers and do not commit the audio.
+
+## C. PII masking (what the model door misses)
+
+54 invented samples in `tests/fixtures/pii_eval.jsonl` (no real person or number). `python scripts/eval_pii.py --show` runs the same `Mask` the model door uses, with an invented contact book, and counts a sample as missed when the secret is still in the masked text. The KEEP rows are prices and document numbers that must NOT change (a change is a false positive). `tests/test_pii_eval.py` fails if any count goes up.
+
+| Kind | Samples | Missed before the 2026-10-30 fixes | Missed now | What still gets through |
+|---|---|---|---|---|
+| Email | 6 | 1 | 1 | written out as "ali (at) shop dot my" |
+| Phone | 12 | 6 | 2 | a letter O for zero; digits spoken as words |
+| ID number | 5 | 2 | 1 | a passport number |
+| Card | 4 | 0 | 0 | |
+| Bank account | 6 | 5 | 1 | a bare digit run with no bank or account word |
+| Name | 7 | 3 | 3 | a first name alone, "Zainuddin B.", a person not in the contact book |
+| Address | 2 | 2 | 2 | every address (no pattern yet) |
+| Keep (false positives) | 12 | 0 | 0 | |
+
+The fixes: landline numbers and spaces after +60 for phones, spaces inside NRIC numbers, and bank account numbers after a bank or account word. This is a small invented set, so the rates show direction, not a guarantee. A real sample of Manglish chats would change them. The remaining gaps are listed in `docs/technical-debt.md` row 1.
+

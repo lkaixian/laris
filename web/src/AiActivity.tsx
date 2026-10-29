@@ -32,7 +32,7 @@ const KIND: Record<string, Text> = {
 }
 const MASK: Record<string, Text> = {
   EMAIL: { en: 'email', ms: 'emel' }, PHONE: { en: 'phone', ms: 'telefon' }, ID: { en: 'ID number', ms: 'nombor ID' },
-  CARD: { en: 'card', ms: 'kad' }, NAME: { en: 'name', ms: 'nama' },
+  CARD: { en: 'card', ms: 'kad' }, ACCT: { en: 'bank account', ms: 'akaun bank' }, NAME: { en: 'name', ms: 'nama' },
 }
 
 export function AiActivity() {

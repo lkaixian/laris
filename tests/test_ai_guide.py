@@ -155,7 +155,7 @@ def test_every_call_rechecks_dns_and_the_connection_is_pinned(env, p):
     assert req.url.host == "93.184.216.34" and req.headers["host"] == "ai.example.com" and req.extensions["sni_hostname"] == "ai.example.com"
     assert str(req.url) == "https://93.184.216.34/v1/chat/completions" and req.headers["authorization"] == "Bearer sk-secret-123456"
     body = json.loads(req.content)
-    assert body["max_tokens"] == 200 and body["temperature"] == 0 and body["model"] == "m1" and len(req.content) < 8192
+    assert body["max_tokens"] == 400 and body["temperature"] == 0 and body["model"] == "m1" and len(req.content) < 8192
     HOSTS["ai.example.com"] = "10.9.9.9"  # rebinding after save
     try:
         r = ask(e)

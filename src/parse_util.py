@@ -7,8 +7,12 @@ BIG = Decimal(10) ** 10
 
 
 PII = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}"                       # email
-                 r"|(?<!\d)(?:\+?60|0)1\d[ -]?\d{3,4}[ -]?\d{4}(?!\d)"       # Malaysian mobile
-                 r"|(?<!\d)\d{6}-?\d{2}-?\d{4}(?!\d)")                       # NRIC
+                 r"|(?<!\d)(?:\+?60|0)[ -]?1\d[ -]?\d{3,4}[ -]?\d{4}(?!\d)"       # Malaysian mobile, with or without +60 and spaces
+                 r"|(?<!\d)(?:\+?60|0)[ -]?\(?[3-9]\)?[ -]?\d{3,4}[ -]?\d{4}(?!\d)"  # landline: 03-1234 5678, (04) 123 4567, +603-12345678
+                 r"|(?<!\d)\d{6}[ -]?\d{2}[ -]?\d{4}(?!\d)")                  # NRIC, with dashes, spaces or none
+# A bank account number is only recognised after a bank or account word: a bare digit run is too often a quantity or a document number.
+ACCT = re.compile(r"(?i)\b(?:acc(?:oun)?t|a/c|akaun|maybank|cimb|rhb|ambank|bsn|bank islam|public bank|hong leong)\b"
+                  r"(?:\s*(?:no|number|nombor)\b)?[\s.:#]*(\d(?:[ -]?\d){7,17})(?!\d)")
 
 
 def redact(text: str) -> str:
@@ -17,7 +21,7 @@ def redact(text: str) -> str:
     return PII.sub("[redacted]", text)
 
 CARD = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")  # 13 to 19 digits, kept only when the Luhn check passes
-TOKEN = re.compile(r"\[(EMAIL|PHONE|ID|CARD|NAME)_(\d+)\]")
+TOKEN = re.compile(r"\[(EMAIL|PHONE|ID|CARD|ACCT|NAME)_(\d+)\]")
 
 
 def _luhn(s: str) -> bool:
@@ -26,7 +30,7 @@ def _luhn(s: str) -> bool:
 
 
 class Mask:
-    """Reversible masking for one model call: PII becomes [EMAIL_1], [PHONE_1], [ID_1], [CARD_1] (the same value always gets the same
+    """Reversible masking for one model call: PII becomes [EMAIL_1], [PHONE_1], [ID_1], [CARD_1], [ACCT_1] (the same value always gets the same
     token) and unmask() puts the real values back into the reply. The map lives only in this object, never stored or logged.
     `names` is the tenant's own contact names (see contact_names): each one found in the text becomes [NAME_n], matched whole and
     ignoring case. ponytail: regex plus that dictionary, so a name that is not a contact, and any address, still pass through."""
@@ -47,8 +51,9 @@ class Mask:
     def __call__(self, text: str) -> str:
         if self.names:
             text = self.names.sub(lambda m: self._tok("NAME", m[0]), text)
+        text = ACCT.sub(lambda m: m[0][:m.start(1) - m.start()] + self._tok("ACCT", m[1]), text)
         text = CARD.sub(lambda m: self._tok("CARD", m[0]) if _luhn(m[0]) else m[0], text)
-        return PII.sub(lambda m: self._tok("EMAIL" if "@" in m[0] else "ID" if re.fullmatch(r"\d{6}-?\d{2}-?\d{4}", m[0]) else "PHONE", m[0]), text)
+        return PII.sub(lambda m: self._tok("EMAIL" if "@" in m[0] else "ID" if re.fullmatch(r"\d{6}[ -]?\d{2}[ -]?\d{4}", m[0]) else "PHONE", m[0]), text)
 
     def unmask(self, x):
         if isinstance(x, str):

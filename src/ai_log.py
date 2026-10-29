@@ -28,18 +28,24 @@ def _uuid(v):
         return None  # an actor that is a name or a channel id, not a user
 
 
-def record(conn, tenant_id, user_id, kind: str) -> None:
+def record(conn, tenant_id, user_id, kind: str) -> Counter:
+    """Writes the pending calls and returns how many values of each type were hidden from the model in them."""
     calls, _ = _pending.get() or [], _pending.set([])
+    hidden = Counter()
     for provider, ok, ms, masked in calls:
+        hidden.update(masked)
         conn.execute("insert into ai_calls (tenant_id, user_id, kind, provider, ok, ms, masked) values (%s,%s,%s,%s,%s,%s,%s)",
                      (tenant_id, _uuid(user_id), kind, provider, ok, ms, Jsonb(masked)))
+    return hidden
 
 
 @contextmanager
-def logged(conn, tenant_id, user_id, kind: str):
+def logged(conn, tenant_id, user_id, kind: str, into: Counter | None = None):
     """Wrap the code that calls the model. ponytail: when the call fails and the route then raises, the request rolls back
     and so does the row; failures the route handles itself (assistant, availability, rfq reply) are kept."""
     try:
         yield
     finally:
-        record(conn, tenant_id, user_id, kind)
+        n = record(conn, tenant_id, user_id, kind)
+        if into is not None:
+            into.update(n)

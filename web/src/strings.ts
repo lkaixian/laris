@@ -369,6 +369,16 @@ const D = {
   'as.confirmNote': { en: 'It is saved under your name in the activity log, exactly as if you had clicked it on the page.', ms: 'Ia disimpan atas nama anda dalam log aktiviti, sama seperti anda mengkliknya pada halaman.', zh: '此操作会以您的名义记入活动记录，与您在页面上点击完全相同。', ta: 'நீங்கள் பக்கத்தில் அழுத்தியது போலவே, உங்கள் பெயரில் செயல்பாட்டுப் பதிவில் சேமிக்கப்படும்.' },
   'as.close': { en: 'Close', ms: 'Tutup', zh: '关闭', ta: 'மூடு' },
   'as.theAssistant': { en: ' (chat assistant)', ms: ' (pembantu sembang)', zh: '（聊天助手）', ta: ' (அரட்டை உதவியாளர்)' },
+  'as.hidden': { en: (x: string) => `Hidden from the AI before it answered: ${x}.`, ms: (x: string) => `Disembunyikan daripada AI sebelum ia menjawab: ${x}.`, zh: (x: string) => `在 AI 回答前已隐藏：${x}。`, ta: (x: string) => `AI பதிலளிக்கும் முன் மறைக்கப்பட்டது: ${x}.` },
+  'as.denied': { en: (x: string) => `Not searched, your role cannot see: ${x}.`, ms: (x: string) => `Tidak dicari, peranan anda tidak boleh melihat: ${x}.`, zh: (x: string) => `未搜索，您的角色无权查看：${x}。`, ta: (x: string) => `தேடப்படவில்லை, உங்கள் பங்கு பார்க்க முடியாது: ${x}.` },
+  'as.m.EMAIL': { en: 'email', ms: 'emel', zh: '邮箱', ta: 'மின்னஞ்சல்' },
+  'as.m.PHONE': { en: 'phone', ms: 'telefon', zh: '电话', ta: 'தொலைபேசி' },
+  'as.m.ID': { en: 'ID number', ms: 'nombor ID', zh: '身份证号', ta: 'அடையாள எண்' },
+  'as.m.CARD': { en: 'card', ms: 'kad', zh: '卡号', ta: 'அட்டை எண்' },
+  'as.m.ACCT': { en: 'bank account', ms: 'akaun bank', zh: '银行账号', ta: 'வங்கிக் கணக்கு' },
+  'as.m.NAME': { en: 'name', ms: 'nama', zh: '姓名', ta: 'பெயர்' },
+  'as.s.costs': { en: 'costs', ms: 'kos', zh: '成本', ta: 'செலவுகள்' },
+  'as.s.supplier_docs': { en: 'supplier documents', ms: 'dokumen pembekal', zh: '供应商文件', ta: 'சப்ளையர் ஆவணங்கள்' },
   'as.button': { en: 'Ask Laris', ms: 'Tanya Laris', zh: '问 Laris', ta: 'Laris இடம் கேள்' },
 } satisfies Record<string, E>
 

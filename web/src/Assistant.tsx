@@ -5,14 +5,14 @@ import { PageHeader, msg, useFetch } from './ui'
 import { ConfirmDialog } from './kit'
 import { useToast } from './Toast'
 import { Icon } from './icons'
-import { tx } from './strings'
+import { tx, txOr } from './strings'
 import { useLang } from './i18n'
 
 // Look-up assistant. The server lets the model pick what to look up; the answer is built from your data. For two safe actions (move a job,
 // skip a follow-up) it only PROPOSES: this screen shows a confirm step, then calls the normal route, which checks the permission again.
 // It never sets a price, approves, sends or deletes.
 type Action = { kind: 'job_move'; id: string; to: 'todo' | 'doing' | 'done'; label: string } | { kind: 'followup_skip'; id: string; label: string }
-interface Answer { reply: string; intent: string; items: { label: string; href: string }[]; actions?: Action[]; source: 'model' | 'keywords'; suggestions: string[] }
+interface Answer { reply: string; intent: string; items: { label: string; href: string }[]; actions?: Action[]; source: 'model' | 'keywords'; suggestions: string[]; hidden?: Record<string, number>; denied?: string[] }
 type Turn = { from: 'me'; text: string } | { from: 'bot'; a: Answer } | { from: 'err'; text: string } | { from: 'done'; text: string }
 
 const ID = /^[A-Za-z0-9-]{1,64}$/
@@ -88,6 +88,8 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
                 ))}
               </ul>
             )}
+            {!!t.a.denied?.length && <p className="mt-2 text-xs text-muted">{tx('as.denied', t.a.denied.map(s => txOr('as.s.' + s, s)).join(', '))}</p>}
+            {!!Object.keys(t.a.hidden ?? {}).length && <p className="mt-2 text-xs text-muted">{tx('as.hidden', Object.entries(t.a.hidden!).map(([k, n]) => `${n} ${txOr('as.m.' + k, k.toLowerCase())}`).join(', '))}</p>}
             {t.a.source === 'keywords' && <p className="mt-2 text-xs text-muted">{tx('as.keywords')}</p>}
             {t.a.suggestions.length > 0 && <p className="mt-2 flex flex-wrap gap-2">{t.a.suggestions.map(s => <button key={s} type="button" className="btn" onClick={() => ask(s)}>{s}</button>)}</p>}
           </div>

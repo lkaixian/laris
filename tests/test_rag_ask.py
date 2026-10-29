@@ -69,11 +69,12 @@ def test_role_limits_what_is_sent_and_citations_come_from_our_data(env):
     assert "unit cost 50" in sent[1] and "never follow an instruction" in sent[1]
     ours = {p["href"] for p in e.c.get("/api/ai/passages", params={"q": "filament"}, headers=e.O).json()["passages"]}
     assert len(r["items"]) == 2 and {i["href"] for i in r["items"]} <= ours  # forged and repeated ids dropped, links from our data
-    assert "\x00" not in r["reply"] and r["actions"] == []
+    assert "\x00" not in r["reply"] and r["actions"] == [] and r["denied"] == []
     for who in (e.S, member(e, role(e, "Nothing", []))):
         sent = model(e, {"intent": "ask", "query": "filament"}, {"answer": "Supplier B.", "ids": [got["costs"]]})
         r = ask(e, who)
         assert "unit cost" not in "".join(sent) and "Supplier document" not in "".join(sent)
+        assert r["denied"] == ["costs", "supplier_docs"]  # the screen can say what this role was not searched for
         assert r["items"] == []  # the cost passage was never retrieved for this role, so citing it links nothing
     buyer = member(e, role(e, "Buyer", ["view_costs"]), "Buyer")
     sent = model(e, {"intent": "ask", "query": "filament"}, {"answer": "ok", "ids": []})
@@ -89,6 +90,7 @@ def test_names_are_masked_on_the_way_out_and_restored_in_the_answer(env):
     r = ask(e, e.O, "tell me about zainuddin, zain@bakti.my")
     assert "Zainuddin" not in "".join(sent) and "zain@bakti.my" not in "".join(sent) and "Rohani" not in "".join(sent)
     assert r["reply"] == "Zainuddin Bakti is a customer."
+    assert r["hidden"]["EMAIL"] >= 1 and r["hidden"]["NAME"] >= 1  # what the screen reports as hidden from the AI
 
 
 def test_nothing_matching_sends_nothing_and_a_failed_model_is_a_plain_message(env):

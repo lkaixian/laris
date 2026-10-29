@@ -87,7 +87,7 @@ def chat(url: str, model: str, key: str, messages: list, client=None) -> str:
     that drips one byte just under each read timeout can run longer; add a hard timer thread if that matters.
     UNVERIFIED against a real TLS server (tests use a fake transport)."""
     host, port, path, ip = check_url(url)
-    body = json.dumps({"model": model, "messages": messages, "max_tokens": 200, "temperature": 0}).encode()
+    body = json.dumps({"model": model, "messages": messages, "max_tokens": 400, "temperature": 0}).encode()
     if len(body) > MAX_BODY:
         raise AiError("The question is too long for the AI server.")
     target = f"https://[{ip}]:{port}" if ":" in ip else f"https://{ip}:{port}"

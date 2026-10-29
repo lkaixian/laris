@@ -78,11 +78,15 @@ Residual risk to tell owners: masking is regex plus the contact book, so a name 
 
 ## Stage 5: chat UI
 
+5 DONE 2026-10-30: the Assistant reply carries `hidden` (values hidden from the AI, by type) and `denied` (sources this role was not searched for); the chat shows both under the answer, in four languages. The answer's links are the cited records. Never opened in a browser.
+
 - Sources shown under each answer, with an owner-only marker where the caller was denied.
 - A line under the box: "N values hidden from the model" from the mask count.
 - Per-user chat history is not stored in this plan; add it only if asked, and then with the same RBAC and purge.
 
 ## Stage 6: hardening
+
+6 DONE 2026-10-30: PII eval set and script (`scripts/eval_pii.py`, `tests/fixtures/pii_eval.jsonl`, ceiling test `tests/test_pii_eval.py`, results in `docs/eval-manglish.md` section C); masking now covers landlines, spaced phone and NRIC numbers and bank accounts after a bank or account word; hostile-text timing test; own-server `max_tokens` 200 to 400; runbook and declaration updated. MCP rate limit (60 a minute per key) and body cap (16 KB) already existed; retrieval is bounded by 5 extracts, 300 characters and a scan cap of 2000 rows. Everything left over is in `docs/technical-debt.md`.
 
 - PII eval set (Manglish names, addresses, split numbers) with a measured miss rate; report it in `docs/eval-manglish.md`.
 - Rate limit per token for MCP, size caps on retrieved text, and a test that retrieval cost stays bounded on a large tenant.

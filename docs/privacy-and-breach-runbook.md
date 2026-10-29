@@ -92,7 +92,7 @@ Taken from law-firm summaries and the vault note; the pdp.gov.my pages could not
 
 Optional, off by default, switched on only by the owner (Settings, AI). Modes: Off, Guide only, Guide plus my data (lets the existing Assistant run). The owner picks hosted ILMU or their own AI server.
 
-**What leaves the system:** the question the person types, with emails, Malaysian mobile numbers, NRIC numbers and any run of 6 or more digits replaced first (`src/api/ai_guide.py`), plus the names and menu paths of the screens listed by the page. Names and addresses typed into a question are NOT removed (regex only). The Assistant sends only its redacted question too. No quote, customer, cost or margin record is sent. The model can only pick from the supplied screens; it cannot run an action, and only supplied links are returned.
+**What leaves the system:** the question the person types, with emails, Malaysian mobile numbers, NRIC numbers and any run of 6 or more digits replaced first (`src/api/ai_guide.py`), plus the names and menu paths of the screens listed by the page. Since 2026-10-30 every model call is masked in one place (`src/parse_util.py` `Mask`): emails, phone numbers (mobile and landline), NRIC numbers, card numbers, bank account numbers after a bank or account word, and the names in the business's own contact book become placeholders and are put back in the reply. Addresses and names that are not in the contact book are NOT removed. Measured misses and the way out are in `docs/technical-debt.md` row 1. The Assistant sends only its masked question too. No quote, customer, cost or margin record is sent. The model can only pick from the supplied screens; it cannot run an action, and only supplied links are returned.
 
 **Not kept:** the question is not stored or logged (only a count, `usage_events` kind `guide`). The custom server key is stored encrypted and never returned.
 
@@ -101,3 +101,18 @@ Optional, off by default, switched on only by the owner (Settings, AI). Modes: O
 **Owner responsibilities:** tell customers in your privacy notice that questions typed in the app can go to an AI provider; the provider's own retention applies to ILMU; for your own server, security, retention and any cross-border transfer are yours. Turn it off at any time. Review the consent log after staff changes. Health shows `ai_not_reviewed` until a choice is saved.
 
 **Limits:** the own-server call refuses private addresses and pins the connection to the checked address, but this was tested with a fake transport only, not a real TLS server.
+
+## AI reading records (opt-in mode `rag`)
+
+A fourth AI mode, "Guide plus my data, read by the AI", off until the owner turns it on and ticks agreement to the version 2 notice (`RAG_DISCLOSURE` in `src/api/ai_guide.py`). It is recorded in `ai_consent_log` with notice version 2. Moving to it from any other mode asks again; leaving it is one click and is logged.
+
+**What leaves the system:** the question and up to 5 extracts of 300 characters from that business's own quotes, contacts and catalog (and costs or supplier prices only when the person asking holds the See costs permission), after masking. Never another business's data, never an owner-only section, never a margin. An AI tool connected through MCP gets the same extracts for the role its key is bound to.
+
+**Not kept:** the question, the extracts and the answer are not stored or logged. `ai_calls` holds one row per call with the time, kind, provider, result, duration and how many values of each type were hidden. It is purged after 90 days. The owner sees every call; anyone else sees only their own.
+
+**Cross-border transfer:** the notice names the provider the owner chose, and a custom server's host is logged. Hosted ILMU's data location and retention terms are not confirmed (`docs/tech-and-tools-declaration.md`).
+
+**Owner responsibilities:** put the AI use in your privacy notice for customers and suppliers; keep MCP keys to tools you trust and revoke any you stop using (API access). Switching the mode off stops every MCP key at once.
+
+**Limits:** the notice has not had a legal review, masking misses some names and all addresses, and nothing has been run against a live model. See `docs/technical-debt.md`.
+

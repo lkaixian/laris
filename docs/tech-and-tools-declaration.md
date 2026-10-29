@@ -69,7 +69,8 @@ Design rule shown to anyone who asks: a model extracts and drafts; prices come f
 
 - Real personal data: none. All records are synthetic.
 - Keys: stored in Replit Secrets and `.env` (git-ignored). `.env.example` lists names only. No key is committed.
-- What leaves our system in a real deployment: audio and text to ILMU, audio to RunPod, chat content to Meta or Telegram. See PDPA section of `docs/PRD.md`.
+- What leaves our system in a real deployment: audio and text to ILMU, audio to RunPod, chat content to Meta or Telegram.
+- AI reading records (opt-in, owner consent v2): short masked extracts of that business's own quotes, contacts and catalog go to the AI provider the owner chose (ILMU or their own server), and to an MCP client the owner connects. No model or library was added for this: it uses Postgres full-text search and the existing ILMU door. See `docs/privacy-and-breach-runbook.md`. See PDPA section of `docs/PRD.md`.
 
 ## 7. Replit proof checklist
 

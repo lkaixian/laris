@@ -1,0 +1,54 @@
+{"kind": "EMAIL", "text": "send to ali@shop.com.my please", "secrets": ["ali@shop.com.my"], "contacts": []}
+{"kind": "EMAIL", "text": "email: siti.aminah+quotes@kedai-ku.my thanks", "secrets": ["siti.aminah+quotes@kedai-ku.my"], "contacts": []}
+{"kind": "EMAIL", "text": "ADMIN@PRINT-HOUSE.COM.MY is our email", "secrets": ["ADMIN@PRINT-HOUSE.COM.MY"], "contacts": []}
+{"kind": "EMAIL", "text": "<tan_ah_kow@mail.example.com> sent this", "secrets": ["tan_ah_kow@mail.example.com"], "contacts": []}
+{"kind": "EMAIL", "text": "hubungi jabatan@sub.domain.example.org.my", "secrets": ["jabatan@sub.domain.example.org.my"], "contacts": []}
+{"kind": "EMAIL", "text": "ali (at) shop dot my", "secrets": ["ali (at) shop dot my"], "contacts": []}
+{"kind": "PHONE", "text": "call 012-345 6789 now", "secrets": ["012-345 6789"], "contacts": []}
+{"kind": "PHONE", "text": "boleh whatsapp 0123456789 ya", "secrets": ["0123456789"], "contacts": []}
+{"kind": "PHONE", "text": "nombor saya +60123456789", "secrets": ["+60123456789"], "contacts": []}
+{"kind": "PHONE", "text": "tel +60 12-345 6789 after 5pm", "secrets": ["+60 12-345 6789"], "contacts": []}
+{"kind": "PHONE", "text": "60123456789 is the wa number", "secrets": ["60123456789"], "contacts": []}
+{"kind": "PHONE", "text": "phone 012 3456789", "secrets": ["012 3456789"], "contacts": []}
+{"kind": "PHONE", "text": "office 03-1234 5678", "secrets": ["03-1234 5678"], "contacts": []}
+{"kind": "PHONE", "text": "pejabat +603-12345678", "secrets": ["+603-12345678"], "contacts": []}
+{"kind": "PHONE", "text": "tel (04) 123 4567 ext 2", "secrets": ["(04) 123 4567"], "contacts": []}
+{"kind": "PHONE", "text": "wa.me/60123456789 click", "secrets": ["60123456789"], "contacts": []}
+{"kind": "PHONE", "text": "call o12-345 6789", "secrets": ["o12-345 6789"], "contacts": []}
+{"kind": "PHONE", "text": "nombor: kosong satu dua tiga empat lima enam tujuh lapan sembilan", "secrets": ["kosong satu dua tiga empat lima enam tujuh lapan sembilan"], "contacts": []}
+{"kind": "ID", "text": "IC 900101-14-5678 for the invoice", "secrets": ["900101-14-5678"], "contacts": []}
+{"kind": "ID", "text": "ic 900101145678", "secrets": ["900101145678"], "contacts": []}
+{"kind": "ID", "text": "NRIC no: 900101 14 5678", "secrets": ["900101 14 5678"], "contacts": []}
+{"kind": "ID", "text": "passport A12345678 holder", "secrets": ["A12345678"], "contacts": []}
+{"kind": "ID", "text": "MyKad 850505-10-1234 dan 920202-08-4321", "secrets": ["850505-10-1234", "920202-08-4321"], "contacts": []}
+{"kind": "CARD", "text": "card 4242 4242 4242 4242 exp 12/28", "secrets": ["4242 4242 4242 4242"], "contacts": []}
+{"kind": "CARD", "text": "4242-4242-4242-4242 is mine", "secrets": ["4242-4242-4242-4242"], "contacts": []}
+{"kind": "CARD", "text": "pay with 4242424242424242", "secrets": ["4242424242424242"], "contacts": []}
+{"kind": "CARD", "text": "amex 3782 822463 10005", "secrets": ["3782 822463 10005"], "contacts": []}
+{"kind": "ACCT", "text": "acct 1234567890123 Maybank", "secrets": ["1234567890123"], "contacts": []}
+{"kind": "ACCT", "text": "a/c no 5123 4567 8901 CIMB", "secrets": ["5123 4567 8901"], "contacts": []}
+{"kind": "ACCT", "text": "Maybank 514012345678 atas nama Ali", "secrets": ["514012345678"], "contacts": []}
+{"kind": "ACCT", "text": "account number: 8001234567", "secrets": ["8001234567"], "contacts": []}
+{"kind": "ACCT", "text": "no akaun 1122334455667 Public Bank", "secrets": ["1122334455667"], "contacts": []}
+{"kind": "ACCT", "text": "transfer to 1234567890123 later", "secrets": ["1234567890123"], "contacts": []}
+{"kind": "NAME", "text": "quote for Zainuddin Bakti please", "secrets": ["Zainuddin Bakti"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "attn Puan Rohani tomorrow", "secrets": ["Puan Rohani"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "ZAINUDDIN BAKTI called", "secrets": ["ZAINUDDIN BAKTI"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "from ah kow printing, 20 pcs", "secrets": ["ah kow printing"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "Encik Zainuddin asked for 5 sheets", "secrets": ["Zainuddin"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "Zainuddin B. wants a quote", "secrets": ["Zainuddin B."], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "NAME", "text": "Ah Seng from the shop on the corner", "secrets": ["Ah Seng"], "contacts": ["Zainuddin Bakti", "Puan Rohani", "Ah Kow Printing"]}
+{"kind": "ADDRESS", "text": "deliver to No 12, Jalan Industri 3, 47100 Puchong, Selangor", "secrets": ["No 12, Jalan Industri 3, 47100 Puchong, Selangor"], "contacts": []}
+{"kind": "ADDRESS", "text": "alamat: Lot 5, Taman Bukit Indah, 81200 Johor Bahru", "secrets": ["Lot 5, Taman Bukit Indah, 81200 Johor Bahru"], "contacts": []}
+{"kind": "KEEP", "text": "please keep 10 pcs @ RM 12.50 as written", "secrets": ["10 pcs @ RM 12.50"], "contacts": []}
+{"kind": "KEEP", "text": "please keep Q-0123-4567-89 as written", "secrets": ["Q-0123-4567-89"], "contacts": []}
+{"kind": "KEEP", "text": "please keep SB-777 as written", "secrets": ["SB-777"], "contacts": []}
+{"kind": "KEEP", "text": "please keep QT-2026-0001 as written", "secrets": ["QT-2026-0001"], "contacts": []}
+{"kind": "KEEP", "text": "please keep acrylic 3mm x 20 sheets as written", "secrets": ["acrylic 3mm x 20 sheets"], "contacts": []}
+{"kind": "KEEP", "text": "please keep RM 1,250.00 as written", "secrets": ["RM 1,250.00"], "contacts": []}
+{"kind": "KEEP", "text": "please keep size 60 x 30 cm as written", "secrets": ["size 60 x 30 cm"], "contacts": []}
+{"kind": "KEEP", "text": "please keep deliver by 2026-11-30 as written", "secrets": ["deliver by 2026-11-30"], "contacts": []}
+{"kind": "KEEP", "text": "please keep invoice INV-100234 as written", "secrets": ["invoice INV-100234"], "contacts": []}
+{"kind": "KEEP", "text": "please keep 50 kg at RM 4.80 per kg as written", "secrets": ["50 kg at RM 4.80 per kg"], "contacts": []}
+{"kind": "KEEP", "text": "please keep order 12 pcs of PLA 1.75mm as written", "secrets": ["order 12 pcs of PLA 1.75mm"], "contacts": []}
+{"kind": "KEEP", "text": "please keep hs code 3926.90 as written", "secrets": ["hs code 3926.90"], "contacts": []}

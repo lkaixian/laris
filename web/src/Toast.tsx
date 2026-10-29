@@ -7,8 +7,11 @@ import { Icon } from './icons'
 //   toast.error('That did not work. Reference: abc')             unexpected error: assertive (role=alert), stays until dismissed
 // Max 3 at once (oldest dropped), each has a Dismiss button. Form errors stay inline next to the thing that failed; the error variant is for
 // failures nobody is looking at: 5xx from api.ts and uncaught errors / rejections (window listeners below), de-duplicated by text for 10 s.
+//   toast('Contact removed.', { action: { label: 'Undo', onClick: restore } })   optional action button (a plain { href, label } link still works)
+// Hover or keyboard focus on a toast pauses its 5 s timer.
 type Link = { href: string; label: string }
-type Toaster = ((text: string, link?: Link) => void) & { error: (text: string) => void }
+type Action = { label: string; onClick: () => void }
+type Toaster = ((text: string, link?: Link | { action: Action }) => void) & { error: (text: string) => void }
 const Ctx = createContext<Toaster>(Object.assign(() => undefined, { error: () => undefined }))
 export const useToast = () => useContext(Ctx)
 
@@ -18,15 +21,19 @@ const DEDUPE_MS = 10_000
 const GENERIC = 'Something went wrong. Reload the page if it keeps happening.'
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [list, setList] = useState<{ id: number; text: string; link?: Link; error?: boolean }[]>([])
+  const [list, setList] = useState<{ id: number; text: string; link?: Link; action?: Action; error?: boolean }[]>([])
   const n = useRef(0)
   const recent = useRef(new Map<string, number>())
-  const dismiss = useCallback((id: number) => setList(l => l.filter(t => t.id !== id)), [])
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
+  const dismiss = useCallback((id: number) => { clearTimeout(timers.current.get(id)); timers.current.delete(id); setList(l => l.filter(t => t.id !== id)) }, [])
+  const arm = useCallback((id: number) => { clearTimeout(timers.current.get(id)); timers.current.set(id, setTimeout(() => dismiss(id), LIFE_MS)) }, [dismiss])
+  const hold = (id: number) => { clearTimeout(timers.current.get(id)) }
   const push = useMemo<Toaster>(() => {
-    const add = (text: string, link?: Link, error?: boolean) => {
+    const add = (text: string, extra?: Link | { action: Action }, error?: boolean) => {
       const id = ++n.current
-      setList(l => [...l.slice(1 - MAX), { id, text, link, error }])
-      if (!error) setTimeout(() => dismiss(id), LIFE_MS)
+      const link = extra && 'href' in extra ? extra : undefined, action = extra && 'action' in extra ? extra.action : undefined
+      setList(l => [...l.slice(1 - MAX), { id, text, link, action, error }])
+      if (!error) arm(id)
     }
     const error = (text: string) => {
       const now = Date.now(), seen = recent.current
@@ -34,8 +41,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       if (seen.has(text)) return
       seen.set(text, now); add(text, undefined, true)
     }
-    return Object.assign((text: string, link?: Link) => add(text, link), { error })
-  }, [dismiss])
+    return Object.assign((text: string, link?: Link | { action: Action }) => add(text, link), { error })
+  }, [arm])
   useEffect(() => {
     const ev = (e: Event) => push.error(String((e as CustomEvent).detail || GENERIC))  // api.ts: unhandled 5xx
     const rej = (e: PromiseRejectionEvent) => {
@@ -48,15 +55,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return () => { removeEventListener('laris:error', ev); removeEventListener('unhandledrejection', rej); removeEventListener('error', err) }
   }, [push])
   const row = (t: (typeof list)[number]) => (
-    <div key={t.id} className={`toast pointer-events-auto ${t.error ? 'toast-err' : ''}`}>
-      <span className="min-w-0 flex-1 break-words">{t.text}{t.link && <> <a className="link" href={t.link.href}>{t.link.label}</a></>}</span>
+    <div key={t.id} className="toast pointer-events-auto" onMouseEnter={() => hold(t.id)} onMouseLeave={() => !t.error && arm(t.id)} onFocus={() => hold(t.id)} onBlur={() => !t.error && arm(t.id)}>
+      <Icon name={t.error ? 'warn' : 'check'} className={`mt-0.5 size-4 shrink-0 ${t.error ? 'text-warn' : 'text-accent'}`} />
+      <span className="min-w-0 flex-1 break-words">{t.text}{t.link && <> <a className="link" href={t.link.href}>{t.link.label}</a></>}{t.action && <> <button type="button" className="link font-semibold" onClick={() => { t.action!.onClick(); dismiss(t.id) }}>{t.action.label}</button></>}</span>
       <button type="button" className="toast-x" aria-label={`Dismiss: ${t.text}`} onClick={() => dismiss(t.id)}><Icon name="close" className="size-4" /></button>
     </div>
   )
   return (
     <Ctx value={push}>
       {children}
-      <div className="pointer-events-none fixed inset-x-3 bottom-3 z-[60] grid justify-items-end gap-2 sm:left-auto sm:right-4 sm:bottom-4 sm:w-96">
+      <div className="pointer-events-none fixed inset-x-3 bottom-3 z-[60] mx-auto grid max-w-[360px] justify-items-center gap-2 md:inset-x-auto md:bottom-4 md:left-64 md:mx-0 md:w-[360px] md:justify-items-start">
         <div role="alert" aria-live="assertive" className="grid w-full justify-items-end gap-2 empty:hidden">{list.filter(t => t.error).map(row)}</div>
         <div role="status" aria-live="polite" className="grid w-full justify-items-end gap-2 empty:hidden">{list.filter(t => !t.error).map(row)}</div>
       </div>

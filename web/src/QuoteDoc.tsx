@@ -42,7 +42,7 @@ export function QuotePaper({ p }: { p: Preview }) {
   const sub = 'text-[#475a50]'
   const th = { backgroundColor: bg, color: fg }
   return (
-    <article aria-label={`Quotation ${p.doc_no ?? ''}`} className="min-w-0 rounded-ui border border-soft bg-white p-4 text-[#16231d] sm:p-6">
+    <article aria-label={`Quotation ${p.doc_no ?? ''}`} className="mx-auto min-w-0 max-w-[860px] rounded-card border border-hairline bg-white p-4 text-[#16231d] sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 basis-60">
           {i.logo_url?.startsWith('data:image/') && <img src={i.logo_url} alt={i.name} className="mb-2 max-h-16 max-w-48 object-contain" />}
@@ -56,7 +56,7 @@ export function QuotePaper({ p }: { p: Preview }) {
           </div>
         </div>
         <div className="min-w-0 text-left sm:text-right">
-          <h3 className="text-xl font-semibold tracking-tight">Quotation {p.doc_no}</h3>
+          <h3 className="text-xl font-semibold">Quotation {p.doc_no}</h3>
           <dl className="mt-1 grid grid-cols-[auto_auto] justify-start gap-x-3 text-sm sm:justify-end">
             <dt className={sub}>Issued</dt><dd>{date(p.issued_on)}</dd>
             <dt className={sub}>Valid until</dt><dd>{date(p.valid_until)}</dd>
@@ -86,15 +86,15 @@ export function QuotePaper({ p }: { p: Preview }) {
             ? <tr key={l.no} className="!border-[#dce7e0] bg-[#e1f0e8]"><th scope="colgroup" colSpan={disc ? 7 : 6} className="!text-[#16231d] text-sm">{l.section || l.description}</th></tr>
             : <tr key={l.no} className="!border-[#dce7e0]">
                 <td>{l.no}</td><td className="min-w-40 break-words">{l.description}</td>
-                <td className="text-right">{num(l.qty)}</td><td>{l.uom}</td>
-                <td className="whitespace-nowrap text-right">{l.unit_price == null ? '' : rm(l.unit_price)}</td>
+                <td className="num">{num(l.qty)}</td><td>{l.uom}</td>
+                <td className="num whitespace-nowrap">{l.unit_price == null ? '' : rm(l.unit_price)}</td>
                 {disc && <td className="text-right">{l.discount_pct != null && Number(l.discount_pct) !== 0 ? `${num(l.discount_pct)}%` : ''}</td>}
-                <td className="whitespace-nowrap text-right">{l.amount == null ? '' : rm(l.amount)}</td>
+                <td className="num whitespace-nowrap">{l.amount == null ? '' : rm(l.amount)}</td>
               </tr>)}</tbody>
         </table>
       </div>
 
-      <dl className="mt-3 ml-auto grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+      <dl className="mt-3 ml-auto grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-[#dce7e0] pt-2 text-sm">
         <dt className={sub}>Subtotal</dt><dd className="text-right">{rm(p.subtotal)}</dd>
         {p.tax_total != null && <><dt className={sub}>SST</dt><dd className="text-right">{rm(p.tax_total)}</dd></>}
         <dt className="font-semibold">Total</dt><dd className="text-right text-base font-semibold">{rm(p.total)}</dd>
@@ -112,7 +112,7 @@ export function Messages({ list }: { list: DocDetail['messages'] }) {
   if (!list?.length) return null
   return (
     <section className="mt-6" aria-labelledby="msgs">
-      <h2 id="msgs" className="mb-2 text-lg font-semibold">Messages</h2>
+      <h2 id="msgs" className="mb-2 text-md font-semibold">Messages</h2>
       <ul className="grid gap-2">
         {list.map((m, n) => (
           <li key={n} className="card text-sm">
@@ -182,7 +182,7 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
   return (
     <section className="mb-6" aria-labelledby="qd">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="qd" className="text-lg font-semibold">Quote document</h2>
+        <h2 id="qd" className="text-md font-semibold">Quote document</h2>
         <div className="flex flex-wrap items-center gap-2" onKeyDown={keyClose}>
           {sendable && <button ref={sendBtn} type="button" className="btn btn-primary" aria-expanded={send} aria-controls="send-box"
             {...(owner ? { onClick: () => setSend(v => !v) } : { 'aria-disabled': true as const, title: why('decide_quotes'), 'data-locked': true as const })}>Send quote</button>}
@@ -202,7 +202,7 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
       )}
       {sendable && owner && <p className="mt-1 text-sm text-muted">Copy customer link gives you a page where your customer can read this quote and accept it by typing their name. The signature is simulated, not a legal e-signature.</p>}
       {menu && (
-        <div id="export-menu" className="card mt-2 grid max-w-xl gap-3 sm:grid-cols-2" onKeyDown={keyClose}>
+        <div id="export-menu" className="card mt-2 grid max-w-xl gap-3 shadow-2 sm:grid-cols-2" onKeyDown={keyClose}>
           <div><h3 className="mb-1 text-sm font-semibold">Customer files</h3><ul className="grid gap-2">{row('customer')}</ul></div>
           {internal && <div><h3 className="mb-1 text-sm font-semibold">Internal (with cost and margin)</h3><ul className="grid gap-2">{row('internal')}</ul>
             <p className="mt-2 text-sm text-warn">Internal files show costs and margins. Do not send them to customers.</p></div>}
@@ -213,6 +213,13 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
         <button type="button" className="btn" aria-expanded={open} aria-controls="quote-preview" onClick={() => setOpen(v => !v)}>{open ? 'Hide preview' : 'Show preview'}</button>
       </div>
       <div id="quote-preview" className="mt-3" hidden={!open}>
+        {p && (
+          <dl className="mb-3 grid grid-cols-2 gap-3 rounded-card border border-hairline bg-surface p-3 text-sm md:grid-cols-3">
+            <div><dt className="text-muted">Customer</dt><dd className="font-semibold">{p.customer.name}</dd></div>
+            <div><dt className="text-muted">Total</dt><dd className="font-semibold tabular-nums">{rm(p.total)}</dd></div>
+            <div><dt className="text-muted">Valid until</dt><dd className="tabular-nums">{date(p.valid_until)}</dd></div>
+          </dl>
+        )}
         <p className="mb-2 flex items-center gap-2 text-sm text-muted"><Icon name="inbox" className="size-4" />This is what your customer receives. Costs and margins are never on it.</p>
         {pv.error ? <div role="alert" className="card border-warn bg-warn-bg text-sm text-warn"><p>{pv.error}</p><button type="button" className="btn mt-2" onClick={pv.reload}>Retry loading</button></div>
           : !p ? <div role="status" aria-busy="true" className="skeleton h-40"><span className="sr-only">Loading preview...</span></div> : <QuotePaper p={p} />}
@@ -254,18 +261,18 @@ function SendBox({ id, status, p, onClose, onSent }: { id: string; status: strin
     } catch (e) { setErr(fail(e)); if (e instanceof ApiError && e.status === 409) onSent() } finally { setBusy(false) }
   }
   return (
-    <div ref={box} id="send-box" role="dialog" aria-labelledby="send-h" tabIndex={-1} className="card mt-2 max-w-xl border-l-4 border-l-accent"
+    <div ref={box} id="send-box" role="dialog" aria-labelledby="send-h" tabIndex={-1} className="card mt-2 max-w-xl shadow-3"
       onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
-      <h3 id="send-h" className="font-semibold">Send quote {p.doc_no}</h3>
+      <h3 id="send-h" className="text-md font-semibold">Send quote {p.doc_no}</h3>
       {status === 'approved' && <p className="mt-1 text-sm text-muted">Sending marks the quote as sent.</p>}
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); go() }}>
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-semibold">Send by</legend>
           {p.channels.length === 0 && <p className="text-sm text-muted">No channel is set up for this customer.</p>}
           {p.channels.map(c => (
-            <label key={c.channel} className={`flex min-h-11 items-start gap-2 rounded-ui border border-soft p-2 text-sm ${c.available ? '' : 'text-muted'}`}>
+            <label key={c.channel} className={`flex min-h-11 items-start gap-2 rounded-ui border border-line p-2 text-sm ${c.available ? '' : 'text-muted'}`}>
               <input type="radio" name="chan" className="mt-1" value={c.channel} disabled={!c.available} checked={ch === c.channel} onChange={() => setCh(c.channel)} aria-describedby={`chan-${c.channel}`} />
-              <span><span className="font-semibold">{chanLabel(c.channel)}</span>
+              <span><span className="flex flex-wrap items-center gap-2"><span className="font-semibold">{chanLabel(c.channel)}</span><span className={`chip ${c.available ? 'chip-approved' : 'chip-expired'}`}>{c.available ? 'Available' : 'Unavailable'}</span></span>
                 <span id={`chan-${c.channel}`} className="block">{c.available ? (c.to_hint ? `To ${c.to_hint}` : 'Available') : (REASON[c.reason ?? ''] ?? 'Not available')}</span></span>
             </label>
           ))}

@@ -3,7 +3,9 @@ import type { Ref } from 'react'
 import { api, can, download, MOCK, needs, why } from './api'
 import type { DocSummary } from './api'
 import { useWriteGate } from './Licence'
-import { Async, EmptyState, PageHeader, Status, TableRegion, msg, rm, useFetch } from './ui'
+import { Async, EmptyState, PageHeader, Status, msg, rm, useFetch } from './ui'
+import { DataTable, FilterBar, Tabs } from './kit'
+import type { Col } from './kit'
 import { useToast } from './Toast'
 import { PersonData } from './Privacy'
 
@@ -19,7 +21,22 @@ interface ContactDetail extends Contact {
 
 const KINDS: [Kind | '', string][] = [['', 'All'], ['customer', 'Customers'], ['supplier', 'Suppliers'], ['contractor', 'Contractors']]
 const KIND_ONE: Record<Kind, string> = { customer: 'Customer', supplier: 'Supplier', contractor: 'Contractor' }
+const COSTS: Col<NonNullable<ContactDetail['current_costs']>[number]>[] = [
+  { key: 'item', head: 'Item', cell: x => x.item_key, mobile: 'title' },
+  { key: 'uom', head: 'Unit', cell: x => x.uom, mobile: 'meta' },
+  { key: 'cost', head: 'Unit cost', cell: x => rm(x.unit_cost), num: true, mobile: 'meta' },
+  { key: 'upd', head: 'Updated', cell: x => x.effective_date.slice(0, 10), mobile: 'meta', className: 'whitespace-nowrap tabular-nums' },
+]
 const day = (s: string | null) => (s ? s.slice(0, 10) : 'No activity yet')
+
+const cols = (owner: boolean): Col<Contact>[] => [
+  { key: 'name', head: 'Name', cell: c => <a href={`#/contact/${c.id}`}>{c.name}</a>, mobile: 'title' },
+  { key: 'role', head: 'Role', cell: c => <span className="badge">{KIND_ONE[c.role]}</span>, mobile: 'badge' },
+  { key: 'phone', head: 'Phone', cell: c => c.contact ?? <span className="text-muted">None</span>, mobile: 'sub', className: 'whitespace-nowrap tabular-nums' },
+  { key: 'docs', head: 'Documents', cell: c => c.documents, num: true },
+  ...(owner ? [{ key: 'value', head: 'Value', cell: (c: Contact) => c.value && Number(c.value) > 0 ? rm(c.value) : '', num: true }] : []),
+  { key: 'last', head: 'Last activity', cell: c => day(c.last_activity), mobile: 'meta' as const, className: 'whitespace-nowrap tabular-nums' },
+]
 
 const empty = { role: 'customer' as Kind, name: '', contact: '', email: '', attention: '', ssm_no: '', sst_no: '', address: '', notes: '' }
 type Form = typeof empty
@@ -92,13 +109,9 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
           {can('export_data') && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
           <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...(can('manage_contacts') ? gate(() => setAdding(!adding)) : needs('manage_contacts'))}>Add contact</button>
         </>} />
-      <div className="mb-3 flex flex-wrap items-end gap-3">
-        <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-semibold">Search contacts
-          <input type="search" className="input font-normal" value={q} placeholder="Name, number, email, notes" onChange={e => setQ(e.target.value)} /></label>
-        <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-2">
-          {KINDS.map(([k, t]) => <button key={k} type="button" className="btn" aria-pressed={kind === k} onClick={() => setKind(k)}>{t}</button>)}
-        </div>
-      </div>
+      <Tabs label="Filter by type" value={kind} options={KINDS.map(([k, t]) => ({ value: k, label: t }))} onChange={v => setKind(v as Kind | '')} />
+      <FilterBar label="Contact search" search={{ value: q, onChange: setQ, label: 'Search name, number, email, notes' }}
+        chips={q ? [{ label: `Search: ${q}`, onRemove: () => setQ('') }] : []} />
       {adding && (
         <form className="card mb-4 grid gap-3" onSubmit={e => { e.preventDefault(); add() }} aria-label="Add contact">
           <Fields f={f} set={setF} kind kindRef={first} />
@@ -109,27 +122,10 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       )}
       {err && !adding && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <p role="status" className="sr-only">{s.data ? `${n} ${n === 1 ? 'contact' : 'contacts'} found` : ''}</p>
-      <Async s={s} rows={6} empty={!n} emptyText={filtered ? 'No contact matches.' : 'No contacts yet.'}
+      <Async s={s} rows={8} shape="table" empty={!n} emptyText={filtered ? 'No contact matches.' : 'No contacts yet.'}
         emptyHint={filtered ? 'Try fewer words or another type.' : 'Add your first supplier or customer. Saved chat numbers let LARIS recognise who is writing.'}
         emptyAction={filtered ? { label: 'Clear search', onClick: () => { setQ(''); setApplied(''); setKind('') } } : can('manage_contacts') ? { label: 'Add the first contact', onClick: () => setAdding(true) } : undefined}>
-        <ul className="grid gap-2 md:grid-cols-2">
-          {s.data?.map(c => (
-            <li key={c.id}>
-              <a className="card block hover:bg-tint" href={`#/contact/${c.id}`}>
-                <span className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-semibold text-accent underline underline-offset-2">{c.name}</span>
-                  <span className="badge">{KIND_ONE[c.role]}</span>
-                </span>
-                {c.attention && <span className="block text-sm">{c.attention}</span>}
-                <span className="block text-sm text-muted">{[c.contact, c.email].filter(Boolean).join(' · ') || 'No contact details'}</span>
-                <span className="mt-2 block text-sm text-muted">
-                  {c.documents} {c.documents === 1 ? 'document' : 'documents'} · last {day(c.last_activity)}
-                  {owner && c.value && Number(c.value) > 0 ? ` · ${rm(c.value)}` : ''}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <DataTable label="Contacts" caption="Contacts" rows={s.data ?? []} rowKey={c => c.id} cols={cols(owner)} />
       </Async>
     </>
   )
@@ -160,11 +156,11 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
   const row = (k: string, v: string | null) => v ? <div><dt className="text-sm text-muted">{k}</dt><dd>{v}</dd></div> : null
   return (
     <>
-      {!c && <PageHeader back={{ href: '#/contacts', label: 'Back to contacts' }} />}
+      {!c && <PageHeader crumbs={[{ href: '#/contacts', label: 'Contacts' }]} />}
       <Async s={s} empty={false} rows={4}>
         {c && <>
-          <PageHeader back={{ href: '#/contacts', label: 'Back to contacts' }} title={c.name}
-            meta={<><span className="badge">{KIND_ONE[c.role]}</span>
+          <PageHeader crumbs={[{ href: '#/contacts', label: 'Contacts' }, { label: c.name }]} title={c.name} status={<span className="badge">{KIND_ONE[c.role]}</span>}
+            meta={<>{c.contact && <span>{c.contact}</span>}{c.email && <span>{c.email}</span>}
               <span className="text-muted">{c.documents} {c.documents === 1 ? 'document' : 'documents'}{owner && c.value && Number(c.value) > 0 ? ` · ${rm(c.value)} in total` : ''}</span></>}
             actions={!editing && <button type="button" className="btn" {...needs('manage_contacts', start)}>Edit {c.name}</button>} />
           {editing ? (
@@ -186,24 +182,19 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
           )}
           {c.current_costs && c.current_costs.length > 0 && (
             <section className="mt-6" aria-labelledby="costs">
-              <h2 id="costs" className="mb-2 text-lg font-semibold">What they charge now</h2>
-              <TableRegion label="Current costs table">
-                <table className="w-full min-w-max"><caption className="sr-only">Current supplier costs for {c.name}</caption>
-                  <thead><tr><th scope="col">Item</th><th scope="col">Unit</th><th scope="col">Unit cost</th><th scope="col">Since</th></tr></thead>
-                  <tbody>{c.current_costs.map(x => <tr key={x.item_key}><td>{x.item_key}</td><td>{x.uom}</td><td className="tabular-nums">{rm(x.unit_cost)}</td><td>{x.effective_date}</td></tr>)}</tbody>
-                </table>
-              </TableRegion>
+              <h2 id="costs" className="mb-3 text-md font-semibold">What they charge now</h2>
+              <DataTable label="Current costs table" caption={`Current supplier costs for ${c.name}`} rows={c.current_costs} rowKey={x => x.item_key} cols={COSTS} />
             </section>
           )}
           <section className="mt-6" aria-labelledby="docs">
-            <h2 id="docs" className="mb-2 text-lg font-semibold">Documents</h2>
+            <h2 id="docs" className="mb-3 text-md font-semibold">Documents</h2>
             {c.recent_documents.length === 0 ? <EmptyState title={`No documents with ${c.name} yet.`} /> : (
-              <ul className="divide-y divide-soft rounded-ui border border-soft bg-surface">
+              <ul className="divide-y divide-hairline rounded-card border border-hairline bg-surface">
                 {c.recent_documents.map(d => (
-                  <li key={d.id}><a className="row" href={`#/doc/${d.id}`}>
+                  <li key={d.id}><a className="row group" href={`#/doc/${d.id}`}>
                     <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="font-semibold text-accent underline underline-offset-2">{d.doc_no ?? 'No document number'}</span>
-                      <span className="text-sm tabular-nums">{d.total ? rm(d.total) : ''}</span></span>
+                      <span className="font-semibold text-ink group-hover:underline">{d.doc_no ?? 'No document number'}</span>
+                      <span className="num text-sm">{d.total ? rm(d.total) : ''}</span></span>
                     <span className="mt-1 flex flex-wrap items-center gap-2 text-sm"><Status v={d.status} /><span className="text-muted">{d.direction === 'in' ? 'Received' : 'Sent'}</span></span>
                   </a></li>
                 ))}

@@ -60,13 +60,14 @@ export function ActionError({ err, onRetry, label }: { err?: { text: string; ret
 // Loading, error and empty states in one place. `rows`/`shape` size the skeleton; `emptyHint`/`emptyAction` turn an empty list into a next step.
 export function Async({ s, empty, emptyText, emptyHint, emptyAction, rows, shape, children }: {
   s: { loading: boolean; error?: string; err?: unknown; data?: unknown; reload: () => void }; empty?: boolean; emptyText?: string
-  emptyHint?: string; emptyAction?: EmptyAction; rows?: number; shape?: 'list' | 'cards' | 'text'; children: ReactNode
+  emptyHint?: string; emptyAction?: EmptyAction; rows?: number; shape?: SkeletonShape; children: ReactNode
 }) {
   useEffect(() => { if (s.err instanceof ApiError) s.err.shown = true }, [s.err])  // on screen here: no extra toast
   if (s.error) return (
     <div role="alert" className="card border-warn bg-warn-bg text-warn">
-      <p>{s.error}</p>
-      <button className="btn mt-3" onClick={s.reload}>Retry loading</button>
+      <p className="flex items-start gap-2"><Icon name="warn" className="mt-0.5 size-4 shrink-0" />{s.error}</p>
+      {s.err instanceof ApiError && s.err.requestId && <p className="mt-1 text-xs">Reference: {s.err.requestId}</p>}
+      <button className="btn mt-3" onClick={s.reload}>Try again</button>
     </div>
   )
   if (s.loading && !s.data) return <Skeleton rows={rows} shape={shape} />
@@ -75,7 +76,17 @@ export function Async({ s, empty, emptyText, emptyHint, emptyAction, rows, shape
 }
 
 // Placeholder bars while data loads. role=status + aria-busy so it is announced once; the pulse stops under prefers-reduced-motion.
-export function Skeleton({ rows = 3, shape = 'list' }: { rows?: number; shape?: 'list' | 'cards' | 'text' }) {
+export type SkeletonShape = 'list' | 'cards' | 'text' | 'table' | 'tiles' | 'detail'
+export function Skeleton({ rows = 3, shape = 'list' }: { rows?: number; shape?: SkeletonShape }) {
+  // table: header bar plus 40px rows (the DataTable row height); tiles: 76px tiles in one strip; detail: title, key facts, panel.
+  if (shape === 'table' || shape === 'tiles' || shape === 'detail') return (
+    <div role="status" aria-busy="true" className="card overflow-hidden p-0">
+      <span className="sr-only">Loading...</span>
+      {shape === 'table' && <><div aria-hidden="true" className="skeleton h-9 rounded-none" />{Array.from({ length: rows }, (_, i) => <div key={i} aria-hidden="true" className="skeleton m-2 h-6" style={{ width: `${96 - ((i * 7) % 25)}%` }} />)}</>}
+      {shape === 'tiles' && <div aria-hidden="true" className="grid grid-cols-2 md:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-[76px] rounded-none border-r border-surface" />)}</div>}
+      {shape === 'detail' && <div aria-hidden="true" className="grid gap-3 p-4"><div className="skeleton h-7 w-1/2" /><div className="grid grid-cols-2 gap-3"><div className="skeleton h-10" /><div className="skeleton h-10" /></div><div className="skeleton h-32" /></div>}
+    </div>
+  )
   const h = shape === 'cards' ? 'h-24' : shape === 'text' ? 'h-4' : 'h-16'
   return (
     <div role="status" aria-busy="true" className={`grid ${shape === 'cards' ? 'sm:grid-cols-2' : ''} gap-3`}>
@@ -89,13 +100,12 @@ export interface EmptyAction { label: string; href?: string; onClick?: () => voi
 // An empty list with a clear next step. One primary action at most.
 export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: EmptyAction }) {
   return (
-    <div className="card flex flex-col items-center gap-2 px-4 py-8 text-center">
-      <span aria-hidden="true" className="grid size-12 place-items-center rounded-full bg-tint text-accent"><Icon name="inbox" className="size-6" /></span>
-      <p className="font-semibold">{title}</p>
-      {hint && <p className="max-w-md text-sm text-muted">{hint}</p>}
+    <div className="card px-4 py-6">
+      <p className="text-md font-semibold">{title}</p>
+      {hint && <p className="mt-1 max-w-[60ch] text-sm text-muted">{hint}</p>}
       {action && (action.href
-        ? <a className="btn btn-primary mt-1" href={action.href}>{action.label}</a>
-        : <button type="button" className="btn btn-primary mt-1" onClick={action.onClick}>{action.label}</button>)}
+        ? <a className="btn btn-primary mt-3" href={action.href}>{action.label}</a>
+        : <button type="button" className="btn btn-primary mt-3" onClick={action.onClick}>{action.label}</button>)}
     </div>
   )
 }
@@ -105,19 +115,40 @@ export const OrgCtx = createContext('LARIS')
 
 // Standard top of every page: optional Back link (detail pages), the one h1 (focus target on navigation), description,
 // meta line, and a slot for the page's primary action. Also keeps <title> in step. Pass no title while loading: a skeleton shows and no h1 exists yet.
-export function PageHeader({ title, description, meta, actions, back }: {
-  title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }
+export interface Crumb { href?: string; label: string }
+export function PageHeader({ title, description, meta, actions, back, crumbs, status }: {
+  title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }; crumbs?: Crumb[]; status?: ReactNode
 }) {
   const org = useContext(OrgCtx)
   useEffect(() => { document.title = `${title ?? 'Loading'} · ${org}` }, [title, org])
+  const trail = crumbs ?? (back ? [back] : undefined)  // `back` is a single crumb with an arrow; `crumbs` ends with the current page
   return (
     <div className="mb-5">
-      {back && <nav aria-label="Breadcrumb" className="mb-1"><a className="link inline-flex min-h-11 items-center gap-1 no-underline hover:underline" href={back.href}><Icon name="back" className="size-4" />{back.label}</a></nav>}
+      {trail && (
+        <nav aria-label="Breadcrumb" className="mb-1 text-sm text-muted">
+          <ol className="flex flex-wrap items-center">
+            {trail.map((c, k) => {
+              const last = !!crumbs && k === trail.length - 1
+              return (
+                <li key={k} className="flex items-center">
+                  {k > 0 && <span aria-hidden="true" className="px-1.5">/</span>}
+                  {c.href && !last
+                    ? <a className="inline-flex min-h-8 items-center gap-1 hover:text-ink hover:underline [@media(pointer:coarse)]:min-h-11" href={c.href}>{!crumbs && <Icon name="back" className="size-4" />}{c.label}</a>
+                    : <span aria-current={last ? 'page' : undefined}>{c.label}</span>}
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 basis-72">
-          {title !== undefined ? <h1 tabIndex={-1} className="break-words text-2xl font-semibold tracking-tight">{title}</h1> : <div aria-hidden="true" className="skeleton h-8 w-56 max-w-full" />}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {title !== undefined ? <h1 tabIndex={-1} className="break-words text-lg font-semibold">{title}</h1> : <div aria-hidden="true" className="skeleton h-7 w-56 max-w-full" />}
+            {status}
+          </div>
           {meta && <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{meta}</div>}
-          {description && <p className="mt-1 max-w-2xl text-muted">{description}</p>}
+          {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -126,7 +157,7 @@ export function PageHeader({ title, description, meta, actions, back }: {
 }
 
 // A wide table in its own horizontal scroll region (keyboard focusable), with a visible hint while columns are cut off.
-export function TableRegion({ label, children }: { label: string; children: ReactNode }) {
+export function TableRegion({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
   const box = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
   useEffect(() => {
@@ -140,7 +171,7 @@ export function TableRegion({ label, children }: { label: string; children: Reac
   }, [])
   return (
     <div className="min-w-0 max-w-full">
-      <div ref={box} className="relative max-w-full overflow-x-auto rounded-ui border border-soft bg-surface" role="region" aria-label={label} tabIndex={0}>{children}</div>
+      <div ref={box} className={`relative max-w-full overflow-x-auto ${className} rounded-card border border-hairline bg-surface`} role="region" aria-label={label} tabIndex={0}>{children}</div>
       {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">Scroll sideways to see more columns</p>}
     </div>
   )
@@ -160,7 +191,7 @@ export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark
     setDark(!dark)
   }
   return compact
-    ? <button type="button" className="btn size-11 px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label="Dark theme" title="Dark theme" onClick={flip}><Icon name="moon" /></button>
+    ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label="Dark theme" title="Dark theme" onClick={flip}><Icon name="moon" /></button>
     : <button className="btn" aria-pressed={dark} onClick={flip}>Dark theme</button>
 }
 
@@ -201,7 +232,24 @@ export function OrgMark({ org }: { org: Me['org'] }) {
   )
 }
 
-export function Status({ v }: { v: string }) { return <span className="badge">{label(v)}</span> }
+// The one status vocabulary: label and chip look for every document, quote, ask and catalog state. Unknown states get the draft look.
+export const STATUS_LABEL: Record<string, string> = {
+  received: 'Received', draft: 'Draft', parsed: 'Parsed', reviewed: 'Reviewed', accepted: 'Accepted', in_cost_book: 'In cost book', approved: 'Approved', sent: 'Sent', read: 'Opened',
+  job_created: 'Job created', expired: 'Expired', rejected: 'Rejected', cancelled: 'Cancelled', superseded: 'Superseded', waiting: 'Waiting for supplier', needs_review: 'Needs review', ready: 'Ready',
+  confirmed: 'Confirmed', discarded: 'Discarded',
+}
+export const stageLabel = (s: string) => STATUS_LABEL[s] ?? s.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+export const STATUS_CHIP: Record<string, string> = {
+  received: 'draft', draft: 'draft', parsed: 'draft', waiting: 'draft', needs_review: 'warn',
+  reviewed: 'approved', approved: 'approved', ready: 'approved', confirmed: 'approved', in_cost_book: 'approved',
+  sent: 'sent', read: 'read', accepted: 'accepted', job_created: 'job_created', rejected: 'rejected',
+  expired: 'expired', cancelled: 'expired', superseded: 'expired', discarded: 'expired',
+}
+export function Status({ v }: { v: string }) {
+  const k = STATUS_CHIP[v] ?? 'draft'
+  return <span className={`chip chip-${k}`}>{k === 'warn' && <Icon name="warn" className="size-3" />}{stageLabel(v)}</span>
+}
+export const OverdueChip = ({ reason }: { reason?: string | null }) => <span className="chip chip-warn"><Icon name="warn" className="size-3" />Overdue{reason ? `: ${reason}` : ''}</span>
 
 // Slim status line in the shell's banner slot. Offline: say changes cannot be saved. Back online: say so for 3 s and tell loaders that failed to try again ('laris:online').
 export function OfflineBanner() {
@@ -214,7 +262,7 @@ export function OfflineBanner() {
     return () => { clearTimeout(t); removeEventListener('offline', off); removeEventListener('online', on) }
   }, [])
   return (
-    <div role="status" className={state === 'on' ? undefined : `px-4 py-2 text-center text-sm ${state === 'off' ? 'bg-warn-bg text-warn' : 'bg-tint text-ink'}`}>
+    <div role="status" className={state === 'on' ? undefined : `flex min-h-7 items-center justify-center px-4 text-xs ${state === 'off' ? 'bg-warn-bg text-warn' : 'bg-surface-2 text-ink'}`}>
       {state === 'off' ? 'You are offline. Changes cannot be saved until you reconnect.' : state === 'back' ? 'Back online' : ''}
     </div>
   )

@@ -68,7 +68,7 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
     <nav aria-label="Main" className="px-2 pb-2">
       <ul>
         {groups.map(g => (
-          <li key={g.label} className={collapsed ? 'mt-2 border-t border-soft pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
+          <li key={g.label} className={collapsed ? 'mt-2 border-t border-hairline pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
             <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{g.label}</p>
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
@@ -130,13 +130,13 @@ function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: stri
   const initials = me.name.replace(/^SAMPLE\s+/i, '').split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
   return (
     <div ref={box} className="relative" onBlur={e => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) setOpen(false) }}>
-      <button ref={btn} type="button" className="inline-flex min-h-11 items-center gap-2 rounded-ui px-1.5 hover:bg-tint" aria-expanded={open} aria-controls="user-panel" aria-label={`Account menu for ${me.name}`} onClick={() => setOpen(!open)}>
+      <button ref={btn} type="button" className="inline-flex min-h-(--control-h) items-center gap-2 rounded-ui px-1.5 hover:bg-surface-2" aria-expanded={open} aria-controls="user-panel" aria-label={`Account menu for ${me.name}`} onClick={() => setOpen(!open)}>
         <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-tint text-xs font-bold text-accent">{initials || <Icon name="user" className="size-4" />}</span>
         <span aria-hidden="true" className="hidden max-w-32 truncate text-sm font-semibold xl:inline">{me.name}</span>
         <Icon name="down" className="size-4 text-muted" />
       </button>
       {open && (
-        <div id="user-panel" className="card absolute right-0 top-full z-50 mt-1 w-64 p-2 shadow-lg">
+        <div id="user-panel" className="card absolute right-0 top-full z-50 mt-1 w-64 p-2 shadow-2">
           <p className="px-2 py-1"><span className="block truncate font-semibold">{me.name}</span><span className="block text-sm text-muted">{me.role_name ?? me.role}</span></p>
           <a className="sidelink" href="#/account"><Icon name="user" />Account</a>
           <a className="sidelink" href="#/help"><Icon name="ask" />Help</a>
@@ -169,7 +169,7 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
   return (
     <div className="fixed inset-0 z-50 md:hidden" onKeyDown={keys}>
       <div aria-hidden="true" className="absolute inset-0 bg-ink/50" style={{ animation: 'fade-in 150ms ease-out' }} onClick={onClose} />
-      <div ref={box} role="dialog" aria-modal="true" aria-label="Menu" className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface shadow-xl" style={{ animation: 'drawer-in 160ms ease-out' }}>
+      <div ref={box} role="dialog" aria-modal="true" aria-label="Menu" className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface shadow-3" style={{ animation: 'drawer-in 160ms ease-out' }}>
         {children}
       </div>
     </div>
@@ -222,31 +222,30 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-[70] focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>Skip to content</a>
       <div className="md:flex">
-        <div role="region" aria-label="Sidebar" inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-soft bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-16' : 'w-60'}`}>
-          <div className="flex h-16 shrink-0 items-center justify-center border-b border-soft px-3">
-            <a href="#/home" className="inline-flex min-h-11 items-center" aria-label="LARIS home">
+        <div role="region" aria-label="Sidebar" inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-14' : 'w-58'}`}>
+          <div className={`flex shrink-0 items-center border-b border-hairline ${collapsed ? 'flex-col gap-1 px-1 py-2' : 'h-14 justify-between pl-4 pr-2'}`}>
+            <a href="#/home" className="inline-flex min-h-(--control-h) items-center" aria-label="LARIS home">
               {collapsed ? <img src="/brand/laris-mark.png" alt="" className="size-8 object-contain" /> : <Brand dark={dark} />}
             </a>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-1">{me ? <NavList groups={groups} route={route} collapsed={collapsed} idp="sb" /> : <div className="p-3"><Skeleton rows={6} shape="text" /></div>}</div>
-          <div className="border-t border-soft p-2">
-            <button type="button" className="sidelink w-full" aria-expanded={!collapsed} title={collapsed ? 'Expand menu' : undefined} onClick={toggleCollapsed}>
-              <Icon name={collapsed ? 'right' : 'left'} /><span className={collapsed ? 'sr-only' : ''}>{collapsed ? 'Expand menu' : 'Collapse menu'}</span>
+            <button type="button" className="btn btn-quiet size-(--control-h) px-0" aria-expanded={!collapsed} aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} title={collapsed ? 'Expand menu' : 'Collapse menu'} onClick={toggleCollapsed}>
+              <Icon name={collapsed ? 'right' : 'left'} />
             </button>
           </div>
+          {me && !collapsed && <div className="border-b border-hairline px-4 py-2"><OrgMark org={me.org} /></div>}
+          <div className="min-h-0 flex-1 overflow-y-auto pt-1">{me ? <NavList groups={groups} route={route} collapsed={collapsed} idp="sb" /> : <div className="p-3"><Skeleton rows={6} shape="text" /></div>}</div>
         </div>
 
         <div className="min-w-0 flex-1" inert={drawer || pal || undefined}>
-          <header className="z-30 border-b border-soft bg-surface md:sticky md:top-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 md:flex-nowrap md:px-6 md:py-0 md:h-16">
+          <header className="z-30 border-b border-hairline bg-surface md:sticky md:top-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 md:h-14 md:flex-nowrap md:px-6 md:py-0">
               <button ref={menuBtn} type="button" className="btn size-11 px-0 md:hidden" aria-label="Open menu" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" /></button>
               <span className="shrink-0 md:hidden"><Brand dark={dark} /></span>
-              {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line md:hidden" /><div className="min-w-0 flex-1 md:max-w-52 md:flex-none lg:max-w-64"><OrgMark org={me.org} /></div></>}
-              {!me && <span className="flex-1" />}
-              <div className="order-last hidden md:order-none md:ml-4 md:block md:max-w-xl md:flex-1">
+              {me && <><span aria-hidden="true" className="h-8 w-px shrink-0 bg-line md:hidden" /><div className="min-w-0 flex-1 md:hidden"><OrgMark org={me.org} /></div></>}
+              {!me && <span className="flex-1 md:hidden" />}
+              <div className="order-last hidden md:order-none md:block md:max-w-[560px] md:flex-1">
                 <button type="button" className="input flex w-full items-center gap-2 text-left text-muted" aria-keyshortcuts="/ Control+K Meta+K" onClick={() => setPal(true)}>
                   <Icon name="search" className="size-4" /><span className="flex-1 truncate">{t({ en: 'Search or jump to...', ms: 'Cari atau pergi ke...' }, lang)}</span>
-                  <kbd aria-hidden="true" className="rounded-ui border border-soft px-1.5 text-xs">{mac ? '⌘ K' : 'Ctrl K'}</kbd>
+                  <kbd aria-hidden="true" className="rounded-xs border border-hairline px-1.5 text-xs">{mac ? '⌘ K' : 'Ctrl K'}</kbd>
                 </button>
               </div>
               <button type="button" className="btn ml-auto size-11 px-0 md:hidden" aria-label={t({ en: 'Search', ms: 'Carian' }, lang)} aria-keyshortcuts="/" onClick={() => setPal(true)}><Icon name="search" /></button>
@@ -255,16 +254,16 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
               <UserMenu me={me} signedIn={signedIn} loc={hash} />
             </div>
           </header>
-          {MOCK && <div role="region" aria-label="Sample data notice" className="bg-warn-bg px-4 py-2 text-center text-sm text-warn">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</div>}
+          {MOCK && <div role="region" aria-label="Sample data notice" className="sticky top-0 z-20 flex min-h-7 items-center justify-center bg-surface-2 px-4 text-center text-xs text-warn md:top-14">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</div>}
           {banner}
-          <main id="main" tabIndex={-1} key={role} className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">{children}</main>
+          <main id="main" tabIndex={-1} key={role} className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-6 xl:px-8">{children}</main>
         </div>
       </div>
 
       {pal && <Palette ctx={{ me, owner, signedIn }} onClose={() => setPal(false)} onAction={act} />}
       {drawer && (
         <Drawer onClose={closeDrawer}>
-          <div className="flex h-16 shrink-0 items-center justify-between border-b border-soft px-3">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-hairline px-3">
             <button type="button" className="btn size-11 px-0" aria-label="Close menu" onClick={closeDrawer}><Icon name="close" /></button>
             <Brand dark={dark} />
           </div>

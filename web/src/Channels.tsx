@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from './api'
 import { Hint, msg, useFetch } from './ui'
+import { ConfirmDialog } from './kit'
 import { Icon } from './icons'
 import { useToast } from './Toast'
 import { BotSettings } from './BotSettings'
@@ -16,11 +17,13 @@ export function ChannelsCard() {
   const toast = useToast()
   useEffect(() => { if (s.data) setWa(s.data.wa_phone_number_id ?? '') }, [s.data])
   const c = s.data
-  const save = async () => {
+  const [ask, setAsk] = useState(false)
+  const save = async (confirmed = false) => {
     if (busy) return
     const v = wa.trim()
     if (v && !/^\d{5,32}$/.test(v)) return setErr('Digits only, 5 to 32 characters')
-    setErr(''); setBusy(true)
+    if (!v && s.data?.wa_phone_number_id && !confirmed) return setAsk(true)  // emptying the field disconnects: ask first
+    setAsk(false); setErr(''); setBusy(true)
     try { await api('POST', '/settings/channels', { wa_phone_number_id: v || null }); toast(v ? 'WhatsApp number saved.' : 'WhatsApp number disconnected.'); s.reload() }
     catch (e) {
       setErr(e instanceof ApiError && e.status === 422 ? 'Digits only, 5 to 32 characters'
@@ -33,29 +36,37 @@ export function ChannelsCard() {
     <>
     <TelegramCards />
     <section className="card mt-8 max-w-xl" aria-labelledby="ch">
-      <h2 id="ch" className="text-lg font-semibold">Channels</h2>
+      <h2 id="ch" className="text-md font-semibold">Channels</h2>
       <p className="mb-3 text-sm text-muted">Tell LARIS which chat number is yours, so customer messages reach your business.</p>
       {s.error ? <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>
-        : !c ? <div role="status" aria-busy="true" className="skeleton h-16"><span className="sr-only">Loading...</span></div> : <>
+        : !c ? <div role="status" aria-busy="true" className="grid gap-3"><span className="sr-only">Loading...</span><div aria-hidden="true" className="skeleton h-10" /><div aria-hidden="true" className="skeleton h-12" /></div> : <>
           {missing && (
-            <div className="mb-3 flex items-start gap-2 rounded-ui border border-warn bg-warn-bg p-3 text-sm text-warn" data-testid="channels-warning">
-              <Icon name="warn" className="mt-0.5 size-5" />
-              <p><strong>Warning: </strong>{both
-                ? 'More than one business uses this system. Messages from people we cannot match to your business are ignored until you connect your WhatsApp number here (or set TELEGRAM_TENANT_ID for Telegram). Customers will get no reply.'
-                : !c.whatsapp_mapped
-                  ? 'More than one business uses this system. WhatsApp messages from people we cannot match to your business are ignored until you connect your WhatsApp number here. Customers will get no reply.'
-                  : 'More than one business uses this system. Telegram messages from people we cannot match to your business are ignored until TELEGRAM_TENANT_ID is set for Telegram. Customers will get no reply.'}</p>
+            <div className="mb-3 flex items-start gap-2 rounded-card border border-warn bg-warn-bg p-3 text-sm text-warn" data-testid="channels-warning">
+              <Icon name="warn" className="mt-0.5 size-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Some customer messages are being ignored.</p>
+                <p>More than one business uses this system, so messages we cannot match to yours get no reply.</p>
+                <p className="mt-1"><strong>How to fix: </strong>{both
+                  ? 'connect your WhatsApp number below, or set TELEGRAM_TENANT_ID for Telegram.'
+                  : !c.whatsapp_mapped
+                    ? 'connect your WhatsApp number below.'
+                    : 'set TELEGRAM_TENANT_ID for Telegram.'}</p>
+              </div>
             </div>
           )}
           <form className="grid gap-3" onSubmit={e => { e.preventDefault(); save() }}>
+            <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted">WhatsApp</dt><dd><span className={`chip ${c.whatsapp_mapped ? 'chip-accepted' : 'chip-expired'}`}>{c.whatsapp_mapped ? 'Connected' : 'Not connected'}</span></dd>
+              <dt className="text-muted">Telegram</dt><dd><span className={`chip ${c.telegram_mapped ? 'chip-accepted' : 'chip-expired'}`}>{c.telegram_mapped ? 'Connected' : 'Not connected'}</span></dd>
+            </dl>
             <label className="flex flex-col gap-1 text-sm font-semibold">WhatsApp phone number ID
               <input className="input font-normal" inputMode="numeric" autoComplete="off" maxLength={32} value={wa} aria-describedby={err ? 'wa-help wa-err' : 'wa-help'} aria-invalid={!!err || undefined}
                 onChange={e => { setWa(e.target.value); setErr('') }} />
               <Hint id="wa-help">The Phone number ID from your Meta WhatsApp dashboard (digits only). Leave empty to disconnect.</Hint></label>
             {err && <p id="wa-err" role="alert" className="text-sm text-warn">{err}</p>}
-            <p className="text-sm">WhatsApp: <strong>{c.whatsapp_mapped ? 'connected' : 'not connected'}</strong>. Telegram: <strong>{c.telegram_mapped ? 'connected' : 'not connected'}</strong>.</p>
-            <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save channels'}</button></div>
-          </form></>}
+            <div className="flex justify-end border-t border-hairline pt-3"><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save channels'}</button></div>
+          </form>
+          <ConfirmDialog open={ask} danger title="Disconnect WhatsApp?" confirmLabel="Disconnect" body="The number will be removed. Customers will no longer get replies on WhatsApp until you connect one again." onCancel={() => setAsk(false)} onConfirm={() => save(true)} /></>}
     </section>
     </>
   )
@@ -121,7 +132,7 @@ function TelegramCards() {
   return (
     <>
       <section className="card mt-8 max-w-xl" aria-labelledby="tgb" data-tour="bot-card">
-        <h2 id="tgb" className="text-lg font-semibold">Your customer bot</h2>
+        <h2 id="tgb" className="text-md font-semibold">Your customer bot</h2>
         <p className="mb-3 text-sm text-muted">A Telegram bot with your shop's name, so customers can message you there and get replies.</p>
         {s.error ? fail : !b ? wait : b.connected ? (
           <div className="grid gap-3">
@@ -161,7 +172,7 @@ function TelegramCards() {
       </section>
       {b && (b.connected || b.source === 'environment') && <BotSettings />}
       <section className="card mt-8 max-w-xl" aria-labelledby="tgh">
-        <h2 id="tgh" className="text-lg font-semibold">LARIS helper bot (for you and your staff)</h2>
+        <h2 id="tgh" className="text-md font-semibold">LARIS helper bot (for you and your staff)</h2>
         <p className="mb-3 text-sm text-muted">You and your staff link your own account to this bot. Then you can send product photos with /catalog and supplier price lists straight from Telegram. Link people on the Team page, or yours on the Account page.</p>
         {s.error ? fail : !h ? wait : h.configured && h.username
           ? <a className="link" href={h.link ?? `https://t.me/${h.username}`} target="_blank" rel="noreferrer">@{h.username}<span className="sr-only"> (opens Telegram)</span></a>

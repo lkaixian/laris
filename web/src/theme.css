@@ -111,17 +111,18 @@
   :root[data-theme="dark"] .chip-job_created { --chip-fg: #06140f; --chip-bg: #7fd6b5; }
   :root[data-theme="dark"] .chip-rejected { --chip-fg: #ffa391; --chip-bg: #3a1b16; }
   :root[data-theme="dark"] .chip-expired { --chip-fg: #a9bbb1; --chip-bg: #12251e; }
+  .chip-warn { --chip-fg: var(--warn); --chip-bg: var(--warn-bg); }
+  .chip-warn::before { display: none; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
   .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }
   /* App shell navigation. Active item = bold text + tinted background + a bar on the left (never colour alone). */
   .sidelink { @apply relative flex items-center gap-3 rounded-ui px-3 text-sm font-medium text-muted transition-colors hover:bg-tint hover:text-ink; min-height: var(--control-h); }
-  .sidelink[aria-current="page"] { @apply bg-tint font-bold text-ink; box-shadow: inset 3px 0 0 var(--brand, var(--accent)); }
-  .sidegroup { @apply px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted; }
+  .sidelink[aria-current="page"] { @apply bg-surface-2 font-semibold text-ink; box-shadow: inset 3px 0 0 var(--brand, var(--accent)); }
+  .sidegroup { @apply px-3 pb-1 pt-4 text-xs font-medium text-muted; }
   /* Loading placeholder: static block, pulses only when motion is allowed. */
   .skeleton { @apply rounded-ui bg-skeleton; animation: pulse-soft 1.4s ease-in-out infinite; }
-  .toast { @apply flex w-full items-start gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink shadow-2; border-left: 4px solid var(--brand, var(--accent)); animation: page-in 150ms ease-out; }
-  .toast-err { border-left-color: var(--warn); }
+  .toast { @apply flex w-full items-start gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink shadow-2; animation: page-in 150ms ease-out; }
   .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
   .page-in { animation: page-in 150ms ease-out; }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }

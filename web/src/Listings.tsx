@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, imageUrl, ApiError } from './api'
 import type { Me } from './api'
-import { useFetch, msg, Async, Hint, PageHeader } from './ui'
+import { useFetch, msg, Async, Hint, PageHeader, Status as Chip } from './ui'
+import { ConfirmDialog, DataTable, MoreMenu } from './kit'
+import type { Col } from './kit'
 
 // "Catalog photos": one photo with many labelled products -> one card per product to check, edit, confirm or ask suppliers about.
 // Contract: docs/api-contract.md (listings), setup: docs/deploy.md 10b.
@@ -78,7 +80,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
 
   return (
     <section aria-labelledby="cat-up" className="card max-w-2xl">
-      <h2 id="cat-up" className="mb-2 text-lg font-semibold">Read a catalog photo</h2>
+      <h2 id="cat-up" className="mb-2 text-md font-semibold">Read a catalog photo</h2>
       <form className="grid gap-3" onSubmit={e => { e.preventDefault(); send() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Photo with several labelled products (take one or choose from the gallery)
           <input id="cat-file" ref={input} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => { setFile(e.target.files?.[0]); setFormErr('') }} />
@@ -118,6 +120,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
   const [askErr, setAskErr] = useState('')
   const [res, setRes] = useState<SendResult>()
   const [note, setNote] = useState('')
+  const [confirmOff, setConfirmOff] = useState(false)
   const ref = useRef<HTMLLIElement>(null)
   const id = `it-${it.id}`
 
@@ -161,21 +164,21 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
   return (
     <li ref={ref} id={id} tabIndex={-1} className={`card scroll-mt-4 ${off ? 'opacity-80' : ''}`} aria-labelledby={`${id}-h`}>
       <div className="flex flex-wrap items-start gap-4">
-        <Pic url={it.crop_url} alt={`Cropped photo of product ${n}`} className="max-h-40 max-w-full rounded-ui border border-soft object-contain" />
+        <Pic url={it.crop_url} alt={`Cropped photo of product ${n}`} className="max-h-40 w-[120px] max-w-full rounded-ui border border-hairline object-contain" />
         <div className="min-w-0 flex-1 basis-60">
           <h3 id={`${id}-h`} className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{n}. <span className={off ? 'line-through' : undefined}>{it.description}</span></span>
-            <span className={`badge ${it.status === 'needs_review' ? 'badge-warn' : ''}`}>{BADGE[it.status]}</span>
+            <Chip v={it.status} />
           </h3>
           {it.labels.length > 0 && (
             <p className="mt-1 text-sm"><span className="text-muted">Printed on the label:</span>{' '}
               {it.labels.map((l, i) => <span key={i} dir="auto" className="mr-2 inline-block rounded-ui border border-soft px-1.5">{l}</span>)}</p>
           )}
-          <dl className="mt-1 grid gap-x-4 text-sm sm:grid-cols-2">
-            <div><dt className="inline text-muted">SKU: </dt><dd className="inline break-words">{it.sku ?? 'none'}</dd></div>
-            <div><dt className="inline text-muted">Sizes: </dt><dd className="inline break-words">{it.sizes.length ? it.sizes.join(', ') : 'none'}</dd></div>
-            {it.item_key && <div><dt className="inline text-muted">Item key: </dt><dd className="inline break-words">{it.item_key}</dd></div>}
-            {it.price !== null && <div><dt className="inline text-muted">Price: </dt><dd className="inline">{it.currency ?? 'MYR'} {Number(it.price).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</dd></div>}
+          <dl className="mt-2 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+            <div><dt className="text-muted">SKU</dt><dd className="break-words">{it.sku ?? 'none'}</dd></div>
+            <div><dt className="text-muted">Sizes</dt><dd className="break-words">{it.sizes.length ? it.sizes.join(', ') : 'none'}</dd></div>
+            {it.item_key && <div><dt className="text-muted">Item key</dt><dd className="break-words">{it.item_key}</dd></div>}
+            {it.price !== null && <div><dt className="text-muted">Price</dt><dd className="tabular-nums">{it.currency ?? 'MYR'} {Number(it.price).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</dd></div>}
           </dl>
           {it.reasons.length > 0 && (
             <ul className="mt-2 grid gap-1 text-sm text-warn">
@@ -186,7 +189,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
       </div>
 
       {edit ? (
-        <form className="mt-3 grid gap-3 border-t border-soft pt-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); save() }}>
+        <form className="mt-3 grid gap-3 border-t border-hairline pt-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); save() }}>
           <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Description
             <input className="input font-normal" maxLength={300} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} autoFocus />
           </label>
@@ -212,18 +215,22 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
           </div>
         </form>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-soft pt-3">
-          <button type="button" className="btn" onClick={open}>Edit product {n}</button>
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-3">
+          <MoreMenu label={`More for product ${n}`}>
+            <button type="button" data-close className="sidelink w-full text-left" onClick={open}>Edit product {n}</button>
+            <button type="button" data-close className="sidelink w-full text-left" aria-expanded={asking} aria-controls={`${id}-ask`} onClick={() => setAsking(!asking)}>Ask suppliers about product {n}</button>
+            {!off && <button type="button" data-close className="sidelink w-full text-left text-warn" aria-disabled={busy || undefined} onClick={() => setConfirmOff(true)}>Discard product {n}</button>}
+          </MoreMenu>
           {it.status !== 'confirmed' && (
             <button type="button" className="btn btn-primary" aria-disabled={busy || undefined} onClick={() => patch({ status: 'confirmed' })}>
               {off ? `Restore and confirm product ${n}` : `Confirm product ${n}`}
             </button>
           )}
-          {!off && <button type="button" className="btn btn-danger" aria-disabled={busy || undefined} onClick={() => patch({ status: 'discarded' })}>Discard product {n}</button>}
-          <button type="button" className="btn" aria-expanded={asking} aria-controls={`${id}-ask`} onClick={() => setAsking(!asking)}>Ask suppliers about product {n}</button>
         </div>
       )}
       {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
+      <ConfirmDialog open={confirmOff} danger title={`Discard product ${n}?`} confirmLabel="Discard" body="It is kept in this photo as discarded, and you can restore it later."
+        onCancel={() => setConfirmOff(false)} onConfirm={() => { setConfirmOff(false); patch({ status: 'discarded' }) }} />
 
       {asking && (
         <form id={`${id}-ask`} className="mt-3 grid gap-3 border-t border-soft pt-3" onSubmit={e => { e.preventDefault(); ask() }}>
@@ -268,10 +275,10 @@ function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; 
   const jump = (itemId: string) => { const el = document.getElementById(`it-${itemId}`); el?.scrollIntoView({ block: 'center' }); el?.focus() }
   const d = s.data
   return (
-    <section aria-labelledby="cat-d" className="mt-8 border-t border-soft pt-6">
-      <h2 id="cat-d" className="mb-1 text-lg font-semibold">Photo from {d ? when(d.created_at) : '...'}</h2>
+    <section aria-labelledby="cat-d" className="mt-8 border-t border-hairline pt-6">
+      <h2 id="cat-d" className="mb-1 text-md font-semibold">Photo from {d ? when(d.created_at) : '...'}</h2>
       <p className="mb-3"><a className="link inline-flex min-h-11 items-center" href="#/catalog">Close this photo</a></p>
-      <Async s={s} rows={4} shape="cards" empty={d && !d.items.length} emptyText="No products were found in this photo." emptyHint="Try a sharper photo with the labels facing the camera.">
+      <Async s={s} rows={4} shape="detail" empty={d && !d.items.length} emptyText="No products were found in this photo." emptyHint="Try a sharper photo with the labels facing the camera.">
         {d && (
           <>
             <p className="mb-2 text-sm text-muted">{d.party_name ? `Supplier: ${d.party_name}. ` : ''}{d.note ? `Note: ${d.note}. ` : ''}Numbered outlines mark each product; select one to jump to its card.</p>
@@ -298,31 +305,28 @@ function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; 
   )
 }
 
+const ROWS: Col<ListingRow>[] = [
+  { key: 'date', head: 'Date', cell: l => <a href={`#/catalog/${l.id}`}><time dateTime={l.created_at}>{when(l.created_at)}</time></a>, mobile: 'title', className: 'whitespace-nowrap' },
+  { key: 'sup', head: 'Supplier', cell: l => l.party_name ?? <span className="text-muted">None</span>, mobile: 'sub' },
+  { key: 'n', head: 'Products', cell: l => l.items, num: true, mobile: 'meta' },
+  { key: 'rev', head: 'Review', cell: l => <Chip v={l.to_review ? 'needs_review' : 'confirmed'} />, mobile: 'badge' },
+]
+
 export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: string }) {
   const list = useFetch<ListingRow[]>('/listings')
   const sup = useFetch<Supplier[]>('/contacts?role=supplier')
+  const [up, setUp] = useState<boolean>()
+  const upOpen = up ?? (list.loading && !list.data ? false : !list.data?.length)  // open until the first photo exists
   return (
     <>
-      <PageHeader title="Catalog photos" description="Photograph a page or shelf of labelled products. LARIS reads each product so you can check it, then confirm it or ask suppliers for a price." />
-      <UploadCard owner={owner} suppliers={sup.data ?? []} onDone={lid => { list.reload(); location.hash = `#/catalog/${lid}` }} />
+      <PageHeader title="Catalog photos" description="Photograph shelves of labelled products, then check what LARIS read."
+        actions={<button type="button" className={`btn ${upOpen ? '' : 'btn-primary'}`} aria-expanded={upOpen} aria-controls="cat-up" onClick={() => setUp(!upOpen)}>Upload photo</button>} />
+      {upOpen && <UploadCard owner={owner} suppliers={sup.data ?? []} onDone={lid => { list.reload(); location.hash = `#/catalog/${lid}` }} />}
       <section aria-labelledby="cat-list" className="mt-8">
-        <h2 id="cat-list" className="mb-2 text-lg font-semibold">Recent photos</h2>
-        <Async s={list} rows={3} empty={!list.data?.length} emptyText="No catalog photos yet." emptyHint="Photograph a page or shelf of labelled products and LARIS lists each one for you to check."
-          emptyAction={{ label: 'Read your first catalog photo', onClick: () => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>
-          <ul className="grid max-w-2xl gap-2">
-            {list.data?.map(l => (
-              <li key={l.id}>
-                <a className="row card" href={`#/catalog/${l.id}`} aria-current={l.id === id ? 'true' : undefined}>
-                  <span className="font-semibold text-accent underline underline-offset-2"><time dateTime={l.created_at}>{when(l.created_at)}</time></span>
-                  {l.party_name && <span className="block text-sm">{l.party_name}</span>}
-                  <span className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-                    <span>{l.items} {l.items === 1 ? 'product' : 'products'}</span>
-                    <span className={`badge ${l.to_review ? 'badge-warn' : ''}`}>{l.to_review ? `${l.to_review} to review` : 'All reviewed'}</span>
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
+        <h2 id="cat-list" className="mb-3 text-md font-semibold">Recent photos</h2>
+        <Async s={list} rows={5} shape="table" empty={!list.data?.length} emptyText="No catalog photos yet." emptyHint="Photograph a page or shelf of labelled products and LARIS lists each one for you to check."
+          emptyAction={{ label: 'Read your first catalog photo', onClick: () => { setUp(true); requestAnimationFrame(() => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() }) } }}>
+          <DataTable label="Recent catalog photos" caption="Recent catalog photos, newest first" rows={list.data ?? []} rowKey={l => l.id} cols={ROWS} current={l => l.id === id} />
         </Async>
       </section>
       {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}

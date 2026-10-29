@@ -32,6 +32,7 @@ import { PrivacyView } from './Privacy'
 import { ApiAccessView } from './ApiAccess'
 import { AiSettingsView } from './AiSettings'
 import { TourHost } from './Tour'
+import { FilterBar, FilterSelect } from './kit'
 import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
 
@@ -40,10 +41,10 @@ import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Foll
 function DocCard({ d, owner }: { d: DocSummary; owner: boolean }) {
   return (
     <li>
-      <a className="row" href={`#/doc/${d.id}`}>
+      <a className="row group" href={`#/doc/${d.id}`}>
         <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <span className="font-semibold text-accent underline underline-offset-2">{d.doc_no ?? 'No document number'}</span>
-          <span className="text-sm tabular-nums">{d.total ? rm(d.total) : ''}</span>
+          <span className="font-semibold text-ink group-hover:underline">{d.doc_no ?? 'No document number'}</span>
+          <span className="num text-sm">{d.total ? rm(d.total) : ''}</span>
         </span>
         <span className="block text-sm">{d.party.name}</span>
         <span className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -178,9 +179,9 @@ function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   const filterName = filter === 'review' ? 'needing review' : filter === 'open' ? 'open customer quotes' : `with status ${label(filter)}`
   const lane = (title: string, hint: string, l: DocSummary[], extra: ReactNode, empty: { title: string; hint: string; action?: { label: string; onClick: () => void } }) => (
     <section aria-labelledby={title} className="min-w-0">
-      <h2 id={title} className="border-b-2 border-accent pb-1 text-lg font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
+      <h2 id={title} className="border-b border-hairline pb-2 text-md font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
       {extra}
-      {l.length ? <ul className="mt-3 divide-y divide-soft rounded-ui border border-soft bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
+      {l.length ? <ul className="mt-3 divide-y divide-hairline rounded-card border border-hairline bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
         : <div className="mt-3">{filter ? <p className="py-3 text-muted">No documents {filterName}. <button type="button" className="link" onClick={() => setFilter('')}>Show all</button></p> : <EmptyState {...empty} />}</div>}
     </section>
   )
@@ -188,18 +189,17 @@ function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
     <>
       <PageHeader title="Quote tracker" description="Supplier quotes you received and customer quotes you sent, in one place."
         actions={can('upload_documents') && <button type="button" className="btn btn-primary" {...gate(() => openForm('quote-file'))}>Upload quote</button>} />
-      <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-semibold">
-        Filter
-        <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
+      <FilterBar label="Tracker filter" chips={filter ? [{ label: `Showing: ${filterName}`, onRemove: () => setFilter('') }] : []} onClear={() => setFilter('')}>
+        <FilterSelect label="Filter" value={filter} onChange={setFilter}>
           <option value="">All documents</option>
           <option value="review">Needs review</option>
           <option value="open">Open customer quotes</option>
           {statuses.map(x => <option key={x} value={x}>Status: {label(x)}</option>)}
-        </select>
-      </label>
+        </FilterSelect>
+      </FilterBar>
       <p role="status" className="sr-only">{s.data ? `Showing ${shown} ${shown === 1 ? 'document' : 'documents'}` : ''}</p>
       <Async s={s} rows={4}>
-        <div className="grid gap-8 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2">
           {lane('Received', 'Supplier quotes', pick(s.data?.received ?? []), can('upload_documents') ? <><UploadQuote onDone={s.reload} open={up} onToggle={setUp} />{!MOCK && <ManualQuote onDone={s.reload} />}</> : null,
             { title: 'No supplier quotes yet.', hint: 'Upload a PDF, a photo or pasted text and LARIS reads the prices for you.', action: can('upload_documents') ? { label: 'Upload a supplier quote', onClick: () => openForm('quote-file') } : undefined })}
           {lane('Sent', 'Customer quotes', pick(s.data?.sent ?? []), <SimulateEnquiry open={sim} onToggle={setSim} />,
@@ -251,11 +251,11 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
       <td>
         {editable ? <input className="input w-36" aria-label={`Item key for line ${l.line_no}`} value={key} onChange={e => setKey(e.target.value)} {...bad} /> : l.item_key ?? <span className="text-muted">Not set</span>}
       </td>
-      <td>
+      <td className="num">
         {editable ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity for line ${l.line_no}`} value={qty} onChange={e => setQty(e.target.value)} {...bad} /> : l.qty ? Number(l.qty) : <span className="text-muted">Not set</span>}
       </td>
       <td>{l.uom}</td>
-      <td>{!showPrice ? <span className="text-muted">Hidden for staff</span>
+      <td className="num">{!showPrice ? <span className="text-muted">Hidden for staff</span>
         : priceEdit ? <input className="input w-28" type="number" min="0" step="any" inputMode="decimal" aria-label={`Unit cost for line ${l.line_no}`} value={price} onChange={e => setPrice(e.target.value)} {...bad} />
         : rm(l.unit_price)}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
@@ -297,14 +297,13 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
   const lineOf = (lineId?: string) => d?.lines.find(l => l.id === lineId)
   return (
     <>
-      {!d && <PageHeader back={{ href: '#/tracker', label: 'Back to tracker' }} />}
+      {!d && <PageHeader crumbs={[{ href: '#/tracker', label: 'Tracker' }]} />}
       <Async s={s} empty={false} rows={5}>
         {d && (
           <>
-            <PageHeader back={{ href: '#/tracker', label: 'Back to tracker' }} title={d.doc.doc_no ?? 'No document number'}
+            <PageHeader crumbs={[{ href: '#/tracker', label: 'Tracker' }, { label: d.doc.doc_no ?? 'No document number' }]} title={d.doc.doc_no ?? 'No document number'} status={<Status v={d.doc.status} />}
               meta={<>
                 <span>{d.doc.direction === 'in' ? 'Supplier quote from' : 'Customer quote for'} {d.doc.party.name}</span>
-                <Status v={d.doc.status} />
                 {costs && d.doc.flags.cost_is_stale && <span className="badge badge-warn">Cost is stale</span>}
                 <span className="text-muted">Total {rm(d.doc.total)}</span>
               </>}
@@ -318,7 +317,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
             <div className="min-w-0 lg:order-1">
             {d.doc.direction === 'out' && <QuotePanel key={id} id={id} status={d.doc.status} owner={owner} onChanged={s.reload} />}
-            <h2 className="mb-1 text-lg font-semibold">Lines</h2>
+            <h2 className="mb-2 text-md font-semibold">Lines</h2>
             {edit && !can('upload_documents') && <p className="mb-2 text-sm text-muted">{why('upload_documents')} to edit these lines. You can read them here.</p>}
             {edit && can('upload_documents') && <p className="mb-2 text-sm text-muted">Review step: set the item key and quantity for each line, then save the line. The item key is a short code that links the line to your cost book, for example acrylic_3mm_sheet. Lines marked Needs review are unclear on the source document.</p>}
             {f.error && <p role="alert" className="mb-2 text-sm text-warn">Could not load extra columns: {f.error}</p>}
@@ -327,8 +326,8 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
                 <table className="w-full min-w-max">
                   <caption className="sr-only">Lines of {d.doc.doc_no ?? 'this document'}</caption>
                   <thead><tr>
-                    <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col">Qty</th><th scope="col">Unit</th>
-                    <th scope="col">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
+                    <th scope="col">No.</th><th scope="col">Description</th><th scope="col">Item key</th><th scope="col" className="text-right">Qty</th><th scope="col">Unit</th>
+                    <th scope="col" className="text-right">{d.doc.direction === 'in' ? 'Unit cost' : 'Unit price'}</th>
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
                     {edit && can('upload_documents') && <th scope="col">Action</th>}
                   </tr></thead>
@@ -340,8 +339,8 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
             </div>
 
             <aside className="grid gap-6 lg:order-2">
-            <section className="card border-l-4 border-l-accent" aria-labelledby="actions">
-              <h2 id="actions" className="font-semibold">Decision</h2>
+            <section className="card" aria-labelledby="actions">
+              <h2 id="actions" className="text-md font-semibold">Decision</h2>
               {!actions.length && <p className="text-sm text-muted">This document is {label(d.doc.status)}. No further actions.</p>}
               {actions.length > 0 && !owner && !actions.some(a => !a.owner) && <p className="text-sm text-muted">Only the owner can decide on this quote. Switch the simulated role to owner to try it.</p>}
               {actions.some(a => !a.owner || owner) && (
@@ -363,7 +362,7 @@ function DetailView({ id, owner }: { id: string; owner: boolean }) {
 
             {costs && d.provenance && (
               <section aria-labelledby="prov">
-                <h2 id="prov" className="text-lg font-semibold">Cost provenance <span className="text-sm font-normal text-muted">(owner only)</span></h2>
+                <h2 id="prov" className="text-md font-semibold">Cost provenance <span className="text-sm font-normal text-muted">(owner only)</span></h2>
                 {d.provenance.length === 0 ? <p className="card mt-2 text-muted">No supplier cost is linked to this document.</p> : (
                   <ul className="mt-2 grid gap-2">
                     {d.provenance.map(p => {

@@ -25,7 +25,7 @@ import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
 import { StatusView, HealthBanner } from './Status'
 import { CatalogView } from './Listings'
-import { useLang } from './i18n'
+import { LANGS, setLang, useLang } from './i18n'
 import { tx, txOr } from './strings'
 const txOrReason = (r: string) => txOr(`why.${r}`, r)
 import { ActivityView } from './Activity'
@@ -37,7 +37,7 @@ import { TourHost } from './Tour'
 import { TrackerView } from './TrackerPage'
 import { DetailView } from './DocDetail'
 import { FilterBar, Tabs, ToggleChip } from './kit'
-import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
+import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, Hint, OrgCtx, Status, applyBrand, OfflineBanner, ThemeToggle, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
 import type { Heat } from './ui'
 import type { Role, Me, Alert, Followup, MarginReport, Settings, Proposal } from './api'
 
@@ -69,13 +69,38 @@ function Report() {
 
 
 
-function SettingsView({ owner }: { owner: boolean }) {
+const SETTINGS_TABS = ['general', 'business', 'quotes', 'channels'] as const
+type SettingsTab = typeof SETTINGS_TABS[number]
+// #/settings/<tab> opens that tab (the search palette links there); read from the live hash so a language change, which remounts the page, keeps the tab.
+const tabFromHash = (): SettingsTab => SETTINGS_TABS.find(t => location.hash.split('?')[0].split('/')[2] === t) ?? 'general'
+
+function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => void }) {
+  const [lang] = useLang()
+  return (
+    <div className="grid max-w-xl gap-4">
+      <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
+        <legend className="px-1 text-sm font-semibold">Language</legend>
+        <div role="group" aria-label="Language" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {LANGS.map(([l, n]) => <button key={l} type="button" lang={l} className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={lang === l} onClick={() => setLang(l)}>{n}</button>)}
+        </div>
+        <p className="text-sm text-muted">Applies to menus and the main work screens on this device. Each person picks their own.</p>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
+        <legend className="px-1 text-sm font-semibold">Appearance</legend>
+        <div><ThemeToggle dark={dark} setDark={setDark} /></div>
+        <p className="text-sm text-muted">Dark theme, remembered on this device.</p>
+      </fieldset>
+    </div>
+  )
+}
+
+function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean; setDark: (d: boolean) => void }) {
   const s = useFetch<Settings>('/settings')
   const [f, setF] = useState<Settings>()
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [logoErr, setLogoErr] = useState('')
-  const [tab, setTab] = useState<'business' | 'quotes' | 'channels'>('business')
+  const [tab, setTab] = useState<SettingsTab>(tabFromHash)
   const toast = useToast()
   useEffect(() => { if (s.data) setF(s.data) }, [s.data])
   if (!owner) return <><PageHeader title="Settings" /><p className="card text-muted">You do not have access. Only the owner changes settings.</p></>
@@ -117,9 +142,10 @@ function SettingsView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Settings" description="The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save." />
-      <Tabs label="Settings sections" value={tab} onChange={v => setTab(v as typeof tab)}
-        options={[{ value: 'business', label: 'Business' }, { value: 'quotes', label: 'Quotes' }, { value: 'channels', label: 'Channels' }]} />
-      {tab !== 'channels' && <Async s={s} empty={false} rows={4}>
+      <Tabs label="Settings sections" value={tab} onChange={v => { setTab(v as SettingsTab); history.replaceState(null, '', `#/settings/${v}`) }}
+        options={[{ value: 'general', label: 'General' }, { value: 'business', label: 'Business' }, { value: 'quotes', label: 'Quotes' }, { value: 'channels', label: 'Channels' }]} />
+      {tab === 'general' && <GeneralTab dark={dark} setDark={setDark} />}
+      {(tab === 'business' || tab === 'quotes') && <Async s={s} empty={false} rows={4}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
             {tab === 'business' && <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
@@ -289,7 +315,7 @@ function AlertsView() {
   and, if it needs a permission, one line in NEED in api.ts. Start the view with <PageHeader title=... /> (it sets <title> and is the focus target).
   Detail pages use PageHeader's `back` prop and a route like #/thing/<id> (arg).
 */
-interface PageCtx { me: Me; owner: boolean; arg?: string }
+interface PageCtx { me: Me; owner: boolean; arg?: string; dark: boolean; setDark: (d: boolean) => void }
 // Mock-only test switch: /?crash=1#/contacts throws while rendering, to see the page fallback. MOCK is a build constant, so real builds drop it.
 function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => <><PageHeader title="Page not found" /><EmptyState title="That page does not exist." action={{ label: 'Open the tracker', href: '#/tracker' }} /></>
@@ -306,7 +332,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   search: { title: 'Search', render: c => <SearchView q={safeDecode(c.arg)} /> },
   track: { title: 'Track', render: () => <TrackView /> },
   jobs: { title: 'Jobs', render: c => <JobsView me={c.me} /> },
-  settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} /> },
+  settings: { title: 'Settings', render: c => <SettingsView owner={c.owner} dark={c.dark} setDark={c.setDark} /> },
   team: { title: 'Team', render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   privacy: { title: 'Privacy and data', render: () => <PrivacyView /> },
   'api-access': { title: 'API access', render: () => <ApiAccessView /> },
@@ -460,7 +486,7 @@ function AppShell() {
             </> : (
               <ErrorBoundary level="page">
                 {MOCK && route === 'contacts' && new URLSearchParams(location.search).get('crash') === '1' && <MockCrash />}
-                {entry ? entry.render({ me, owner, arg }) : <NotFound />}
+                {entry ? entry.render({ me, owner, arg, dark, setDark }) : <NotFound />}
               </ErrorBoundary>
             )}
           </div>

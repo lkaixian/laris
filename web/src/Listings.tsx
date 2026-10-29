@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, imageUrl, ApiError } from './api'
 import type { Me } from './api'
 import { useFetch, msg, Async, Hint, PageHeader, Status as Chip } from './ui'
-import { ConfirmDialog, DataTable, MoreMenu } from './kit'
-import type { Col } from './kit'
+import { ConfirmDialog, MoreMenu } from './kit'
 
 // "Catalog photos": one photo with many labelled products -> one card per product to check, edit, confirm or ask suppliers about.
 // Contract: docs/api-contract.md (listings), setup: docs/deploy.md 10b.
@@ -17,7 +16,7 @@ interface Item {
 // One customer price: for one size (or every size when size is null) from min_qty up. Priced by the rules engine, never the model.
 interface Tier { size: string | null; min_qty: string | number; price: string | number }
 interface TierRow { size: string; min_qty: string; price: string }
-interface ListingRow { id: string; party_name: string | null; note: string | null; created_at: string; items: number; to_review: number; image_url: string }
+interface ListingRow { id: string; party_name: string | null; note: string | null; created_at: string; items: number; to_review: number; image_url: string; thumb_url?: string }
 interface Detail extends Omit<ListingRow, 'items'> { items: Item[] }
 interface Supplier { id: string; name: string; contact: string | null }
 interface SendResult { rfq_id: string; sends: { supplier_id: string; status: 'sent' | 'failed'; error: string | null }[] }
@@ -376,12 +375,28 @@ function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; 
   )
 }
 
-const ROWS: Col<ListingRow>[] = [
-  { key: 'date', head: 'Date', cell: l => <a href={`#/catalog/${l.id}`}><time dateTime={l.created_at}>{when(l.created_at)}</time></a>, mobile: 'title', className: 'whitespace-nowrap' },
-  { key: 'sup', head: 'Supplier', cell: l => l.party_name ?? <span className="text-muted">None</span>, mobile: 'sub' },
-  { key: 'n', head: 'Products', cell: l => l.items, num: true, mobile: 'meta' },
-  { key: 'rev', head: 'Review', cell: l => <Chip v={l.to_review ? 'needs_review' : 'confirmed'} />, mobile: 'badge' },
-]
+// Recent photos as a grid of the photos themselves: the card is one link, so the date is its name.
+function Gallery({ rows, current }: { rows: ListingRow[]; current?: string }) {
+  return (
+    <ul aria-label="Recent catalog photos, newest first" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {rows.map(l => (
+        <li key={l.id}>
+          <a href={`#/catalog/${l.id}`} aria-current={l.id === current ? 'page' : undefined}
+            className={`block overflow-hidden rounded-ui border bg-surface hover:border-accent ${l.id === current ? 'border-accent ring-2 ring-accent' : 'border-hairline'}`}>
+            <div className="flex aspect-4/3 items-center justify-center bg-tint">
+              <Pic url={l.thumb_url ?? l.image_url} alt={`Catalog photo from ${when(l.created_at)}`} className="size-full object-cover" />
+            </div>
+            <div className="grid gap-1 p-2 text-sm">
+              <time dateTime={l.created_at} className="font-semibold">{when(l.created_at)}</time>
+              <span className="truncate text-muted">{l.party_name ?? 'No supplier'}</span>
+              <span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{l.items} {l.items === 1 ? 'product' : 'products'}</span><Chip v={l.to_review ? 'needs_review' : 'confirmed'} /></span>
+            </div>
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: string }) {
   const list = useFetch<ListingRow[]>('/listings')
@@ -397,7 +412,7 @@ export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: s
         <h2 id="cat-list" className="mb-3 text-md font-semibold">Recent photos</h2>
         <Async s={list} rows={5} shape="table" empty={!list.data?.length} emptyText="No catalog photos yet." emptyHint="Photograph a page or shelf of labelled products and LARIS lists each one for you to check."
           emptyAction={{ label: 'Read your first catalog photo', onClick: () => { setUp(true); requestAnimationFrame(() => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() }) } }}>
-          <DataTable label="Recent catalog photos" caption="Recent catalog photos, newest first" rows={list.data ?? []} rowKey={l => l.id} cols={ROWS} current={l => l.id === id} />
+          <Gallery rows={list.data ?? []} current={id} />
         </Async>
       </section>
       {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}

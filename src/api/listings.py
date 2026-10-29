@@ -105,7 +105,7 @@ def listings(ctx: Ctx = Depends(read_ctx)):
                                       (select count(*) from listing_items i where i.listing_id=l.id and i.status='needs_review') as to_review
                                from listings l left join parties p on p.id=l.party_id
                                where l.tenant_id=%s order by l.created_at desc, l.id limit 50""", (ctx.tenant_id,)).fetchall()
-    return reply(ctx, [{**x, "image_url": f"/api/listings/{x['id']}/image"} for x in rows])
+    return reply(ctx, [{**x, "image_url": f"/api/listings/{x['id']}/image", "thumb_url": f"/api/listings/{x['id']}/thumb"} for x in rows])
 
 
 def _listing(ctx: Ctx, lid) -> dict:
@@ -130,6 +130,22 @@ def listing_image(listing_id: UUID, ctx: Ctx = Depends(read_ctx)):
     if not row["image"]:
         raise ApiError(404, "expired", "photo removed after the retention period")
     return Response(bytes(row["image"]), media_type=row["image_mime"])
+
+
+@r.get("/listings/{listing_id}/thumb")
+def listing_thumb(listing_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    """Small upright JPEG of the whole photo for the gallery; the full image can be 8 MB."""
+    from PIL import Image, ImageOps
+    row = ctx.conn.execute("select image from listings where id=%s and tenant_id=%s", (listing_id, ctx.tenant_id)).fetchone()
+    if not row:
+        raise ApiError(404, "not_found", "catalog photo not found")
+    if not row["image"]:
+        raise ApiError(404, "expired", "photo removed after the retention period")
+    im = ImageOps.exif_transpose(Image.open(io.BytesIO(bytes(row["image"])))).convert("RGB")
+    im.thumbnail((480, 480))
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=80)
+    return Response(out.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 def _crop_row(ctx: Ctx, listing_id, item_id) -> dict:

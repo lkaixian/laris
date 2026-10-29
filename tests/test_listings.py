@@ -168,6 +168,9 @@ def test_post_stores_listing_and_crops_staff_never_see_price(lenv):
     c = e.c.get(j["items"][0]["crop_url"], headers=e.S)
     assert c.status_code == 200 and c.headers["content-type"] == "image/jpeg" and c.content == bytes(rows[0]["crop"])
     assert e.c.get(f"/api/listings/{j['listing_id']}/image", headers=e.S).content == bytes(e.sql("select image from listings")[0]["image"])
+    lst = e.c.get("/api/listings", headers=e.S).json()[0]
+    t = e.c.get(lst["thumb_url"], headers=e.S)
+    assert t.status_code == 200 and t.headers["content-type"] == "image/jpeg" and max(Image.open(io.BytesIO(t.content)).size) <= 480
     g = e.c.get(f"/api/listings/{j['listing_id']}", headers=e.O).json()  # the owner sees the verified price
     assert g["items"][0]["price"] == "12.5000" and g["items"][0]["bbox"] == [0.1, 0.1, 0.5, 0.5] and "labels" in g["items"][0]
     assert e.c.get(f"/api/listings/{j['listing_id']}", headers=e.S).json()["items"][0]["price"] is None

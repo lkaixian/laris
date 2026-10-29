@@ -32,7 +32,7 @@ export function mockListings(method: string, p: string, owner: boolean, body: an
     listings.unshift(l)
     return { listing_id: l.id, item_count: l.items.length, items: view(l).items }
   }
-  if (p === '/listings' && method === 'GET') return listings.map(l => ({ id: l.id, party_id: l.party_id, party_name: l.party_name, note: l.note, source_channel: l.source_channel, created_at: l.created_at, image_url: l.image_url, items: l.items.length, to_review: l.items.filter(i => i.status === 'needs_review').length }))
+  if (p === '/listings' && method === 'GET') return listings.map(l => ({ id: l.id, party_id: l.party_id, party_name: l.party_name, note: l.note, source_channel: l.source_channel, created_at: l.created_at, image_url: l.image_url, thumb_url: l.image_url, items: l.items.length, to_review: l.items.filter(i => i.status === 'needs_review').length }))
   if ((m = p.match(/^\/listings\/([^/]+)$/)) && method === 'GET') return view(find(m[1]))
   if ((m = p.match(/^\/listings\/([^/]+)\/items\/([^/]+)$/)) && method === 'PATCH') {
     const it: any = find(m[1]).items.find(x => x.id === m![2])

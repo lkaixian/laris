@@ -22,7 +22,7 @@ def test_costs_and_supplier_prices_need_view_costs(env):
     assert any("unit cost 50" in p["text"] for p in owner["passages"])
     staff = found(e, e.S)
     assert sources(staff) == {"contacts"} and set(staff["denied"]) == {"costs", "supplier_docs"}
-    assert "50" not in str(staff["passages"]) and "Supplier document" not in str(staff["passages"])
+    assert not any("50" in p["text"] for p in staff["passages"]) and "Supplier document" not in str(staff["passages"])  # the text only: ids are random and can contain "50"
     buyer = found(e, member(e, role(e, "Buyer", ["view_costs"])))
     assert {"costs", "supplier_docs"} <= sources(buyer) and buyer["denied"] == []
     nothing = found(e, member(e, role(e, "Nothing", [])))

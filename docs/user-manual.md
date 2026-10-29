@@ -1,6 +1,6 @@
 # LARIS User Manual
 
-For owners and staff. Matches the app on master at build log row 160. A live, editable copy of this manual is kept as a Claude doc ("LARIS User Manual"); this file is its snapshot in the repository.
+For owners and staff. Matches the app on master at build log row 174. A live, editable copy of this manual is kept as a Claude doc ("LARIS User Manual"); this file is its snapshot in the repository.
 
 - **Who it is for:** owners and staff of a made-to-order shop (signage, printing, 3D printing) using LARIS to quote and track work.
 - **Roles:** the **Owner** can do everything. **Staff** see what their role allows; a button you lack permission for says which permission is missing. Owners create custom roles under **Roles**.
@@ -21,15 +21,26 @@ Everything is reached from the left sidebar or the search bar at the top; the us
 | Group | Pages |
 | --- | --- |
 | Work | Home, Tracker, Track, Jobs, Follow-ups |
-| Suppliers | Contacts, Ask suppliers, Catalog photos, Stale costs |
-| Insights | Activity, Assistant |
+| Suppliers | Contacts, Ask suppliers, Catalog photos |
+| Insight | Stale costs |
+| Audit Log | Audit log |
 | Admin | Team, Roles, Settings, Privacy and data, API access, AI settings, System status, Licence |
 
 1. Select a page name in the sidebar to open it.
-2. Select the small **?** beside a page name to open its help article.
+2. Select the small **?** beside a page name, or **How to** beside a page title, for a step-by-step guide (see 1.3).
 3. On a phone, open the menu button at the top left to show the sidebar.
+4. **Ask Laris** is the round button at the bottom right of every page (Chapter 4); it has no sidebar entry.
 
-### 1.3 Jump anywhere with the command palette
+### 1.3 Follow a step-by-step guide
+
+1. Select **?** in the sidebar or **How to** on Home, Jobs, Follow-ups, Track, Catalog photos or Audit log.
+2. The page is blurred and dimmed except the part the step is about, which has a green ring and the step number.
+3. Read the step, then select **Next** (or **Back**). The dots at the top show where you are; select one to jump to that step.
+4. Select **Done** on the last step, **Close**, or press **Esc**. Going to another page also closes the guide.
+
+> **Pro-Tip:** the area you are shown stays usable during the guide, so you can try it as you read.
+
+### 1.4 Jump anywhere with the command palette
 
 1. Press **Ctrl+K** (Cmd+K on a Mac) or **/**, or select the search field at the top.
 2. Type a few letters of a page, an action, a quote number or a customer name.
@@ -37,7 +48,20 @@ Everything is reached from the left sidebar or the search bar at the top; the us
 
 > **Pro-Tip:** the palette understands English and Bahasa Melayu: "sebut harga" finds the same pages as "quote".
 
-### 1.4 Help, tour, language and theme
+### 1.5 Home at a glance
+
+The top of **Home** has four glass tiles, one per sidebar group, each with a small picture of how it works. Select any number or shape to open that list.
+
+| Tile | Picture | What it shows |
+| --- | --- | --- |
+| Work | Arrows, left to right | To review, Quotes open, Follow-ups, Jobs to do, In progress, Done |
+| Suppliers | A loop | Ask, Replies, Compare, Cost book, with your supplier count in the middle |
+| Insight | Bars | Quotes hit by a cost rise, margin at risk (owner), quotes waiting for approval, jobs due today |
+| Audit Log | Day columns | Entries on each of the last active days; select a day to open it |
+
+The detailed tiles you had before are below, under **Details**.
+
+### 1.6 Help, tour, language and theme
 
 1. Select your avatar at the top right to open the user menu.
 2. Choose **Help** for the 17 help articles, or **Take the tour** for a guided walk through the main screens.
@@ -45,7 +69,7 @@ Everything is reached from the left sidebar or the search bar at the top; the us
 4. Select the moon or sun button in the header to switch between dark and light themes.
 5. Select **Sign out** when you finish on a shared computer.
 
-> **Note:** Chinese and Tamil cover the menus, status labels and the Jobs, Follow-ups, Track, Activity and Assistant screens. Other pages, server messages and Assistant answers stay in English; help, tour and palette are in English and Malay. The translations have not yet been reviewed by native speakers.
+> **Note:** Chinese and Tamil cover the menus, status labels and the Jobs, Follow-ups, Track, Audit log and Ask Laris screens. Other pages, server messages and Ask Laris answers stay in English; help, tour and palette are in English and Malay. The translations have not yet been reviewed by native speakers.
 
 ## Chapter 2: Managing jobs
 
@@ -76,6 +100,16 @@ For work that did not start as a quote, such as a repair or a site visit.
 - the quote number (opens the quote) and the customer, or the title for a job made by hand
 - a short summary and the total
 - the due date in words: **Due in 3 days**, **Due today**, or **Overdue by 2 days** with an **Overdue** chip
+- a coloured left edge and chip by due date (legend above the board):
+
+| Colour | Name | When |
+| --- | --- | --- |
+| Green | On track | due in 4 days or more |
+| Yellow | Due soon | due in 1 to 3 days |
+| Orange | Due today | due today |
+| Red | Overdue | past the due date |
+
+Jobs that are done or have no due date have no colour.
 - the priority and who it is assigned to
 - buttons to move it, and **Edit**
 
@@ -146,9 +180,9 @@ When a customer has not answered a sent quote within the follow-up window (48 ho
 1. Customer says yes: **Record customer accepted**, then **Create job from quote**.
 2. Customer says no: **Record customer rejected**, with a reason if you have one.
 
-## Chapter 4: The AI guide and the Assistant
+## Chapter 4: The AI guide and Ask Laris
 
-The **AI guide** answers "where do I click?" from the Ctrl+K palette. The **Assistant** answers questions about your own quotes, contacts, costs and jobs, and can move a job or skip a follow-up only after you confirm. Neither prices, approves, sends or deletes anything.
+The **AI guide** answers "where do I click?" from the Ctrl+K palette. **Ask Laris** (the chat assistant) answers questions about your own quotes, contacts, costs and jobs, and can move a job or skip a follow-up only after you confirm. Neither prices, approves, sends or deletes anything.
 
 ### 4.1 Switch the AI guide on (owner)
 
@@ -163,17 +197,17 @@ The **AI guide** answers "where do I click?" from the Ctrl+K palette. The **Assi
 
 > **Pro-Tip:** the guide sees only your question, with long numbers and personal details removed. It never sees your records.
 
-### 4.3 Ask the Assistant, from its page or the Ask button
+### 4.3 Ask Laris
 
-1. Open **Assistant**, or select **Ask** at the bottom right of any page.
+1. Select **Ask Laris** at the bottom right of any page (or open #/assistant for the full page).
 2. Pick a suggested question or type your own, then press **Enter**.
 3. Select a link in the answer to open that quote, contact or job.
 
-### 4.4 Let the Assistant move a job or skip a follow-up
+### 4.4 Let Ask Laris move a job or skip a follow-up
 
 1. Ask, for example **move job QT-2026-0005 to done** or **skip the follow-up for Kopi Corner**.
 2. Select the proposal you mean. A box asks **Do this now?**
-3. Select **Yes, do it**, or **Cancel**. The change is saved under your name in the Activity log.
+3. Select **Yes, do it**, or **Cancel**. The change is saved under your name in the Audit log.
 
 | Can do after you confirm | Will never do |
 | --- | --- |
@@ -181,32 +215,50 @@ The **AI guide** answers "where do I click?" from the Ctrl+K palette. The **Assi
 | Skip a pending follow-up | Approve or send a quote or a follow-up |
 | | Delete anything |
 
-## Chapter 5: Filtering and exporting the Activity log
+## Chapter 5: The Audit log
 
-### 5.1 Read the log
+### 5.1 Read the log by day
 
-1. Open **Activity** (needs **view audit**). Entries are newest first; new ones appear every 4 seconds.
-2. Each entry shows what happened, when, who, the module, the kind of action and its entry number.
-3. Select **Load older entries** to go further back.
+1. Open **Audit log** (needs **view audit**). Days are listed newest first as simple buttons, each with its number of entries.
+2. Select a day to see only that day's entries: time, what happened and who. Select it again to close it.
+3. Select an entry to open its details: when, who, module, action, the record, and a **What changed** table with each field **Before** and **After**.
+4. Select **Refresh** for the latest; counts also refresh every 15 seconds.
+
+> **Note:** secrets, passwords and logos always read **[hidden]**; costs and margins are hidden from people without **view costs**.
 
 ### 5.2 Filter
 
-1. Search the event words, pick **From** and **To** dates (Malaysia time), and choose **Person**, **Module** and **Action** (Created, Status changed, Other changes).
+1. Select **Filters**. Search the event words, pick **From** and **To** dates (Malaysia time), and choose **Person**, **Module** and **Action** (Created, Status changed, Other changes).
+2. The days list now shows only days with matching entries. Remove a chip, or **Clear all**, to go back.
 
 ### 5.3 Choose entries and download them
 
-1. Tick the entries you want, or **Choose all [n] shown**.
+1. Open a day, tick the entries you want, or **Choose all [n] shown**.
 2. Select **Download chosen as CSV** or **Download chosen as PDF**.
-3. Or select **All matching as CSV/PDF** (up to 1,000 entries).
+3. Or select **All matching as CSV/PDF**: everything matching the filters, or with no filters the open day (up to 1,000 entries).
 
 > **Note:** downloading needs **export data** as well as **view audit**. Entries cannot be edited or deleted, and each download is itself recorded.
+
+## Chapter 6: Catalog photos and your logo
+
+### 6.1 See a photo and its products quickly
+
+1. Open **Catalog photos**. Recent photos show as cards.
+2. Select **View** beside a card's date. A box shows the whole photo and each product with its SKU, sizes, price (if you may see costs), stock and review status.
+3. Select **Open to review and edit** for the full page, or **Close**.
+
+### 6.2 Add your logo (owner)
+
+1. Open **Settings** and the **Business** tab, then choose a PNG, JPEG or WebP **Logo** up to 10 MB.
+2. LARIS shrinks it in your browser (longest side 512 pixels) so the saved logo stays under 200 KB. Select **Save**.
 
 ## Appendix: Limits
 
 | Feature | Limit |
 | --- | --- |
 | Age colours | Fixed bands; a business cannot set its own yet |
-| Ask button | Actions tested with a mocked model only, not a live one |
-| Activity log download | At most 1,000 entries per file; the PDF is a plain table |
+| Ask Laris | Actions tested with a mocked model only, not a live one |
+| Audit log download | At most 1,000 entries per file; the PDF is a plain table |
 | Jobs made by hand | No quote, PDF or accept link; the amount is typed |
-| Languages | Chinese and Tamil cover the main work screens only; not reviewed by native speakers |
+| Languages | Chinese and Tamil cover the main work screens only; Home and Catalog photos are English; not reviewed by native speakers |
+| Glass Home tiles | Blur needs a recent browser; older ones show plain tiles |

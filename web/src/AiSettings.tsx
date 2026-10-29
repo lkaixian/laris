@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from './api'
+import { AiActivity } from './AiActivity'
 import { Async, PageHeader, useFetch } from './ui'
 import { useToast } from './Toast'
 import { t, useLang } from './i18n'
@@ -134,6 +135,7 @@ export function AiSettingsView() {
             {d.consent.at && d.mode !== 'off' && <p className="text-sm text-muted">{t(S.by, lang)} {d.consent.by} {t(S.on, lang)} {new Date(d.consent.at).toLocaleDateString()}</p>}
           </form>)}
       </Async>
+      <div className="mt-8"><AiActivity /></div>
     </>
   )
 }

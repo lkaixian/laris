@@ -32,7 +32,7 @@ Limits kept on purpose: the model can drop or change a token in its reply, so an
 
 ## Stage 2: observability on the AI tab
 
-2a (backend) DONE 2026-10-30: `db/aicalls.sql`, `src/ai_log.py`, `GET /api/ai/activity`, 90-day purge. 2b (the AI tab UI) is next.
+2a (backend) DONE 2026-10-30: `db/aicalls.sql`, `src/ai_log.py`, `GET /api/ai/activity`, 90-day purge. 2b DONE 2026-10-30: `web/src/AiActivity.tsx` (totals, hidden-value counts, call table with empty, loading and error states) shown on the AI settings page for the owner and under the chat on the Assistant page for everyone; the server decides the scope. Never opened in a browser: the mock-mode view and the table at phone width are unchecked.
 
 Known limit: when a model call fails and the route then raises (supplier document and enquiry return 502), the request rolls back and the row with it. Failures that a route handles itself (Assistant, availability, RFQ reply) are kept.
 

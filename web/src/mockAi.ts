@@ -21,6 +21,21 @@ export function mockAi(method: string, p: string, owner: boolean, body: any): un
     const c: { label: string; href: string }[] = (body.candidates ?? []).slice(0, 2)
     return { answer: `This is a SAMPLE answer to "${String(body.question).slice(0, 60)}". Try ${c.length > 1 ? 'these screens' : 'this screen'}.`, links: c.map(x => ({ label: x.label, href: x.href })) }
   }
+  if (p === '/ai/activity' && method === 'GET') {
+    const at = (m: number) => new Date(Date.now() - m * 6e4).toISOString()
+    const all = [
+      { at: at(5), kind: 'assistant', provider: 'ilmu', ok: true, ms: 640, masked: { EMAIL: 1 }, person: 'SAMPLE Owner' },
+      { at: at(40), kind: 'enquiry', provider: 'ilmu', ok: true, ms: 910, masked: { PHONE: 1, NAME: 1 }, person: null },
+      { at: at(95), kind: 'supplier_doc', provider: 'ilmu', ok: false, ms: 3200, masked: {}, person: 'SAMPLE Staff' },
+      { at: at(300), kind: 'guide', provider: 'ilmu', ok: true, ms: 480, masked: {}, person: 'SAMPLE Staff' },
+    ]
+    const recent = owner ? all : all.filter(x => x.person === 'SAMPLE Staff')
+    const masked: Record<string, number> = {}
+    recent.forEach(x => Object.entries(x.masked).forEach(([k, n]) => { masked[k] = (masked[k] ?? 0) + n }))
+    const by_kind: Record<string, number> = {}
+    recent.forEach(x => { by_kind[x.kind] = (by_kind[x.kind] ?? 0) + 1 })
+    return { scope: owner ? 'all' : 'own', days: 30, totals: { calls: recent.length, failed: recent.filter(x => !x.ok).length, median_ms: 640, masked }, by_kind, recent }
+  }
   if (!p.startsWith('/settings/ai')) return undefined
   if (!owner) throw new ApiError(403, 'owner_only', 'owner role required')
   if (p === '/settings/ai/test') return mode === 'down' ? { ok: false, message: 'The AI server did not answer. Check the address and key.' } : { ok: true, message: 'Connected. The AI server answered.' }

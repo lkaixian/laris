@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { AiActivity } from './AiActivity'
 import { PageHeader, msg, useFetch } from './ui'
 import { ConfirmDialog } from './kit'
 import { useToast } from './Toast'
@@ -116,6 +117,7 @@ export function AssistantView() {
     <>
       <PageHeader title={tx('as.title')} description={tx('as.lead')} />
       <AssistantChat />
+      <div className="mt-6"><AiActivity /></div>
     </>
   )
 }

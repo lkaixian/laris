@@ -8,7 +8,6 @@ import type { Heat } from './ui'
 import { tx, txOr } from './strings'
 import { locale } from './i18n'
 import { Icon } from './icons'
-import type { IconName } from './icons'
 
 // Track page (#/track): everything in flight, inbound and outbound, from GET /api/track (docs/tracker.md).
 export type Kind = 'quote' | 'supplier_doc' | 'rfq' | 'listing'
@@ -21,9 +20,9 @@ interface TrackData { items: Item[]; counts?: Partial<Counts>; overdue_total?: n
 
 const KIND_KEYS = ['all', 'quote', 'supplier_doc', 'rfq', 'listing'] as const
 const KINDS = (): [string, string][] => KIND_KEYS.map(k => [k, txOr(`tr.kind.${k}`, k)])
-const KIND_INFO: Record<Kind, { label: string; icon: IconName }> = {
-  quote: { get label() { return tx('tr.k.quote') }, icon: 'tracker' }, supplier_doc: { get label() { return tx('tr.k.supplier_doc') }, icon: 'upload' },
-  rfq: { get label() { return tx('tr.k.rfq') }, icon: 'ask' }, listing: { get label() { return tx('tr.k.listing') }, icon: 'camera' },
+const KIND_INFO: Record<Kind, { label: string }> = {
+  quote: { get label() { return tx('tr.k.quote') } }, supplier_doc: { get label() { return tx('tr.k.supplier_doc') } },
+  rfq: { get label() { return tx('tr.k.rfq') } }, listing: { get label() { return tx('tr.k.listing') } },
 }
 // counts group -> the `kind` filter that shows it
 const GROUPS: [keyof Counts, Kind][] = [['outbound', 'quote'], ['inbound', 'supplier_doc'], ['rfq', 'rfq'], ['listing', 'listing']]
@@ -48,13 +47,16 @@ const initial = (): Filters => {
 function Open({ i }: { i: Item }) {
   return <a href={i.link}>{i.ref}<span className="sr-only"> ({KIND_INFO[i.kind]?.label ?? i.kind} for {i.party})</span></a>
 }
-const KindIcon = ({ k }: { k: Kind }) => <span title={KIND_INFO[k]?.label ?? k}><Icon name={KIND_INFO[k]?.icon ?? 'tracker'} className="size-4 text-muted" /><span className="sr-only">{KIND_INFO[k]?.label ?? k}</span></span>
-const Stage = ({ i }: { i: Item }) => <span className="inline-flex flex-wrap items-center gap-1"><Status v={i.status} />{i.overdue && <OverdueChip reason={i.overdue_reason} />}</span>
+const Late = ({ reason }: { reason: string | null }) => (
+  <span className="mt-1 flex items-start gap-1 text-xs text-warn"><Icon name="warn" className="mt-0.5 size-3 shrink-0" />
+    <span><span className="sr-only">{tx('common.overdue')}: </span>{reason ? txOr(`why.${reason}`, reason) : tx('common.overdue')}</span></span>
+)
+const Stage = ({ i }: { i: Item }) => <div><Status v={i.status} />{i.overdue && <Late reason={i.overdue_reason} />}</div>
+const Ref = ({ i }: { i: Item }) => <><Open i={i} /><span className="block text-xs font-normal text-muted">{KIND_INFO[i.kind]?.label ?? i.kind}</span></>
 
 const COLS: Col<Item>[] = [
-  { key: 'ref', get head() { return tx('tr.col.ref') }, cell: i => <Open i={i} />, mobile: 'title', className: 'min-w-[8.5rem]' },
+  { key: 'ref', get head() { return tx('tr.col.ref') }, cell: i => <Ref i={i} />, mobile: 'title', className: 'min-w-[8.5rem]' },
   { key: 'party', get head() { return tx('tr.col.party') }, cell: i => i.party, mobile: 'sub' },
-  { key: 'kind', get head() { return tx('tr.col.kind') }, cell: i => <KindIcon k={i.kind} /> },
   { key: 'stage', get head() { return tx('tr.col.stage') }, cell: i => <Stage i={i} />, mobile: 'badge' },
   { key: 'time', get head() { return tx('tr.col.time') }, cell: i => <HeatChip heat={i.heat} days={i.days_in_stage} />, mobile: 'meta', className: 'whitespace-nowrap' },
   { key: 'due', get head() { return tx('tr.col.due') }, cell: i => i.due_on ? when(i.due_on) : <span className="text-muted">{tx('common.none')}</span>, mobile: 'meta', className: 'whitespace-nowrap tabular-nums' },

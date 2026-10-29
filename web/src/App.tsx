@@ -38,7 +38,7 @@ import { TourHost } from './Tour'
 import { TrackerView } from './TrackerPage'
 import { DetailView } from './DocDetail'
 import { FilterBar, Tabs, ToggleChip } from './kit'
-import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, Hint, OrgCtx, Status, applyBrand, OfflineBanner, ThemeToggle, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
+import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
 import type { Heat } from './ui'
 import type { Role, Me, Alert, Followup, MarginReport, Settings, Proposal } from './api'
 
@@ -88,8 +88,11 @@ function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) =>
       </fieldset>
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
         <legend className="px-1 text-sm font-semibold">Appearance</legend>
-        <div><ThemeToggle dark={dark} setDark={setDark} /></div>
-        <p className="text-sm text-muted">Dark theme, remembered on this device.</p>
+        <div role="group" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:max-w-xs">
+          {([['Light', false], ['Dark', true]] as const).map(([n, d]) => <button key={n} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={dark === d}
+            onClick={() => { document.documentElement.dataset.theme = d ? 'dark' : 'light'; try { localStorage.setItem('theme', d ? 'dark' : 'light') } catch { /* storage blocked: lasts for this visit */ } setDark(d) }}>{n}</button>)}
+        </div>
+        <p className="text-sm text-muted">Remembered on this device.</p>
       </fieldset>
     </div>
   )

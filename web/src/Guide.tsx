@@ -115,7 +115,7 @@ export function GuidePanel() {
           <span aria-hidden="true" key={String(done)} className={`grid size-9 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-on-accent ${done ? 'guide-pop' : ''}`}>{done ? '✓' : i + 1}</span>
           <p className="text-base leading-relaxed">{t(step.text)}</p>
         </div>
-        {step.target && <p className="mt-2 text-xs text-muted">{missing ? tx('guide.notHere') : tx('guide.pointing')}</p>}
+        {missing && <p className="mt-2 text-xs text-muted">{tx('guide.notHere')}</p>}
         {step.act && !missing && !done && <p className="guide-step mt-2 rounded-ui border border-accent bg-tint p-2 text-sm font-semibold">{tx('guide.tryIt')}</p>}
         {missing && step.sample && (
           <div className="guide-step mt-3 rounded-ui border border-dashed border-line bg-tint p-3" style={{ '--dx': '0px' } as React.CSSProperties}>

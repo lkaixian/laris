@@ -336,9 +336,9 @@ const D = {
   'mod.api_keys': { en: 'API access', ms: 'Akses API', zh: 'API 访问', ta: 'API அணுகல்' },
 
   // ---- step-by-step guide behind every "?"
-  'guide.howto': { en: 'How to', ms: 'Cara', zh: '操作指南', ta: 'எப்படி' },
+  'guide.howto': { en: 'Tutorial', ms: 'Tutorial', zh: '教程', ta: 'பயிற்சி' },
   'guide.open': { en: (x: string) => `How to use ${x}, step by step`, ms: (x: string) => `Cara guna ${x}, langkah demi langkah`, zh: (x: string) => `${x}：分步指南`, ta: (x: string) => `${x}: படிப்படியான வழிகாட்டி` },
-  'guide.button': { en: 'How to', ms: 'Cara', zh: '指南', ta: 'எப்படி' },
+  'guide.button': { en: 'Tutorial', ms: 'Tutorial', zh: '教程', ta: 'பயிற்சி' },
   'guide.step': { en: (n: number, m: number) => `Step ${n} of ${m}`, ms: (n: number, m: number) => `Langkah ${n} daripada ${m}`, zh: (n: number, m: number) => `第 ${n} 步，共 ${m} 步`, ta: (n: number, m: number) => `படி ${n} / ${m}` },
   'guide.progress': { en: (n: number, m: number) => `Step ${n} of ${m}`, ms: (n: number, m: number) => `Langkah ${n} daripada ${m}`, zh: (n: number, m: number) => `第 ${n} 步，共 ${m} 步`, ta: (n: number, m: number) => `படி ${n} / ${m}` },
   'guide.goto': { en: (n: number) => `Go to step ${n}`, ms: (n: number) => `Pergi ke langkah ${n}`, zh: (n: number) => `转到第 ${n} 步`, ta: (n: number) => `படி ${n} க்குச் செல்` },
@@ -347,7 +347,6 @@ const D = {
   'guide.done': { en: 'Done', ms: 'Selesai', zh: '完成', ta: 'முடிந்தது' },
   'guide.tryIt': { en: 'Try it: select the ringed button now.', ms: 'Cuba: pilih butang berbulatan sekarang.', zh: '试一试：现在点击带圈的按钮。', ta: 'முயற்சி செய்யுங்கள்: வட்டமிட்ட பொத்தானை இப்போது தேர்ந்தெடுக்கவும்.' },
   'guide.example': { en: 'Example', ms: 'Contoh', zh: '示例', ta: 'எடுத்துக்காட்டு' },
-  'guide.pointing': { en: 'The numbered ring on the page shows where.', ms: 'Bulatan bernombor pada halaman menunjukkan tempatnya.', zh: '页面上带编号的圆圈标出了位置。', ta: 'பக்கத்திலுள்ள எண் வளையம் இடத்தைக் காட்டுகிறது.' },
   'guide.notHere': { en: 'That part is not on the screen yet: it appears once there is something to show.', ms: 'Bahagian itu belum ada pada skrin: ia muncul apabila ada sesuatu untuk ditunjukkan.', zh: '该部分尚未显示：有内容时才会出现。', ta: 'அந்தப் பகுதி இன்னும் திரையில் இல்லை: காட்ட ஏதாவது இருக்கும்போது தோன்றும்.' },
 
   // ---- assistant

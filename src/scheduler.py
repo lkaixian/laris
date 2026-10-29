@@ -73,10 +73,11 @@ def remind_jobs(c, tid) -> int:
         return 0
     today = pipeline.today_my()
     jobs = c.execute(
-        """select j.id, j.assignee_id, d.doc_no, p.name as customer, (%s::date - j.due_on) as days_overdue
-           from jobs j join documents d on d.id = j.quote_id join parties p on p.id = d.party_id
+        """select j.id, j.assignee_id, coalesce(d.doc_no, j.title) as doc_no, coalesce(p.name, 'no customer') as customer,
+                  (%s::date - j.due_on) as days_overdue
+           from jobs j left join documents d on d.id = j.quote_id left join parties p on p.id = coalesce(d.party_id, j.party_id)
            where j.tenant_id=%s and j.status <> 'done' and j.due_on <= %s
-             and (j.remind_sent_at is null or j.remind_sent_at < %s) order by j.due_on, d.doc_no, j.id""",
+             and (j.remind_sent_at is null or j.remind_sent_at < %s) order by j.due_on, coalesce(d.doc_no, j.title), j.id""",
         (today, tid, today, datetime.combine(today, time.min, pipeline.MY))).fetchall()
     if not jobs:
         return 0

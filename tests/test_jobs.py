@@ -365,3 +365,52 @@ def test_schema_is_idempotent_and_an_old_jobs_table_migrates(env, pg_url):
         assert c.execute("select done_at > created_at from jobs where id=%s", (old,)).fetchone()[0] is True  # the backfill runs once
         with pytest.raises(psycopg.errors.ForeignKeyViolation):  # an assignee must be a user of the job's own tenant
             c.execute("update jobs set assignee_id = %s where id = %s", (uuid.uuid4(), old))
+
+
+# ---------------------------------------------------------------- jobs made by hand
+def cust_id(e):
+    return str(e.sql("select party_id from documents where direction='out' and tenant_id=(select tenant_id from users where id=%s) limit 1",
+                     (e.owner,))[0]["party_id"])
+
+
+def test_a_job_made_by_hand_has_a_title_customer_amount_and_moves_like_any_job(env):
+    e = env
+    body = {"title": "  Repair the lightbox  ", "customer_id": cust_id(e), "amount": "350.00", "due_on": "2026-11-05", "priority": "high",
+            "assignee_id": e.staff, "notes": "Customer brings it in"}
+    r = e.c.post("/api/jobs", json=body, headers=e.S)
+    assert r.status_code == 201, r.text
+    j = r.json()
+    assert (j["title"], j["label"], j["manual"], j["quote_id"], j["quote_no"]) == ("Repair the lightbox", "Repair the lightbox", True, None, None)
+    assert j["customer"] and Decimal(j["total"]) == 350 and j["status"] == "todo" and j["priority"] == "high" and j["assignee"]["id"] == e.staff
+    assert j["id"] in [x["id"] for x in e.c.get("/api/jobs?status=todo", headers=e.O).json()]
+    assert e.c.post(f"/api/jobs/{j['id']}", json={"status": "doing"}, headers=e.S).json()["started_at"]
+    events = [x["event"] for x in e.c.get("/api/audit", headers=e.O).json() if x["entity_id"] == j["id"]]
+    assert "job created by hand" in events and "insert" in events
+    bare = e.c.post("/api/jobs", json={"title": "Measure the shopfront"}, headers=e.O).json()
+    assert bare["customer"] is None and bare["total"] is None and bare["label"] == "Measure the shopfront"
+
+
+def test_a_hand_made_job_is_validated_and_gated(env):
+    e = env
+    post = lambda body, who=None: e.c.post("/api/jobs", json=body, headers=who or e.O).status_code
+    for bad in ({}, {"title": ""}, {"title": "   "}, {"title": "x" * 201}, {"title": "x", "amount": "-1"}, {"title": "x", "priority": "urgent"},
+                {"title": "x", "notes": "n" * 2001}, {"title": "x", "quote_id": cust_id(e)}):
+        assert post(bad) == 422, bad
+    sup = str(e.sql("select id from parties where role='supplier' limit 1")[0]["id"])
+    assert post({"title": "x", "customer_id": sup}) == 422  # a supplier is not a customer
+    assert post({"title": "x", "assignee_id": str(uuid.uuid4())}) == 422
+    x = other_tenant(e)
+    assert post({"title": "x", "customer_id": cust_id(e)}, x) == 422  # another business's customer
+    assert all(j["title"] != "x" for j in e.c.get("/api/jobs", headers=x).json())
+    none = member(e, role(e, "Viewer", []))
+    assert post({"title": "x"}, none) == 403
+    with pytest.raises(psycopg.errors.CheckViolation):  # the database itself refuses a job with neither a quote nor a title
+        e.sql("insert into jobs(tenant_id) select tenant_id from users where id=%s", (e.owner,))
+
+
+def test_reminder_names_a_hand_made_job_by_its_title(env, mails):
+    e = env
+    verified(e, e.owner, "owner@shop.test")
+    e.c.post("/api/jobs", json={"title": "Paint the banner", "due_on": str(pipeline.today_my())}, headers=e.O)
+    assert scheduler.run_once()["reminders"] == 1
+    assert "Paint the banner" in mails[0][2] and "no customer" in mails[0][2]

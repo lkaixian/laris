@@ -37,6 +37,7 @@ REQ = {
     ("POST", "/api/documents/{doc_id}/accept-link"): {},
     ("POST", "/api/documents/{doc_id}/lines/{line_id}"): {"json": {"qty": 1}},
     ("POST", "/api/settings"): {"json": {"brand_color": "#112233"}},
+    ("POST", "/api/jobs"): {"json": {"title": "Fix the shop sign"}},
     ("POST", "/api/jobs/{job_id}"): {"json": {"status": "doing"}},
     ("POST", "/api/followups/{fid}"): {"json": {"action": "skip"}},
     ("POST", "/api/field-proposals/{pid}/decide"): {"json": {"decision": "ignore"}},

@@ -52,7 +52,10 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/listings/{id}/items/{iid}/ask`, `POST /api/rfq` | `ask_suppliers` |
 | `POST /api/rfq/{id}/replies/{rid}/accept` | owner |
 | `POST /api/enquiries/simulate` | `manage_contacts` |
+| `POST /api/jobs` | `manage_contacts` (a job made by hand) |
 | `POST /api/jobs/{id}` | `manage_contacts` (status, due date, assignee, priority, notes) |
+| `GET /api/audit/search`, `GET /api/audit/facets` | `view_audit` |
+| `GET /api/audit/export` | `view_audit` and `export_data` |
 | `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |

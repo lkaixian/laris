@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, getRole, needs, why, can } from './api'
 import type { Assignee, Job, Me } from './api'
 import { Async, OverdueChip, PageHeader, TableRegion, msg, rm, useFetch } from './ui'
@@ -11,6 +11,7 @@ const COLS: [Job['status'], string][] = [['todo', 'To do'], ['doing', 'In progre
 const PRIORITY: [NonNullable<Job['priority']>, string][] = [['high', 'High'], ['normal', 'Normal'], ['low', 'Low']]
 const colName = (s: string) => COLS.find(c => c[0] === s)?.[1] ?? s
 const MAX_NOTES = 2000
+const jl = (j: Job) => j.label ?? j.quote_no ?? j.title ?? 'Job'  // a job made by hand has no quote number
 
 // ---- dates (Malaysia calendar, like the server)
 const iso = (d: Date) => d.toISOString().slice(0, 10)
@@ -62,7 +63,7 @@ function EditForm({ j, people, me, onSaved }: { j: Job; people: Assignee[]; me: 
     setErrs({}); setInfo('')
     if (!Object.keys(body).length) { setInfo('Nothing changed.'); return }
     setBusy(true)
-    try { await api('POST', `/jobs/${j.id}`, body); toast(`${j.quote_no} updated.`); onSaved() }
+    try { await api('POST', `/jobs/${j.id}`, body); toast(`${jl(j)} updated.`); onSaved() }
     catch (e) {
       const next: Errs = {}
       if (e instanceof ApiError && e.status === 422) {
@@ -97,7 +98,7 @@ function EditForm({ j, people, me, onSaved }: { j: Job; people: Assignee[]; me: 
         <span className="text-xs font-normal text-muted">{notes.length} of {MAX_NOTES} characters</span><E k="notes" />
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn btn-primary" aria-disabled={busy || undefined} {...needs('manage_contacts', save)}>{busy ? 'Saving...' : `Save ${j.quote_no}`}</button>
+        <button type="button" className="btn btn-primary" aria-disabled={busy || undefined} {...needs('manage_contacts', save)}>{busy ? 'Saving...' : `Save ${jl(j)}`}</button>
         {!can('manage_contacts') && <span className="text-sm text-muted">{why('manage_contacts')} to edit jobs.</span>}
       </div>
       {info && <p role="status" className="text-sm text-muted">{info}</p>}
@@ -114,15 +115,16 @@ function JobCard({ j, people, me, compact, onChanged }: { j: Job; people: Assign
   const move = async (to: Job['status']) => {
     if (busy) return
     setErr(''); setBusy(to)
-    try { await api('POST', `/jobs/${j.id}`, { status: to }); toast(`${j.quote_no} moved to ${colName(to)}.`); onChanged() }
+    try { await api('POST', `/jobs/${j.id}`, { status: to }); toast(`${jl(j)} moved to ${colName(to)}.`); onChanged() }
     catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
   const pr = j.priority ?? 'normal'
   return (
     <li className="card min-w-0 p-3 text-sm">
-      <p className="break-words font-semibold"><a className="text-ink underline-offset-2 hover:underline" href={`#/doc/${j.quote_id}`}>{j.quote_no}</a> <span className="font-normal">for {j.customer}</span></p>
+      <p className="break-words font-semibold">{j.quote_id ? <a className="text-ink underline-offset-2 hover:underline" href={`#/doc/${j.quote_id}`}>{jl(j)}</a> : jl(j)}
+        {j.customer && <span className="font-normal"> for {j.customer}</span>}{j.manual && <span className="badge ml-2 font-normal">Made by hand</span>}</p>
       {j.summary && <p className="mt-1 break-words text-sm">{j.summary}</p>}
-      <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>
+      {j.total != null && <p className="mt-1 text-sm text-muted">Total {rm(j.total)}</p>}
       <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">{due.text}{due.late && <OverdueChip />}</p>
       <p className="mt-1 flex flex-wrap items-center gap-1 text-sm">
         {compact && <span className="badge">{colName(j.status)}</span>}
@@ -131,14 +133,14 @@ function JobCard({ j, people, me, compact, onChanged }: { j: Job; people: Assign
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {COLS.filter(c => c[0] !== j.status).map(([to, label]) => (
-          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} {...(compact ? { 'aria-label': `Move to ${label}: ${j.quote_no}` } : {})} {...needs('manage_contacts', () => move(to))}>
-            {busy === to ? 'Moving...' : compact ? `Move to ${label}` : `Move ${j.quote_no} to ${label}`}
+          <button key={to} type="button" className="btn" aria-disabled={!!busy || undefined} {...(compact ? { 'aria-label': `Move to ${label}: ${jl(j)}` } : {})} {...needs('manage_contacts', () => move(to))}>
+            {busy === to ? 'Moving...' : compact ? `Move to ${label}` : `Move ${jl(j)} to ${label}`}
           </button>
         ))}
       </div>
       {err && <p role="alert" className="mt-2 text-sm text-warn">{err}</p>}
       <details className="mt-2">
-        <summary className="inline-flex min-h-(--control-h) cursor-pointer items-center font-semibold text-accent hover:underline">Edit<span className="sr-only"> {j.quote_no}</span></summary>
+        <summary className="inline-flex min-h-(--control-h) cursor-pointer items-center font-semibold text-accent hover:underline">Edit<span className="sr-only"> {jl(j)}</span></summary>
         <EditForm j={j} people={people} me={me} onSaved={onChanged} />
       </details>
     </li>
@@ -231,7 +233,72 @@ function AgendaView({ f, me, people }: { f: Filters; me: Me; people: Assignee[] 
   )
 }
 
+// ---- a job made by hand: work that did not start as a quote (POST /api/jobs). It starts in To do.
+function NewJobForm({ me, people, onDone, onCancel }: { me: Me; people: Assignee[]; onDone: (label: string) => void; onCancel: () => void }) {
+  const customers = useFetch<{ id: string; name: string }[]>('/contacts?role=customer')
+  const [v, setV] = useState({ title: '', customer_id: '', amount: '', due_on: '', assignee_id: '', priority: 'normal', notes: '' })
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const first = useRef<HTMLInputElement>(null)
+  useEffect(() => first.current?.focus(), [])
+  const save = async () => {
+    if (busy) return
+    if (!v.title.trim()) { setErr('Give the job a title.'); first.current?.focus(); return }
+    if (v.amount.trim() && !(Number(v.amount) >= 0)) return setErr('The amount must be a number, zero or more.')
+    const body: Record<string, unknown> = { title: v.title.trim(), priority: v.priority }
+    if (v.customer_id) body.customer_id = v.customer_id
+    if (v.amount.trim()) body.amount = Number(v.amount).toFixed(2)
+    if (v.due_on) body.due_on = v.due_on
+    if (v.assignee_id) body.assignee_id = v.assignee_id
+    if (v.notes.trim()) body.notes = v.notes.trim()
+    setErr(''); setBusy(true)
+    try { await api('POST', '/jobs', body); onDone(v.title.trim()) } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
+  }
+  const field = 'flex flex-col gap-1 text-sm font-semibold'
+  return (
+    <section aria-labelledby="new-job-h" className="card mb-4 max-w-3xl">
+      <h2 id="new-job-h" className="text-md font-semibold">New job</h2>
+      <p className="mt-1 text-sm text-muted">For work that did not start as a quote. Jobs from quotes are still created on the quote.</p>
+      <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); save() }}>
+        <label className={`${field} sm:col-span-2`}>Title
+          <input ref={first} className="input font-normal" maxLength={200} value={v.title} onChange={e => setV({ ...v, title: e.target.value })} aria-invalid={err && !v.title.trim() ? true : undefined} />
+        </label>
+        <label className={field}>Customer (optional)
+          <select className="input font-normal" value={v.customer_id} onChange={e => setV({ ...v, customer_id: e.target.value })}>
+            <option value="">No customer</option>{(customers.data ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        <label className={field}>Amount in RM (optional)
+          <input className="input font-normal" inputMode="decimal" value={v.amount} onChange={e => setV({ ...v, amount: e.target.value })} />
+        </label>
+        <label className={field}>Due date
+          <input type="date" className="input font-normal" value={v.due_on} onChange={e => setV({ ...v, due_on: e.target.value })} />
+        </label>
+        <label className={field}>Assignee
+          <select className="input font-normal" value={v.assignee_id} onChange={e => setV({ ...v, assignee_id: e.target.value })}>
+            <option value="">Unassigned</option>{people.map(a => <option key={a.id} value={a.id}>{a.id === me.id ? `Me (${a.name})` : a.name}</option>)}
+          </select>
+        </label>
+        <label className={field}>Priority
+          <select className="input font-normal" value={v.priority} onChange={e => setV({ ...v, priority: e.target.value })}>{PRIORITY.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
+        </label>
+        <label className={`${field} sm:col-span-2`}>Notes
+          <textarea className="input min-h-20 py-2 font-normal" maxLength={MAX_NOTES} value={v.notes} onChange={e => setV({ ...v, notes: e.target.value })} />
+        </label>
+        {err && <p role="alert" className="text-sm text-warn sm:col-span-2">{err}</p>}
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Creating...' : 'Create job'}</button>
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
 export function JobsView({ me }: { me: Me }) {
+  const toast = useToast()
+  const [adding, setAdding] = useState(false)
+  const [rev, setRev] = useState(0)
   const [f, setF] = useState<Filters>(initial)
   const set = (p: Partial<Filters>) => setF(x => { saved = { ...x, ...p }; return saved })
   const [people, peopleFailed] = usePeople(me)
@@ -246,7 +313,9 @@ export function JobsView({ me }: { me: Me }) {
   ]
   return (
     <>
-      <PageHeader title="Jobs" description={'Created when a customer accepts a quote ("Sign and create job" on the quote).'} />
+      <PageHeader title="Jobs" description="A job is created when a customer accepts a quote, or by hand for other work."
+        actions={can('manage_contacts') ? <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} onClick={() => setAdding(!adding)}>New job</button> : undefined} />
+      {adding && <NewJobForm me={me} people={people} onCancel={() => setAdding(false)} onDone={t => { setAdding(false); setRev(r => r + 1); toast(`${t} added to To do.`) }} />}
       {peopleFailed && <p role="alert" className="mb-2 text-sm text-warn">Could not load the team list, so only you can be assigned for now. Reload to try again.</p>}
       {!can('manage_contacts') && <p className="mb-2 text-sm text-muted">{why('manage_contacts')} to move or edit jobs. You can see the board.</p>}
       <FilterBar label="Job filters" chips={chips} onClear={filtered ? clear : undefined}
@@ -257,7 +326,7 @@ export function JobsView({ me }: { me: Me }) {
           <FilterSelect label="Status" value={f.status} onChange={v => set({ status: v })}><option value="">All</option>{COLS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</FilterSelect>
         </>}
       </FilterBar>
-      {f.view === 'board' ? <Board f={f} me={me} people={people} /> : <AgendaView f={f} me={me} people={people} />}
+      {f.view === 'board' ? <Board key={rev} f={f} me={me} people={people} /> : <AgendaView key={rev} f={f} me={me} people={people} />}
     </>
   )
 }

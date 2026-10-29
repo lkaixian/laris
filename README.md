@@ -68,11 +68,11 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 - **Catalog photos**: one photo of labelled products becomes reviewable catalog items (Qwen2.5-VL on RunPod, Tesseract cross-check of every price and SKU).
 - **Availability and quote requests**: customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner, priced by the rules engine from the item's per-size prices and quantity tiers. Replies say "in stock" only when the owner has set a stock count.
 - **Supplier work**: price lists by PDF, photo, XLSX, DOCX and CSV; "Ask suppliers" with a circled photo over WhatsApp or Telegram and a price comparison of the replies.
-- **Quotes and tracking**: quote PDF, XLSX and CSV export; tracker with stage and overdue rules, follow-up reminders, job board, "speed to quote" on Home.
+- **Quotes and tracking**: quote PDF, XLSX and CSV export; tracker with stage and overdue rules and age colours (fresh, waiting, late, stale by days waiting, with a filter), follow-ups sorted by longest wait, job board with jobs from accepted quotes or made by hand, "speed to quote" on Home.
 - **Customer accept link**: the customer opens a link, types a name and accepts or declines. This is a simulated e-signature, labelled so in the app, and creates the job.
-- **Owner control**: approval step, custom roles and permissions, audit log, multi-business isolation with row-level security, sign-in with sessions and email invites, signed software licence.
+- **Owner control**: approval step, custom roles and permissions, activity log with filters (dates, person, module, action, words) and a CSV or PDF download of only the chosen entries, multi-business isolation with row-level security, sign-in with sessions and email invites, signed software licence.
 - **Privacy tools (PDPA)**: consent notice on first chat contact, bot commands `/privacy`, `/mydata` and `/forget`, per-person export and erase, breach register with deadline clocks, DPO contact, retention purge. Not reviewed by a lawyer.
-- **Help**: guided tour, Ctrl+K command palette, 17 help articles. An optional in-app AI guide is off by default and the owner opts in; it sees only a redacted question.
+- **Help**: guided tour, Ctrl+K command palette, 17 help articles. An optional in-app AI guide is off by default and the owner opts in; it sees only a redacted question. A floating **Ask** button opens the Assistant on every page: it looks things up, and can move a job or skip a follow-up only after the person confirms (it never prices, approves, sends or deletes).
 - **API access**: API keys (hash stored) for a read-only recipe list and a price check priced by the same rules engine, without costs or margins.
 
 ## Tech Stack
@@ -195,7 +195,8 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
   - All data is synthetic. Single-process deployment with no failover; some rate limits and the 15-minute catalog memory are per process.
   - Row-level security and the database roles have not been tried on Replit's own Postgres, only on PGlite.
   - Emails, the command palette, the guided tour and the customer accept page have not been checked in real mail clients, browsers or phones. Malay text is not reviewed by a native speaker.
-  - The AI guide has not been checked against a live model.
+  - The AI guide has not been checked against a live model, and neither have the Assistant's proposed actions (move a job, skip a follow-up); they were tested with a mocked model and keyword fallback only.
+  - Age colour bands are fixed (0 to 1, 2 to 3, 4 to 7, 8 or more days) and not set per business. The floating Ask panel, the activity log download and the New job form have been checked in mock mode at 1440px and 360px, not with a screen reader or on a real phone.
   - PDPA: the tools above exist, but the legal wording is not reviewed by a lawyer, the 72 hour and 7 day deadlines come from law-firm summaries and are not verified at pdp.gov.my, and no data protection officer is named. Do not use real customer data until `docs/privacy-and-breach-runbook.md` is completed.
   - The e-signature is simulated, not a legally binding signature. The licence is a deterrent, not copy protection.
 

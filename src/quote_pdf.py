@@ -118,3 +118,19 @@ def render_model(m: dict) -> bytes:
 
 def render(org: dict, doc: dict, customer: str, lines: list[dict]) -> bytes:
     return render_model(quote_doc.compose(org, doc, customer, lines))
+
+
+def table_pdf(title: str, subtitle: str, head: list[str], rows: list[list]) -> bytes:
+    """A plain landscape A4 table (the activity log export). Every cell is escaped text; long text wraps inside its column."""
+    from reportlab.lib.pagesizes import landscape
+    buf = io.BytesIO()
+    pdf = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
+                            title=title)
+    st = getSampleStyleSheet()
+    cell = st["BodyText"].clone("cell", fontSize=8, leading=10)
+    data = [[Paragraph(f"<b>{_esc(h)}</b>", cell) for h in head]] + [[Paragraph(_esc(v), cell) for v in r] for r in rows]
+    t = Table(data, colWidths=[16 * mm, 30 * mm, 40 * mm, 32 * mm, 20 * mm, None], repeatRows=1)
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#0f5c47")),
+                           ("LINEBELOW", (0, 1), (-1, -1), 0.25, colors.HexColor("#d5e0d9")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e1f0e8"))]))
+    pdf.build([Paragraph(_esc(title), st["Title"]), Paragraph(_esc(subtitle), st["Normal"]), Spacer(1, 4 * mm), t])
+    return buf.getvalue()

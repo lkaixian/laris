@@ -581,6 +581,7 @@ def test_followup_is_suggested_then_owner_sends(env):
     assert e.c.get("/api/followups", headers=e.S).status_code == 403  # step 105: the list needs manage_followups, staff has none by default
     fu = [x for x in e.c.get("/api/followups", headers=e.O).json() if x["document_id"] == d][0]
     assert fu["suggested_text"].startswith("Hi ") and "RM" not in fu["suggested_text"] and "MYR" in fu["suggested_text"]
+    assert (fu["days_waiting"], fu["heat"]) == (3, "waiting")  # sent 3 days ago: the tracker's heat bands
     assert "cost" not in json.dumps(fu).lower()
     act = lambda who, a: e.c.post(f"/api/followups/{fu['id']}", json={"action": a}, headers=who)
     assert act(e.S, "send").status_code == 403
@@ -879,7 +880,7 @@ def test_assistant_never_acts_and_survives_a_bad_model(env):
     d = make_draft(e)
     before = e.sql("select status from documents where id=%s", (d,))[0]["status"]
     r = ask(e, e.O, "do_action", "approve QT-1").json()
-    assert "cannot change, approve, price or send" in r["reply"]
+    assert "cannot approve, price, send or delete" in r["reply"] and r["actions"] == []
     assert e.sql("select status from documents where id=%s", (d,))[0]["status"] == before
     assert ask(e, e.O, "drop_database").json()["intent"] == "help"  # outside the closed list
     e.ai.payload = {"intent": "search", "query": ["not", "a", "string"], "days": True}
@@ -916,6 +917,43 @@ def test_assistant_keyword_fallback_strips_filler(env):
     assert phrase("find supplier for acrylic") == "acrylic" and phrase("who is Pak Ali?") == "Pak Ali"
     assert fallback("how much does acrylic cost")["query"] == "acrylic"
     assert fallback("SAMPLE-QT-0001")["intent"] == "search"
+
+
+def test_assistant_proposes_a_job_move_and_changes_nothing_until_the_route_is_called(env):
+    e = env
+    from test_jobs import mkjob
+    from test_roles import member, role
+    j = str(mkjob(e, "JB-ASK-1"))
+    r = ask(e, e.O, "job_move", "jb-ask", to="done").json()
+    assert r["actions"] == [{"kind": "job_move", "id": j, "to": "done", "label": r["actions"][0]["label"]}] and "Done" in r["actions"][0]["label"]
+    assert "Nothing changes until you confirm" in r["reply"] and e.sql("select status from jobs where id=%s", (j,))[0]["status"] == "todo"
+    assert e.c.post(f"/api/jobs/{j}", json={"status": "done"}, headers=e.O).json()["status"] == "done"  # what the app calls after the confirm
+    assert ask(e, e.O, "job_move", "JB-ASK-1", to="done").json()["actions"] == [] and "already in Done" in ask(e, e.O, "job_move", "JB-ASK-1", to="done").json()["reply"]
+    assert ask(e, e.O, "job_move", "nothing-like-this", to="doing").json()["actions"] == []
+    assert "Which column" in ask(e, e.O, "job_move", "JB-ASK-1").json()["reply"]
+    assert ask(e, e.O, "job_move", "JB-ASK-1", to="sideways").json()["actions"] == []  # outside the closed list
+    none = member(e, role(e, "Viewer", []))
+    assert ask(e, none, "job_move", "JB-ASK-1", to="todo").json()["actions"] == []  # never offered to a role that may not do it
+
+
+def test_assistant_proposes_skipping_a_follow_up_only_with_the_permission(env):
+    e = env
+    d = sent_quote_on_telegram(e)
+    scheduler.run_once()
+    no = e.sql("select doc_no from documents where id=%s", (d,))[0]["doc_no"]
+    r = ask(e, e.O, "followup_skip", no).json()
+    fid = e.sql("select id from followups where document_id=%s", (d,))[0]["id"]
+    assert [a["id"] for a in r["actions"]] == [str(fid)] and r["actions"][0]["kind"] == "followup_skip" and no in r["actions"][0]["label"]
+    assert e.sql("select state from followups where id=%s", (fid,))[0]["state"] == "pending"
+    assert ask(e, e.S, "followup_skip", no).json()["actions"] == []  # staff lack manage_followups by default
+
+
+def test_assistant_keywords_find_job_moves_and_skips():
+    from src.api.assistant import fallback
+    assert fallback("move job QT-2026-0005 to done") == {"intent": "job_move", "query": "QT-2026-0005", "to": "done"}
+    assert fallback("start the job for Warung Ali")["to"] == "doing"
+    assert fallback("skip the follow up for Kopi Corner") == {"intent": "followup_skip", "query": "Kopi Corner"}
+    assert fallback("please approve and send everything")["intent"] == "do_action"
 
 
 def test_dashboard_counts_and_staff_scrub(env):

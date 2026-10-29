@@ -28,6 +28,8 @@ export function useFetch<T>(path: string | null) {
   // Back online: a load that failed is tried again (one that worked is left alone).
   const failed = !!s.error
   useEffect(() => { if (!failed) return; const h = () => setN(x => x + 1); addEventListener('laris:online', h); return () => removeEventListener('laris:online', h) }, [failed])
+  // Something changed the data from outside this page (the floating assistant after a confirmed action): load again.
+  useEffect(() => { const h = () => setN(x => x + 1); addEventListener('laris:changed', h); return () => removeEventListener('laris:changed', h) }, [])
   return { ...s, reload: () => setN(x => x + 1) }
 }
 
@@ -249,6 +251,22 @@ export function Status({ v }: { v: string }) {
   const k = STATUS_CHIP[v] ?? 'draft'
   return <span className={`chip chip-${k}`}>{k === 'warn' && <Icon name="warn" className="size-3" />}{stageLabel(v)}</span>
 }
+// Age colour bands from the server (src/track_rules.py heat): fresh 0-1 days, waiting 2-3, late 4-7, stale 8+.
+export type Heat = 'fresh' | 'waiting' | 'late' | 'stale'
+export const HEAT: [Heat, string, string][] = [['fresh', 'Fresh', '0 to 1 day'], ['waiting', 'Waiting', '2 to 3 days'], ['late', 'Late', '4 to 7 days'], ['stale', 'Stale', '8 days or more']]
+export const heatName = (h: Heat) => HEAT.find(x => x[0] === h)?.[1] ?? h
+const dayWord = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
+export const HeatChip = ({ heat, days }: { heat?: Heat | null; days: number }) =>
+  heat ? <span className={`chip heat-${heat} tabular-nums`}>{`${heatName(heat)}, ${dayWord(days)}`}</span> : <span className="text-muted tabular-nums">{dayWord(days)}</span>
+export function HeatLegend({ counts }: { counts?: Partial<Record<Heat, number>> }) {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted" aria-label="Age colours">
+      <span>Age colours:</span>
+      {HEAT.map(([h, name, range]) => <span key={h} className={`chip heat-${h}`}>{`${name} ${range}${counts ? ` (${counts[h] ?? 0})` : ''}`}</span>)}
+    </p>
+  )
+}
+
 export const OverdueChip = ({ reason }: { reason?: string | null }) => <span className="chip chip-warn"><Icon name="warn" className="size-3" />Overdue{reason ? `: ${reason}` : ''}</span>
 
 // Slim status line in the shell's banner slot. Offline: say changes cannot be saved. Back online: say so for 3 s and tell loaders that failed to try again ('laris:online').

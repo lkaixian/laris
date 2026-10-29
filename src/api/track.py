@@ -175,9 +175,9 @@ def _stats(ctx: Ctx) -> dict:
 @r.get("/track")
 def track(kind: Literal["all", "quote", "supplier_doc", "rfq", "listing"] = "all", stage: str | None = Query(None, max_length=30),
           overdue: int = Query(0, ge=0, le=1), q: str = Query("", max_length=100), limit: int = Query(50, ge=1, le=200),
-          offset: int = Query(0, ge=0), ctx: Ctx = Depends(read_ctx)):
-    """Everything in flight, overdue first then oldest in its stage. counts and stats cover the whole tenant; overdue_total counts
-    the overdue items that match kind, stage and q (before the overdue flag and paging)."""
+          offset: int = Query(0, ge=0), heat: Literal["fresh", "waiting", "late", "stale"] | None = None, ctx: Ctx = Depends(read_ctx)):
+    """Everything in flight, overdue first then oldest in its stage. counts and stats cover the whole tenant; overdue_total and
+    heat_counts count the items that match kind, stage and q (before the overdue and heat filters and paging)."""
     p = {"t": ctx.tenant_id, "stage": stage or None, "term": sorted(tr.TERMINAL), "has_q": bool(q.strip()), "q": like(q),
          "cap": CAP, "costs": ctx.costs}
     kinds, hours, now = (tr.KINDS if kind == "all" else (kind,)), followup_hours(ctx), _now()
@@ -190,13 +190,18 @@ def track(kind: Literal["all", "quote", "supplier_doc", "rfq", "listing"] = "all
         why = tr.overdue_reason(k, x["status"], x["since"], now, sent_at=x.get("sent_at"), valid_until=x.get("valid_until"), followup_hours=hours)
         link = {"quote": "#/doc/", "supplier_doc": "#/doc/", "rfq": "#/ask", "listing": "#/catalog/"}[k] + (str(x["link_id"]) if k != "rfq" else "")
         items.append({"kind": k, "id": x["id"], "ref": x["ref"] or "", "party": x["party"], "status": x["status"], "stage_label": tr.label(x["status"]),
-                      "since": x["since"], "days_in_stage": tr.days_in_stage(x["since"], now), "overdue": bool(why), "overdue_reason": why,
+                      "since": x["since"], "days_in_stage": (age := tr.days_in_stage(x["since"], now)), "heat": tr.heat(x["status"], age),
+                      "overdue": bool(why), "overdue_reason": why,
                       "due_on": x.get("valid_until"), "total": x["total"], "link": link})
     overdue_total = sum(i["overdue"] for i in items)
+    heat_counts = {b: sum(i["heat"] == b for i in items) for b in tr.HEAT_BANDS}
     items.sort(key=lambda i: (not i["overdue"], i["status"] in tr.TERMINAL, i["since"], str(i["id"])))
     if overdue:
         items = [i for i in items if i["overdue"]]
-    out = {"items": items[offset:offset + limit], "counts": _counts(ctx), "overdue_total": overdue_total, "has_more": len(items) > offset + limit}
+    if heat:
+        items = [i for i in items if i["heat"] == heat]
+    out = {"items": items[offset:offset + limit], "counts": _counts(ctx), "overdue_total": overdue_total, "heat_counts": heat_counts,
+           "has_more": len(items) > offset + limit}
     if "view_audit" in ctx.perms:
         out["stats"] = _stats(ctx)
     return reply(ctx, out)

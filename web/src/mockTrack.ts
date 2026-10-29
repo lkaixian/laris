@@ -48,6 +48,8 @@ export function trackStats() {
 }
 export const dashTrack = () => (Q.get('notrack') === '1' ? null : trackStats())
 
+// Same bands as src/track_rules.py heat: fresh 0-1, waiting 2-3, late 4-7, stale 8+; finished items have none.
+export const heatOf = (status: string, d: number) => TERMINAL.includes(status) ? null : d <= 1 ? 'fresh' : d <= 3 ? 'waiting' : d <= 7 ? 'late' : 'stale'
 function track(q: URLSearchParams, owner: boolean) {
   const bad = (field: string, message: string) => { const e = new ApiError(422, 'invalid_request', `${field}: ${message}`); e.fields = [{ field, message }]; return e }
   const kind = q.get('kind') ?? 'all'
@@ -56,12 +58,13 @@ function track(q: URLSearchParams, owner: boolean) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw bad('limit', 'must be from 1 to 200')
   if (!Number.isInteger(offset) || offset < 0) throw bad('offset', 'must be 0 or more')
   const stage = q.get('stage'), term = (q.get('q') ?? '').trim().toLowerCase(), cap = Number(Q.get('trackpage')) || limit
-  const all = trackItems(owner)
+  const all = trackItems(owner).map(i => ({ ...i, heat: heatOf(i.status, i.days_in_stage) }))
   const hit = all.filter(i => (kind === 'all' || i.kind === kind) && (!stage || (stage === 'open' ? !TERMINAL.includes(i.status) : i.status === stage)) && (!term || `${i.party} ${i.ref}`.toLowerCase().includes(term)))
-  const rows = hit.filter(i => q.get('overdue') !== '1' || i.overdue)
+  const rows = hit.filter(i => (q.get('overdue') !== '1' || i.overdue) && (!q.get('heat') || i.heat === q.get('heat')))
+  const heat_counts = Object.fromEntries(['fresh', 'waiting', 'late', 'stale'].map(b => [b, hit.filter(i => i.heat === b).length]))
   const counts = Object.fromEntries(Object.entries(ZERO).map(([g, keys]) => [g, Object.fromEntries(keys.map(k => [k, all.filter(i => GROUP[i.kind] === g && i.status === k).length]))]))
   const size = Math.min(limit, cap)
-  return { items: rows.slice(offset, offset + size), counts, overdue_total: hit.filter(i => i.overdue).length, has_more: offset + size < rows.length,
+  return { items: rows.slice(offset, offset + size), counts, overdue_total: hit.filter(i => i.overdue).length, heat_counts, has_more: offset + size < rows.length,
     ...(owner ? { stats: { draft: { avg_days: 1.4, n: 22 }, approved: { avg_days: 0.8, n: 19 }, sent: { avg_days: 3.2, n: 17 }, read: { avg_days: 2.1, n: 9 }, parsed: { avg_days: 1.2, n: 14 }, reviewed: { avg_days: 2.6, n: 11 }, waiting: { avg_days: 2.9, n: 8 } } } : {}) }
 }
 
@@ -78,7 +81,7 @@ function timeline(doc: { direction: string; status: string }) {
 }
 
 // ---- jobs
-type J = { id: string; status: 'todo' | 'doing' | 'done'; created_at: string; quote_id: string; quote_no: string; customer: string; total: string; quote_total: string; summary: string | null
+type J = { id: string; status: 'todo' | 'doing' | 'done'; created_at: string; quote_id: string | null; quote_no: string | null; customer: string | null; total: string | null; quote_total: string | null; summary: string | null; title?: string | null
   due_on: string | null; assignee_id: string | null; priority: 'low' | 'normal' | 'high'; notes: string | null; started_at: string | null; done_at: string | null }
 const PEOPLE: Record<string, string> = { 'sample-owner': 'SAMPLE Owner', 'sample-staff': 'SAMPLE Staff' }
 const SEED: [J['status'], string, string, number | null, string | null, J['priority'], string][] = [
@@ -99,7 +102,18 @@ const jobs: J[] = Q.get('jobs') === '0' ? [] : SEED.map(([status, no, customer, 
 const view = (j: J) => {
   const { assignee_id, ...rest } = j
   const d = j.due_on ? day(j.due_on) : null
-  return { ...rest, assignee: assignee_id ? { id: assignee_id, name: PEOPLE[assignee_id] ?? assignee_id } : null, overdue: d != null && d < 0 && j.status !== 'done', days_to_due: d }
+  return { ...rest, assignee: assignee_id ? { id: assignee_id, name: PEOPLE[assignee_id] ?? assignee_id } : null, overdue: d != null && d < 0 && j.status !== 'done', days_to_due: d,
+    manual: j.quote_id == null, label: j.quote_no ?? j.title ?? 'Job' }
+}
+// Mock assistant: "move job QT-2026-0005 to done" -> a proposal (nothing changes until the app's confirm step posts /jobs/{id}).
+export function mockJobMove(text: string) {
+  const t = text.toLowerCase(), to = /done|finish|complete/.test(t) ? 'done' : /start|progress|doing/.test(t) ? 'doing' : /to do|todo|reopen/.test(t) ? 'todo' : null
+  if (!t.includes('job') || !to) return null
+  const hit = jobs.filter(j => j.status !== to && (j.quote_no ?? j.title ?? '').toLowerCase().split(/\s+/).some(w => w.length > 3 && t.includes(w.toLowerCase()))).slice(0, 3)
+  const name = { todo: 'To do', doing: 'In progress', done: 'Done' }[to]
+  return { reply: hit.length ? 'SAMPLE (mock mode): I found this job. Nothing changes until you confirm.' : 'SAMPLE (mock mode): no job matches. Try a quote number such as QT-2026-0005.',
+    intent: 'job_move', items: [{ label: 'Open the job board', href: '#/jobs' }], source: 'keywords', suggestions: [],
+    actions: hit.map(j => ({ kind: 'job_move', id: j.id, to, label: `Move ${j.quote_no ?? j.title} for ${j.customer} to ${name}` })) }
 }
 export const jobStats = () => ({
   jobs: { todo: jobs.filter(j => j.status === 'todo').length, doing: jobs.filter(j => j.status === 'doing').length, done: jobs.filter(j => j.status === 'done').length },
@@ -145,6 +159,17 @@ export function mockTrack(method: string, p: string, query: string, c: Ctx, body
     if (st && !['todo', 'doing', 'done'].includes(st)) throw new ApiError(422, 'invalid_request', 'status: not a job status')
     const who = as === 'me' ? c.me : as
     return jobs.map(view).filter(j => (!st || j.status === st) && (!who || j.assignee?.id === who) && (q.get('overdue') !== '1' || j.overdue) && (!before || (j.due_on != null && j.due_on < before))).slice(0, limit)
+  }
+  if (method === 'POST' && p === '/jobs') {
+    c.perm('manage_contacts')
+    const b = body ?? {}, title = String(b.title ?? '').trim()
+    if (!title) throw new ApiError(422, 'invalid_request', 'title: cannot be blank')
+    if (b.amount != null && !(Number(b.amount) >= 0)) throw new ApiError(422, 'invalid_request', 'amount: must be 0 or more')
+    const j: J = { id: `job-${jobs.length + 1}`, status: 'todo', created_at: new Date().toISOString(), quote_id: null, quote_no: null, title, customer: b.customer_id ? 'SAMPLE Customer (synthetic)' : null,
+      total: b.amount == null ? null : Number(b.amount).toFixed(2), quote_total: null, summary: null, due_on: b.due_on ?? null, assignee_id: b.assignee_id ?? null, priority: b.priority ?? 'normal',
+      notes: b.notes ?? null, started_at: null, done_at: null }
+    jobs.unshift(j)
+    return view(j)
   }
   if (method === 'POST' && (m = p.match(/^\/jobs\/([^/]+)$/))) {
     c.perm('manage_contacts')

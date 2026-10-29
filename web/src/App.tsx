@@ -19,7 +19,7 @@ import { QuoteSettingsCard } from './QuoteSettings'
 import { QuotePanel, Messages } from './QuoteDoc'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
-import { AssistantView } from './Assistant'
+import { AssistantView, AssistantWidget } from './Assistant'
 import { HomeView } from './Home'
 import { TrackView } from './Track'
 import { Timeline } from './Timeline'
@@ -27,14 +27,16 @@ import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
 import { StatusView, HealthBanner } from './Status'
 import { CatalogView } from './Listings'
+import { ActivityView } from './Activity'
 import { HelpView } from './Help'
 import { PrivacyView } from './Privacy'
 import { ApiAccessView } from './ApiAccess'
 import { AiSettingsView } from './AiSettings'
 import { TourHost } from './Tour'
-import { FilterBar, FilterSelect } from './kit'
-import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner } from './ui'
-import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal, AuditEvent } from './api'
+import { FilterBar, FilterSelect, ToggleChip } from './kit'
+import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT, HeatChip, HeatLegend, heatName } from './ui'
+import type { Heat } from './ui'
+import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal } from './api'
 
 
 // ---------- Tracker ----------
@@ -582,6 +584,7 @@ function Followups() {
   const s = useFetch<Followup[]>(can('manage_followups') ? '/followups' : null)  // no permission: no request (the page is not reachable then anyway)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')  // "<id>:<action>" while that call runs
+  const [band, setBand] = useState<Heat | ''>('')
   const toast = useToast()
   const act = async (f: Followup, action: 'send' | 'skip') => {
     if (busy) return
@@ -589,16 +592,26 @@ function Followups() {
     try { await api('POST', `/followups/${f.id}`, { action }); toast(action === 'send' ? `Follow-up for ${f.doc_no} sent.` : `Follow-up for ${f.doc_no} skipped.`); s.reload() }
     catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
+  const counts = Object.fromEntries(HEAT.map(([h]) => [h, (s.data ?? []).filter(f => f.heat === h).length])) as Record<Heat, number>
+  const shown = (s.data ?? []).filter(f => !band || f.heat === band)
   return (
     <section id="followups" aria-label="Quotes waiting for a reply">
-      <PageHeader title="Follow-ups" description="Quotes with no answer after the follow-up window. Read the message, then send it or skip. Nothing is sent without you." />
+      <PageHeader title="Follow-ups" description="Quotes with no answer after the follow-up window, longest wait first. Read the message, then send it or skip. Nothing is sent without you." />
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
+      {!!s.data?.length && <>
+        <FilterBar label="Follow-up filters" chips={band ? [{ label: `Age: ${heatName(band)}`, onRemove: () => setBand('') }] : []} onClear={band ? () => setBand('') : undefined}>
+          {HEAT.map(([h, name]) => <ToggleChip key={h} pressed={band === h} onClick={() => setBand(band === h ? '' : h)}><span aria-hidden="true" className={`heat-${h} size-2.5 rounded-full`} style={{ background: 'var(--heat-fg)' }} />{name} <span className="tabular-nums">{counts[h]}</span></ToggleChip>)}
+        </FilterBar>
+        <div className="mb-3"><HeatLegend /></div>
+      </>}
       <Async s={s} rows={2} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up." emptyHint="When a customer has not answered after the follow-up window, the quote shows up here.">
+        {shown.length === 0 ? <p className="card text-sm text-muted">No follow-ups in this age band. <button type="button" className="link" onClick={() => setBand('')}>Show all</button></p> : (
         <ul className="grid gap-2 md:grid-cols-2">
-          {s.data?.map(f => (
-            <li key={f.id} className="card">
-              <p className="font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">for {f.customer}</span></p>
-              <p className="mt-1 text-sm text-muted">{f.reason}</p>
+          {shown.map(f => (
+            <li key={f.id} className={`card ${f.heat ? `heat-edge heat-${f.heat}` : ''}`}>
+              <p className="flex flex-wrap items-center gap-2 font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">for {f.customer}</span>
+                {f.days_waiting != null && <HeatChip heat={f.heat} days={f.days_waiting} />}</p>
+              <p className="mt-1 text-sm text-muted">{f.reason}{f.days_waiting != null ? `, sent ${f.days_waiting} ${f.days_waiting === 1 ? 'day' : 'days'} ago` : ''}</p>
               <p className="mt-2 text-sm">{f.suggested_text ?? 'No chat contact on file: call the customer, then skip this.'}</p>
               {can('manage_followups') && <div className="mt-3 flex flex-wrap gap-2">
                 {f.suggested_text && <button type="button" className="btn btn-primary" aria-disabled={!!busy || undefined} onClick={() => act(f, 'send')}>{busy === `${f.id}:send` ? 'Sending...' : `Send follow-up for ${f.doc_no}`}</button>}
@@ -606,7 +619,7 @@ function Followups() {
               </div>}
             </li>
           ))}
-        </ul>
+        </ul>)}
       </Async>
     </section>
   )
@@ -681,44 +694,6 @@ function AlertsView() {
 }
 
 // ---------- Activity ----------
-function ActivityView() {
-  const [events, setEvents] = useState<AuditEvent[]>([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [checked, setChecked] = useState('')
-  const [announce, setAnnounce] = useState('')
-  const cursor = useRef(0)
-  const first = useRef(true)
-  const poll = async () => {
-    try {
-      const rows = await api<AuditEvent[]>('GET', `/audit?after=${cursor.current}`)
-      if (rows.length) {
-        cursor.current = Math.max(...rows.map(r => r.id)); setEvents(e => [...rows.reverse(), ...e])
-        if (!first.current) setAnnounce(`${rows.length} new ${rows.length === 1 ? 'event' : 'events'}`)
-      }
-      setError(''); setChecked(new Date().toLocaleTimeString())
-    } catch (e) { setError(msg(e)) } finally { setLoading(false); first.current = false }
-  }
-  useEffect(() => { poll(); const t = setInterval(poll, 4000); return () => clearInterval(t) }, [])
-  return (
-    <>
-      <PageHeader title="Activity log" description={`Checks for new events every 4 seconds.${checked ? ` Last checked ${checked}.` : ''}`} />
-      <p role="status" className="sr-only">{announce}</p>
-      {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button className="btn mt-3" onClick={poll}>Retry loading</button></div>}
-      {loading ? <Skeleton rows={5} shape="text" /> : events.length === 0 && !error ? <EmptyState title="No activity yet." hint="Uploads, approvals and sign-ins are listed here as they happen." /> : (
-        <ol className="grid gap-2">
-          {events.map(e => (
-            <li key={e.id} className="card text-sm">
-              <p className="font-semibold">{e.event}</p>
-              <p className="text-muted"><time dateTime={e.at}>{new Date(e.at).toLocaleString()}</time>, by {e.actor}</p>
-            </li>
-          ))}
-        </ol>
-      )}
-    </>
-  )
-}
-
 // ---------- Pages and shell ----------
 /*
   ADD A PAGE: write the view component, add one entry to PAGES (hash route -> title + render), add a nav item in Shell.tsx NAV,
@@ -900,6 +875,7 @@ function AppShell() {
             )}
           </div>
         )}
+        {me && lic && <AssistantWidget hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
       </Shell>
       {me && <TourHost me={me} owner={owner} />}
       {!MOCK && getAccount() && <IdleGuard />}

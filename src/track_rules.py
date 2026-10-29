@@ -27,6 +27,18 @@ def label(status: str) -> str:
     return LABELS.get(status, status.replace("_", " ").capitalize())
 
 
+# Age colour bands ("heat") for the tracker and follow-ups: the last day each band covers. 8 days and more = stale.
+HEAT = ((1, "fresh"), (3, "waiting"), (7, "late"))
+HEAT_BANDS = ("fresh", "waiting", "late", "stale")
+
+
+def heat(status: str, days: int) -> str | None:
+    """Colour band by calendar days waiting: fresh 0-1, waiting 2-3, late 4-7, stale 8+. Finished items have none."""
+    if status in TERMINAL:
+        return None
+    return next((name for last, name in HEAT if days <= last), "stale")
+
+
 def days_in_stage(since: datetime, now: datetime) -> int:
     return (now.astimezone(MY).date() - since.astimezone(MY).date()).days
 

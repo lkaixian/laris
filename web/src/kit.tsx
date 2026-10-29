@@ -91,9 +91,9 @@ export function FilterBar({ label, search, children, right, chips, onClear }: {
 // A select with its name inside the control ("Stage: Any"); the name is also the accessible label.
 export function FilterSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: ReactNode }) {
   return (
-    <label className="input flex items-center gap-1 bg-surface py-0">
-      <span className="text-muted">{label}:</span>
-      <select className="min-w-0 bg-transparent py-1 font-medium text-ink" value={value} onChange={e => onChange(e.target.value)}>{children}</select>
+    <label className="input flex max-w-full items-center gap-1 bg-surface py-0">
+      <span className="shrink-0 text-muted">{label}:</span>
+      <select className="min-w-0 max-w-full flex-1 bg-transparent py-1 font-medium text-ink" value={value} onChange={e => onChange(e.target.value)}>{children}</select>
     </label>
   )
 }

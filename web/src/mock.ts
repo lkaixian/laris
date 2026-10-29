@@ -11,7 +11,7 @@ import { mockListings } from './mockListings'
 import { mockPrivacy } from './mockPrivacy'
 import { mockAi, mockAiOn } from './mockAi'
 import { mockAccept } from './mockAccept'
-import { mockTrack, jobStats, dashTrack, extraMembers } from './mockTrack'
+import { mockTrack, jobStats, dashTrack, extraMembers, heatOf, mockJobMove } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
 const cust = { id: 'p3', name: 'SAMPLE Customer Cafe (synthetic)' }
@@ -102,6 +102,18 @@ const newIn2 = (supplier: string): DocDetail => ({
 if (new URLSearchParams(location.search).get('seed') === '1') docs['in-2'] = newIn2(supA.name)
 const audit: AuditEvent[] = []
 const log = (actor: string, entity_id: string, event: string) => audit.push({ id: audit.length + 1, at: new Date().toISOString(), actor, entity: 'document', entity_id, event })
+// SAMPLE history so the activity log has something to filter in mock mode (oldest first, like the server's ids).
+;([[30, 'SAMPLE Owner', 'tenants', 'settings changed: name'], [12, 'SAMPLE Staff', 'listing_items', 'catalog product confirmed'], [9, 'system:scheduler', 'documents', 'status sent->expired'],
+  [6, 'SAMPLE Owner', 'documents', 'insert'], [5, 'SAMPLE Owner', 'documents', 'status draft->approved'], [4, 'SAMPLE Staff', 'jobs', 'job changed: status'],
+  [3, 'SAMPLE Owner', 'followups', 'follow-up skipped'], [2, 'SAMPLE Owner', 'jobs', 'insert'], [1, 'SAMPLE Staff', 'parties', 'contact created'], [0.2, 'SAMPLE Owner', 'jobs', 'job changed: priority']] as const)
+  .forEach(([d, actor, entity, event]) => audit.push({ id: audit.length + 1, at: new Date(Date.now() - d * 864e5).toISOString(), actor, entity, entity_id: `sample-${audit.length + 1}`, event }))
+const actionOf = (e: string) => e === 'insert' ? 'created' : /^status .+->/.test(e) ? 'status' : 'other'
+function auditMatch(q: URLSearchParams) {
+  const from = q.get('from'), to = q.get('to'), words = (q.get('q') ?? '').toLowerCase()
+  return audit.map(e => ({ ...e, action: actionOf(e.event) })).filter(e => (!from || e.at.slice(0, 10) >= from) && (!to || e.at.slice(0, 10) <= to)
+    && (!q.get('actor') || e.actor === q.get('actor')) && (!q.get('module') || e.entity === q.get('module')) && (!q.get('action') || e.action === q.get('action'))
+    && (!words || e.event.toLowerCase().includes(words))).sort((a, b) => b.id - a.id)
+}
 log('SAMPLE Staff', 'in-1', 'SAMPLE-A-001: uploaded')
 log('SAMPLE Owner', 'in-1', 'SAMPLE-A-001: accepted, added to cost book (acrylic_3mm_sheet RM100)')
 log('SAMPLE Owner', 'out-1', 'SAMPLE-QT-0001: approved and sent')
@@ -336,6 +348,11 @@ function mockInvites(method: string, p: string, owner: boolean, body: any): unkn
   return undefined
 }
 
+// SAMPLE follow-ups, one per age band (days since the quote was sent).
+const followupDone = new Set<string>()
+const FOLLOWUPS = ([[9, 'QT-2026-0003', 'Kopi Corner'], [5, 'QT-2026-0007', 'Pak Hassan Printing'], [3, 'QT-2026-0009', 'Studio Lim'], [2, 'QT-2026-0011', 'Warung Ali']] as const)
+  .map(([d, no, who], i) => ({ id: `fu-${i + 1}`, document_id: `doc-fu-${i + 1}`, doc_no: no, customer: `${who} (SAMPLE)`, status: 'sent', days_waiting: d,
+    due_at: new Date(Date.now() - (d - 2) * 864e5).toISOString(), reason: 'no reply since sent', suggested_text: i === 2 ? null : `Hi ${who}, just checking on quote ${no}. Any questions? (SAMPLE)` }))
 export function mock(method: string, path: string, role: Role, body: any): unknown {
   const [p, q = ''] = path.split('?')
   const owner = role === 'owner'
@@ -499,8 +516,15 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
       recent_documents: all.slice(0, 5).map(d => (owner || d.direction === 'out' ? d : { ...d, total: null })),
       ...(owner ? { stale_quotes: stale.length, stale_margin_lost: '-400', followups_pending: 0, quote_speed: { median_minutes: 4.5, quotes: 6, days: 30 } } : {}) }
   }
-  if (p === '/assistant/suggestions') return ['What needs my attention?', 'Find the acrylic supplier']
+  if (p === '/assistant/suggestions') return ['What needs my attention?', 'Move job QT-2026-0005 to done', 'Skip the follow-up for Kopi Corner']
   if (p === '/assistant' && method === 'POST') {
+    const jm = mockJobMove(String(body?.message ?? ''))
+    if (jm) return jm
+    if (/skip/i.test(body?.message ?? '') && /follow/i.test(body?.message ?? '')) {
+      const open = FOLLOWUPS.filter(f => !followupDone.has(f.id)).slice(0, 3)
+      return { reply: 'SAMPLE (mock mode): skipping means no chase message is sent. Nothing changes until you confirm.', intent: 'followup_skip', source: 'keywords', suggestions: [],
+        items: [{ label: 'Open Follow-ups', href: '#/followups' }], actions: open.map(f => ({ kind: 'followup_skip', id: f.id, label: `Skip the follow-up for ${f.doc_no} (${f.customer})` })) }
+    }
     const stale = owner && Object.values(docs).some(d => d.doc.flags.cost_is_stale)
     return { reply: stale ? 'SAMPLE answer (mock mode): 1 sent quote is hurt by a cost rise, RM400.00 of margin.' : 'SAMPLE answer (mock mode): nothing needs attention.',
       intent: 'attention', items: [{ label: 'Stale costs', href: '#/alerts' }], source: 'keywords', suggestions: [] }
@@ -627,7 +651,8 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { wa_phone_number_id: channels.wa, whatsapp_mapped: channels.wa !== null, telegram_mapped: false, tenants_total_hint: Q.get('tenants') !== 'one' }
   }
   if (p === '/followups' && Q.get('perms') === 'none' && role !== 'owner') throw new ApiError(403, 'permission_required', 'missing permission: manage_followups')
-  if (p === '/followups') return []  // mock data has no quote old enough to chase
+  if (p === '/followups') return FOLLOWUPS.filter(f => !followupDone.has(f.id)).map(f => ({ ...f, heat: heatOf('sent', f.days_waiting) }))
+  if (p.startsWith('/followups/') && method === 'POST') { followupDone.add(p.split('/')[2]); return { id: p.split('/')[2], state: body.action === 'send' ? 'sent' : 'skipped' } }
   if (p === '/field-proposals') { need(); return proposals.filter(x => x.status === 'pending') }
   if ((m = p.match(/^\/field-proposals\/([^/]+)\/decide$/)) && method === 'POST') {
     need()
@@ -664,6 +689,19 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { ok: true }
   }
   if (p.startsWith('/listings')) { const r = mockListings(method, p, owner, body); if (r !== undefined) return r }
+  if (p === '/audit/facets') return { people: [...new Set(audit.map(e => e.actor))].sort(), modules: [...new Set(audit.map(e => e.entity))].sort() }
+  if (p === '/audit/search') {
+    const sp = new URLSearchParams(q), after = Number(sp.get('after') ?? 0), before = Number(sp.get('before') ?? 0), limit = Number(sp.get('limit') ?? 100)
+    const hit = auditMatch(sp).filter(e => e.id > after && (!before || e.id < before))
+    return { items: hit.slice(0, limit), has_more: hit.length > limit }
+  }
+  if (p === '/audit/export') {
+    perm('view_audit'); perm('export_data')
+    const sp = new URLSearchParams(q), ids = (sp.get('ids') ?? '').split(',').filter(Boolean).map(Number)
+    const rows = auditMatch(ids.length ? new URLSearchParams() : sp).filter(e => !ids.length || ids.includes(e.id))
+    if (!rows.length) throw new ApiError(404, 'nothing_to_export', 'no entries match; choose some entries or widen the filters')
+    return new Blob([`SAMPLE activity log, ${rows.length} entries (mock mode)\n` + rows.map(e => `${e.id},${e.at},${e.actor},${e.entity},${e.action},${e.event}`).join('\n')], { type: sp.get('format') === 'pdf' ? 'application/pdf' : 'text/csv' })
+  }
   if (p === '/audit') {
     const after = Number(new URLSearchParams(q).get('after') ?? 0)
     return audit.filter(e => e.id > after)

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api'
-import { ActionError, EmptyState, OverdueChip, PageHeader, Skeleton, Status, TableRegion, msg, rm, stageLabel } from './ui'
+import { ActionError, EmptyState, HEAT, HeatChip, HeatLegend, heatName, OverdueChip, PageHeader, Skeleton, Status, TableRegion, msg, rm, stageLabel } from './ui'
 import { DataTable, FilterBar, FilterSelect, Tabs, ToggleChip } from './kit'
 import type { Col } from './kit'
+import type { Heat } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 
@@ -11,10 +12,10 @@ import type { IconName } from './icons'
 export type Kind = 'quote' | 'supplier_doc' | 'rfq' | 'listing'
 interface Item {
   kind: Kind; id: string; ref: string; party: string; status: string; stage_label: string; since: string; days_in_stage: number
-  overdue: boolean; overdue_reason: string | null; due_on: string | null; total: string | null; link: string
+  overdue: boolean; overdue_reason: string | null; due_on: string | null; total: string | null; link: string; heat?: Heat | null
 }
 type Counts = Record<'outbound' | 'inbound' | 'rfq' | 'listing', Record<string, number>>
-interface TrackData { items: Item[]; counts?: Partial<Counts>; overdue_total?: number; has_more?: boolean; stats?: Record<string, { avg_days: number; n: number }> }
+interface TrackData { items: Item[]; counts?: Partial<Counts>; overdue_total?: number; heat_counts?: Partial<Record<Heat, number>>; has_more?: boolean; stats?: Record<string, { avg_days: number; n: number }> }
 
 const KINDS: [string, string][] = [['all', 'All'], ['quote', 'Quotes'], ['supplier_doc', 'Supplier documents'], ['rfq', 'Asks'], ['listing', 'Catalog']]
 const KIND_INFO: Record<Kind, { label: string; icon: IconName }> = {
@@ -25,7 +26,6 @@ const KIND_INFO: Record<Kind, { label: string; icon: IconName }> = {
 const GROUPS: [keyof Counts, Kind][] = [['outbound', 'quote'], ['inbound', 'supplier_doc'], ['rfq', 'rfq'], ['listing', 'listing']]
 const BOARD = ['draft', 'approved', 'sent', 'read', 'accepted', 'job_created']  // outbound columns of the board
 const PAGE = 20
-const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
 const sum = (o?: Record<string, number>) => Object.values(o ?? {}).reduce((a, b) => a + b, 0)
 const when = (d: string) => new Date(d.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -33,13 +33,13 @@ const when = (d: string) => new Date(d.slice(0, 10) + 'T00:00:00').toLocaleDateS
 export function hashParams(): URLSearchParams { try { return new URLSearchParams(location.hash.split('?')[1] ?? '') } catch { return new URLSearchParams() } }
 export const flagOn = (p: URLSearchParams, k: string) => p.has(k) && !['0', 'false'].includes(p.get(k) ?? '')
 
-interface Filters { kind: string; stage: string; overdue: boolean; q: string; view: 'list' | 'board' }
-let saved: Filters = { kind: 'all', stage: '', overdue: false, q: '', view: 'list' }  // kept for this visit, like the other filters
+interface Filters { kind: string; stage: string; overdue: boolean; q: string; view: 'list' | 'board'; heat: string }
+let saved: Filters = { kind: 'all', stage: '', overdue: false, q: '', view: 'list', heat: '' }  // kept for this visit, like the other filters
 const initial = (): Filters => {
   const p = hashParams()
-  if (![...p.keys()].some(k => ['kind', 'stage', 'overdue', 'q'].includes(k))) return saved
+  if (![...p.keys()].some(k => ['kind', 'stage', 'overdue', 'q', 'heat'].includes(k))) return saved
   const kind = p.get('kind') ?? 'all'
-  return { ...saved, kind: KINDS.some(k => k[0] === kind) ? kind : 'all', stage: /^[a-z_]{1,24}$/.test(p.get('stage') ?? '') ? p.get('stage')! : '', overdue: flagOn(p, 'overdue'), q: (p.get('q') ?? '').slice(0, 100) }
+  return { ...saved, kind: KINDS.some(k => k[0] === kind) ? kind : 'all', stage: /^[a-z_]{1,24}$/.test(p.get('stage') ?? '') ? p.get('stage')! : '', overdue: flagOn(p, 'overdue'), q: (p.get('q') ?? '').slice(0, 100), heat: HEAT.some(h => h[0] === p.get('heat')) ? p.get('heat')! : '' }
 }
 
 function Open({ i }: { i: Item }) {
@@ -53,7 +53,7 @@ const COLS: Col<Item>[] = [
   { key: 'party', head: 'Party', cell: i => i.party, mobile: 'sub' },
   { key: 'kind', head: 'Kind', cell: i => <KindIcon k={i.kind} /> },
   { key: 'stage', head: 'Stage', cell: i => <Stage i={i} />, mobile: 'badge' },
-  { key: 'time', head: 'Time in stage', cell: i => days(i.days_in_stage), num: true },
+  { key: 'time', head: 'Time in stage', cell: i => <HeatChip heat={i.heat} days={i.days_in_stage} />, mobile: 'meta', className: 'whitespace-nowrap' },
   { key: 'due', head: 'Due', cell: i => i.due_on ? when(i.due_on) : <span className="text-muted">None</span>, mobile: 'meta', className: 'whitespace-nowrap tabular-nums' },
   { key: 'total', head: 'Total', cell: i => i.total == null ? <span aria-hidden="true">-</span> : rm(i.total), num: true, mobile: 'meta' },
 ]
@@ -76,10 +76,10 @@ function Board({ items, counts, kind, more }: { items: Item[]; counts?: Partial<
                   <ul className="grid gap-2">
                     {list.map(i => (
                       <li key={i.id}>
-                        <a href={i.link} className="card group block p-3 text-sm hover:bg-surface-2">
+                        <a href={i.link} className={`card group block p-3 text-sm hover:bg-surface-2 ${i.heat ? `heat-edge heat-${i.heat}` : ''}`}>
                           <span className="block font-semibold group-hover:underline">{i.ref}</span>
                           <span className="block">{i.party}</span>
-                          <span className="block text-muted">{days(i.days_in_stage)} in stage{i.total != null && <> · {rm(i.total)}</>}</span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1 text-muted"><HeatChip heat={i.heat} days={i.days_in_stage} /> in stage{i.total != null && <> · {rm(i.total)}</>}</span>
                           {i.overdue && <span className="mt-1 block"><OverdueChip reason={i.overdue_reason} /></span>}
                         </a>
                       </li>
@@ -134,6 +134,7 @@ export function TrackView() {
     if (f.stage) p.set('stage', f.stage)
     if (f.overdue) p.set('overdue', '1')
     if (qd.trim()) p.set('q', qd.trim())
+    if (f.heat) p.set('heat', f.heat)
     try {
       const d = await api<TrackData>('GET', `/track?${p}`)
       if (my !== seq.current) return
@@ -142,12 +143,12 @@ export function TrackView() {
       const c = d?.counts ?? {}
       setStages(s => [...new Set([...s, ...Object.values(c).flatMap(g => Object.keys(g ?? {}))])])
     } catch (e) { if (my === seq.current) setErr({ text: msg(e), retry: true }) } finally { if (my === seq.current) setLoading(false) }
-  }, [f.kind, f.stage, f.overdue, qd])
+  }, [f.kind, f.stage, f.overdue, f.heat, qd])
   useEffect(() => { void load(0) }, [load])
   useEffect(() => { const h = () => { if (err) void load(0) }; addEventListener('laris:online', h); return () => removeEventListener('laris:online', h) }, [err, load])
 
-  const active = f.kind !== 'all' || !!f.stage || f.overdue || !!f.q
-  const reset = () => { set({ kind: 'all', stage: '', overdue: false, q: '' }); setQd('') }
+  const active = f.kind !== 'all' || !!f.stage || f.overdue || !!f.q || !!f.heat
+  const reset = () => { set({ kind: 'all', stage: '', overdue: false, q: '', heat: '' }); setQd('') }
   const counts = data?.counts
   const kindName = KINDS.find(k => k[0] === f.kind)?.[1] ?? f.kind
   const tabs = KINDS.map(([v, t]) => {
@@ -158,6 +159,7 @@ export function TrackView() {
     ...(f.kind !== 'all' ? [{ label: `Kind: ${kindName}`, onRemove: () => set({ kind: 'all' }) }] : []),
     ...(f.stage ? [{ label: `Stage: ${f.stage === 'open' ? 'Open' : stageLabel(f.stage)}`, onRemove: () => set({ stage: '' }) }] : []),
     ...(f.overdue ? [{ label: 'Overdue only', onRemove: () => set({ overdue: false }) }] : []),
+    ...(f.heat ? [{ label: `Age: ${heatName(f.heat as Heat)}`, onRemove: () => set({ heat: '' }) }] : []),
     ...(f.q ? [{ label: `Search: ${f.q}`, onRemove: () => { set({ q: '' }); setQd('') } }] : []),
   ]
   let body: ReactNode
@@ -182,11 +184,16 @@ export function TrackView() {
           <option value="">Any</option><option value="open">Open (not finished)</option>
           {[...new Set([...stages, ...(f.stage && f.stage !== 'open' ? [f.stage] : [])])].sort().map(s => <option key={s} value={s}>{stageLabel(s)}</option>)}
         </FilterSelect>
+        <FilterSelect label="Age" value={f.heat} onChange={v => set({ heat: v })}>
+          <option value="">Any</option>
+          {HEAT.map(([h, name, range]) => <option key={h} value={h}>{name}, {range}{data?.heat_counts ? ` (${data.heat_counts[h] ?? 0})` : ''}</option>)}
+        </FilterSelect>
         <ToggleChip pressed={f.overdue} warn={(data?.overdue_total ?? 0) > 0} onClick={() => set({ overdue: !f.overdue })}>
           {(data?.overdue_total ?? 0) > 0 && <Icon name="warn" className="size-4" />}Overdue <span className="tabular-nums">{data?.overdue_total ?? 0}</span>
         </ToggleChip>
       </FilterBar>
 
+      <div className="mb-3"><HeatLegend counts={data?.heat_counts} /></div>
       <p role="status" className="sr-only">{!loading && !err ? `${items.length} ${items.length === 1 ? 'item' : 'items'} shown${more ? ', more available' : ''}` : ''}</p>
       <ActionError err={err} onRetry={() => void load(0)} label="Retry loading" />
       {body}

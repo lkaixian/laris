@@ -1,6 +1,7 @@
 """Assistant: a chat box over the owner's own data. The model only PICKS an intent and a search phrase from a closed list;
-every answer is composed here from the database for the signed-in role. It cannot change anything, set a price or send a
-message: requests to do so are refused with a link to the screen where a person does it."""
+every answer is composed here from the database for the signed-in role. It changes nothing itself. For two safe actions (move a job,
+skip a follow-up) it PROPOSES the action: the person confirms in the app, which then calls the normal route under their own
+permissions and audit. It never sets a price, approves, sends a message or deletes: those requests are refused with a link."""
 import logging
 from collections import defaultdict, deque
 
@@ -17,7 +18,9 @@ from .routes import SUMMARY, summary
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
 
-INTENTS = ("attention", "search", "contacts", "stale_costs", "followups", "margin_report", "jobs", "cost_of", "do_action", "help")
+INTENTS = ("attention", "search", "contacts", "stale_costs", "followups", "margin_report", "jobs", "cost_of", "job_move", "followup_skip",
+           "do_action", "help")
+JOB_STATUS = {"todo": "To do", "doing": "In progress", "done": "Done"}
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -26,9 +29,12 @@ SCHEMA = {
             "contacts: find a customer, supplier or contractor. stale_costs: quotes hurt by a supplier price rise. "
             "followups: quotes waiting for a customer reply. margin_report: recent quotes, margin, won and lost. "
             "jobs: job board status. cost_of: what an item costs from suppliers. "
-            "do_action: the user asks to change, approve, send, price, delete or create something. help: anything else.")},
+            "job_move: move a job to to do, in progress or done (query = its quote number or title, to = the column). "
+            "followup_skip: skip or dismiss the follow-up of a quote (query = the quote number or customer). "
+            "do_action: the user asks to change, approve, send, price, delete or create anything else. help: anything else.")},
         "query": {"type": ["string", "null"], "description": "the name, number or item to look for, copied from the message; null if none"},
         "days": {"type": ["integer", "null"], "description": "for margin_report: how many days back"},
+        "to": {"type": ["string", "null"], "enum": ["todo", "doing", "done", None], "description": "for job_move: the column to move it to"},
     },
     "required": ["intent"],
 }
@@ -55,9 +61,28 @@ def phrase(text: str) -> str | None:
     return " ".join(words) or None
 
 
+def target(text: str) -> str | None:
+    """Which job column a message asks for, by keywords."""
+    t = text.lower()
+    for words, to in ((("done", "finish", "complete", "selesai", "siap"), "done"), (("in progress", "doing", "start", "mula"), "doing"),
+                      (("to do", "todo", "reopen", "back to"), "todo")):
+        if any(w in t for w in words):
+            return to
+    return None
+
+
+MOVE_FILLER = FILLER | {"move", "job", "jobs", "mark", "set", "as", "into", "start", "started", "finish", "finished", "done", "complete",
+                        "completed", "doing", "progress", "todo", "reopen", "back", "skip", "dismiss", "follow", "followup", "follow-up", "up"}
+
+
 def fallback(text: str) -> dict:
     """Keyword intent when the model is unavailable: deterministic and clearly labelled in the reply."""
     t = text.lower()
+    rest = lambda: " ".join(w for w in (phrase(text) or "").split() if w.lower() not in MOVE_FILLER) or None
+    if "skip" in t and "follow" in t:
+        return {"intent": "followup_skip", "query": rest()}
+    if "job" in t and target(t) and any(w in t for w in ("move", "mark", "start", "finish", "set", "reopen", "complete")):
+        return {"intent": "job_move", "query": rest(), "to": target(t)}
     for words, intent in ((("approve", "send ", "delete", "change the price", "set the price", "create a quote"), "do_action"),
                           (("stale", "price rise", "went up"), "stale_costs"), (("follow", "waiting for a reply", "no reply"), "followups"),
                           (("margin", "report", "last week", "last 7"), "margin_report"), (("job",), "jobs"),
@@ -73,11 +98,47 @@ def link(label, href):
     return {"label": label, "href": href}
 
 
+def propose(ctx: Ctx, intent: str, q: str, to: str | None) -> tuple[str, list, list]:
+    """Find what the person means and PROPOSE it: nothing changes here. -> (reply, links, actions). Each action names only a kind,
+    an id and the target; the app shows a confirm step, then calls the normal route, which checks the permission again."""
+    c = ctx.conn
+    if intent == "job_move":
+        if "manage_contacts" not in ctx.perms:
+            return ("Moving jobs needs the manage contacts permission, which your role does not have.", [link("Open the job board", "#/jobs")], [])
+        if to not in JOB_STATUS:
+            return ("Which column: to do, in progress or done?", [link("Open the job board", "#/jobs")], [])
+        if not q:
+            return ("Which job? Give me its quote number or title.", [link("Open the job board", "#/jobs")], [])
+        rows = c.execute("""select j.id, j.status, coalesce(d.doc_no, j.title) as label, p.name as customer
+                            from jobs j left join documents d on d.id = j.quote_id left join parties p on p.id = coalesce(d.party_id, j.party_id)
+                            where j.tenant_id=%(t)s and (d.doc_no ilike %(q)s or j.title ilike %(q)s or p.name ilike %(q)s)
+                            order by j.created_at desc limit 4""", {"t": ctx.tenant_id, "q": like(q)}).fetchall()
+        if not rows:
+            return (f"No job matches \"{q}\".", [link("Open the job board", "#/jobs")], [])
+        moves = [x for x in rows if x["status"] != to][:3]
+        if not moves:
+            return (f"That job is already in {JOB_STATUS[to]}.", [link("Open the job board", "#/jobs")], [])
+        acts = [{"kind": "job_move", "id": str(x["id"]), "to": to,
+                 "label": f"Move {x['label']}{' for ' + x['customer'] if x['customer'] else ''} to {JOB_STATUS[to]}"} for x in moves]
+        return (("I found this job. " if len(acts) == 1 else f"I found {len(acts)} jobs. ") + "Nothing changes until you confirm.",
+                [link("Open the job board", "#/jobs")], acts)
+    if "manage_followups" not in ctx.perms:
+        return ("That needs the follow-up permission, which your role does not have.", [], [])
+    rows = c.execute("""select f.id, d.doc_no, p.name from followups f join documents d on d.id=f.document_id join parties p on p.id=d.party_id
+                        where d.tenant_id=%(t)s and f.state='pending' and d.direction='out' and (%(all)s or d.doc_no ilike %(q)s or p.name ilike %(q)s)
+                        order by f.due_at limit 3""", {"t": ctx.tenant_id, "q": like(q), "all": not q}).fetchall()
+    if not rows:
+        return ("No follow-up is waiting" + (f" for \"{q}\"." if q else "."), [link("Open Follow-ups", "#/followups")], [])
+    acts = [{"kind": "followup_skip", "id": str(x["id"]), "label": f"Skip the follow-up for {x['doc_no']} ({x['name']})"} for x in rows]
+    return ("Skipping means no chase message is sent for that quote. Nothing changes until you confirm. To send a follow-up, "
+            "read the message on Follow-ups first.", [link("Open Follow-ups", "#/followups")], acts)
+
+
 def run(ctx: Ctx, intent: str, query: str | None, days: int | None) -> tuple[str, list]:
     c, q = ctx.conn, (query or "").strip()[:100]
     if intent == "do_action":
-        return ("I can look things up but I cannot change, approve, price or send anything. Open the quote and do it there, "
-                "so a person stays in control.", [link("Open the tracker", "#/tracker")])
+        return ("I can move a job or skip a follow-up after you confirm, but I cannot approve, price, send or delete anything. "
+                "Open the quote and do it there, so a person stays in control.", [link("Open the tracker", "#/tracker")])
     need = {"stale_costs": "view_costs", "cost_of": "view_costs", "margin_report": "view_reports"}  # margin_report shows margins: also view_costs
     if intent in need and not (need[intent] in ctx.perms and ctx.costs):
         return ("That needs cost and margin figures, which only the owner can see.", [])
@@ -108,8 +169,8 @@ def run(ctx: Ctx, intent: str, query: str | None, days: int | None) -> tuple[str
                             where d.tenant_id=%s and f.state='pending' and d.direction='out' order by f.due_at limit 8""", (ctx.tenant_id,)).fetchall()
         if not rows:
             return ("No quote is waiting for a follow-up.", [])
-        return (f"{len(rows)} {'quote has' if len(rows) == 1 else 'quotes have'} had no reply. Open the Stale costs page to read the suggested message and send it.",
-                [link(f"{x['doc_no']} for {x['name']}", f"#/doc/{x['document_id']}") for x in rows] + [link("Stale costs page", "#/alerts")])
+        return (f"{len(rows)} {'quote has' if len(rows) == 1 else 'quotes have'} had no reply. Open Follow-ups to read the suggested message and send it.",
+                [link(f"{x['doc_no']} for {x['name']}", f"#/doc/{x['document_id']}") for x in rows] + [link("Follow-ups", "#/followups")])
     if intent == "margin_report":
         d = min(max(days or 7, 1), 366)
         t = c.execute("""select count(distinct m.quote_id) n, coalesce(sum(m.line_total),0) rev, coalesce(sum(m.line_cost),0) cost
@@ -170,13 +231,18 @@ def assistant(body: Ask, request: Request, ctx: Ctx = Depends(write_ctx)):
     intent = out.get("intent") if out.get("intent") in INTENTS else "help"
     query = out.get("query") if isinstance(out.get("query"), str) else None
     days = out.get("days") if isinstance(out.get("days"), int) and not isinstance(out.get("days"), bool) else None
-    if intent == "help":
+    actions = []
+    if intent in ("job_move", "followup_skip"):
+        to = out.get("to") if out.get("to") in JOB_STATUS else target(body.message)
+        text, items, actions = propose(ctx, intent, (query or "").strip()[:100], to)
+    elif intent == "help":
         text, items = ("I can find documents and contacts, show what needs attention, stale costs, follow-ups, jobs and the margin report, "
-                       "and look up supplier costs. Try one of the suggestions.", [])
+                       "look up supplier costs, and, after you confirm, move a job or skip a follow-up. Try one of the suggestions.", [])
     else:
         text, items = run(ctx, intent, query, days)
     pipeline._log_ai(ctx.conn, ctx.tenant_id, "assistant_query", None, {"intent": intent, "source": source})
-    return reply(ctx, {"reply": text, "intent": intent, "items": items, "source": source, "suggestions": SUGGESTIONS if intent == "help" else []})
+    return reply(ctx, {"reply": text, "intent": intent, "items": items, "actions": actions, "source": source,
+                       "suggestions": SUGGESTIONS if intent == "help" else []})
 
 
 @r.get("/assistant/suggestions")

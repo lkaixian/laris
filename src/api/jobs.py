@@ -1,5 +1,7 @@
-"""Job board and scheduling: one job per accepted quote, with a due date, an assignee, a priority and notes. Selling side only."""
+"""Job board and scheduling: one job per accepted quote, or a job made by hand for work that did not start as a quote; each with a due
+date, an assignee, a priority and notes. Selling side only."""
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -15,13 +17,14 @@ STATUS = Literal["todo", "doing", "done"]
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MAX_DAYS = 62  # agenda span, both ends included
 
-SELECT = """select j.id, j.status, j.created_at, d.id as quote_id, d.doc_no as quote_no, p.name as customer,
+SELECT = """select j.id, j.status, j.created_at, d.id as quote_id, d.doc_no as quote_no, p.name as customer, p.id as customer_id, j.title,
+                  case when d.id is null then j.amount else
                   (select coalesce(sum(round(l.qty * l.unit_price * (1 - coalesce(l.discount_pct, 0) / 100), 2)), 0)
-                   from document_lines l where l.document_id = d.id and not l.is_header) as total,
+                   from document_lines l where l.document_id = d.id and not l.is_header) end as total,
                   (select string_agg(l.description || ' x ' || trim(trailing '.' from trim(trailing '0' from l.qty::text)), '; ' order by l.line_no)
                    from document_lines l where l.document_id = d.id and not l.is_header) as summary,
                   j.due_on, j.assignee_id, u.name as assignee_name, j.priority, j.notes, j.started_at, j.done_at
-           from jobs j join documents d on d.id = j.quote_id join parties p on p.id = d.party_id
+           from jobs j left join documents d on d.id = j.quote_id left join parties p on p.id = coalesce(d.party_id, j.party_id)
            left join users u on u.id = j.assignee_id where j.tenant_id = %(t)s"""
 RANK = "case j.priority when 'high' then 0 when 'normal' then 1 else 2 end"
 
@@ -31,6 +34,8 @@ def shape(row: dict, today: date) -> dict:
     out = {k: v for k, v in row.items() if k not in ("assignee_id", "assignee_name")}
     out["assignee"] = {"id": row["assignee_id"], "name": row["assignee_name"]} if row["assignee_id"] else None
     out["quote_total"] = row["total"]
+    out["manual"] = row["quote_id"] is None
+    out["label"] = row["quote_no"] or row["title"] or "Job"  # what to call the job on cards and in messages
     out["overdue"] = bool(due and due < today and row["status"] != "done")
     out["days_to_due"] = (due - today).days if due else None
     return out
@@ -76,6 +81,37 @@ def agenda(from_: date | None = Query(None, alias="from"), to: date | None = Non
                        "days": [{"date": d, "weekday": WEEKDAYS[d.weekday()], "jobs": js} for d, js in by_day.items()],
                        "unscheduled": fetch(ctx, f"{open_} and j.due_on is null", None, f"{RANK}, j.created_at, j.id", 500),
                        "overdue": fetch(ctx, f"{open_} and j.due_on < %(a)s", {"a": from_}, f"j.due_on, {RANK}, j.id", 500)})
+
+
+class NewJob(BaseModel, extra="forbid"):
+    title: str = Field(min_length=1, max_length=200)
+    customer_id: UUID | None = None
+    amount: Decimal | None = Field(None, ge=0, lt=Decimal(10) ** 12, decimal_places=2)
+    due_on: date | None = None
+    assignee_id: UUID | None = None
+    priority: Literal["low", "normal", "high"] = "normal"
+    notes: str | None = Field(None, max_length=2000)
+
+
+@r.post("/jobs")
+def new_job(body: NewJob, ctx: Ctx = Depends(write_ctx)):
+    """A job for work that did not start as a quote. The amount is what the person typed (shown like a quote total), never a rules-engine
+    price. It starts in To do and is audited like every job (jobs_audit trigger plus an event)."""
+    require_perm(ctx, "manage_contacts")
+    c = ctx.conn
+    title = body.title.strip()
+    if not title:
+        raise ApiError(422, "bad_param", "title cannot be blank")
+    if body.customer_id and not c.execute("select 1 from parties where id=%s and tenant_id=%s and role='customer'", (body.customer_id, ctx.tenant_id)).fetchone():
+        raise ApiError(422, "bad_customer", "customer_id is not one of your customers")
+    if body.assignee_id and not c.execute("select 1 from users where id=%s and tenant_id=%s and active", (body.assignee_id, ctx.tenant_id)).fetchone():
+        raise ApiError(422, "bad_assignee", "the assignee must be an active person in your business")
+    jid = c.execute("""insert into jobs(tenant_id, title, party_id, amount, due_on, assignee_id, priority, notes, created_by)
+                       values (%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
+                    (ctx.tenant_id, title, body.customer_id, body.amount, body.due_on, body.assignee_id, body.priority,
+                     (body.notes or "").strip() or None, ctx.user_id)).fetchone()["id"]
+    audit(ctx, "jobs", jid, "job created by hand", None, {"title": title})
+    return reply(ctx, fetch(ctx, "and j.id = %(id)s", {"id": jid})[0], 201)
 
 
 class JobEdit(BaseModel, extra="forbid"):

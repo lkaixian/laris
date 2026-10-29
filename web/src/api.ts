@@ -38,7 +38,8 @@ export interface Field {
   key: string; label: string; type: 'text' | 'number' | 'integer' | 'date' | 'select' | 'boolean'
   unit: string | null; options: string[] | null; show_in_grid: boolean; sort_order: number
 }
-export interface Followup { id: string; document_id: string; doc_no: string; customer: string; status: Status; due_at: string; reason: string; suggested_text: string | null }
+export interface Followup { id: string; document_id: string; doc_no: string; customer: string; status: Status; due_at: string; reason: string; suggested_text: string | null
+  days_waiting?: number; heat?: 'fresh' | 'waiting' | 'late' | 'stale' | null }
 export interface MarginReport {
   // cost, margin, margin_pct, stale_quotes, stale_margin_lost and lowest_margin are scrubbed without view_costs: treat them as maybe missing
   days: number; quotes: number; revenue: string; cost?: string; margin?: string; margin_pct?: string | number | null
@@ -47,7 +48,8 @@ export interface MarginReport {
 }
 export interface Assignee { id: string; name: string }
 export interface Job {
-  id: string; status: 'todo' | 'doing' | 'done'; created_at?: string; quote_id: string; quote_no: string; customer: string; total: string; quote_total?: string; summary: string | null
+  id: string; status: 'todo' | 'doing' | 'done'; created_at?: string; quote_id: string | null; quote_no: string | null; customer: string | null; total: string | null; quote_total?: string | null; summary: string | null
+  title?: string | null; label?: string; manual?: boolean  // a job made by hand has no quote: label = its title
   due_on?: string | null; assignee?: Assignee | null; priority?: 'low' | 'normal' | 'high'; notes?: string | null; started_at?: string | null; done_at?: string | null
   overdue?: boolean; days_to_due?: number | null  // days_to_due: negative = late
 }

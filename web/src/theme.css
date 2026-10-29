@@ -119,6 +119,22 @@
   :root[data-theme="dark"] .chip-rejected { --chip-fg: #ffa391; --chip-bg: #3a1b16; }
   :root[data-theme="dark"] .chip-expired { --chip-fg: #a9bbb1; --chip-bg: #12251e; }
   .chip-warn { --chip-fg: var(--warn); --chip-bg: var(--warn-bg); }
+  /* Age "heat" bands (tracker, follow-ups): four flat steps, never a gradient. The chip always names the band and the days,
+     and the dot gets fuller as the band gets older, so colour is never the only signal. All pairs >= 6.5:1 in both themes. */
+  .heat-fresh { --heat-fg: #0a4434; --heat-bg: #d9f0e3; }
+  .heat-waiting { --heat-fg: #5c4300; --heat-bg: #fbefc4; }
+  .heat-late { --heat-fg: #7a3300; --heat-bg: #fbdcc3; }
+  .heat-stale { --heat-fg: #8f1d12; --heat-bg: #f8d4cf; }
+  :root[data-theme="dark"] .heat-fresh { --heat-fg: #bfe8d6; --heat-bg: #17392d; }
+  :root[data-theme="dark"] .heat-waiting { --heat-fg: #f2d77a; --heat-bg: #3a300f; }
+  :root[data-theme="dark"] .heat-late { --heat-fg: #ffbb85; --heat-bg: #3f2410; }
+  :root[data-theme="dark"] .heat-stale { --heat-fg: #ffa391; --heat-bg: #451a14; }
+  .chip.heat-fresh, .chip.heat-waiting, .chip.heat-late, .chip.heat-stale { --chip-fg: var(--heat-fg); --chip-bg: var(--heat-bg); }
+  .chip.heat-fresh::before { background: transparent; border: 1.5px solid currentColor; border-radius: 50%; }
+  .chip.heat-waiting::before { background: transparent; border: 1.5px solid currentColor; border-radius: 50%; box-shadow: inset 3px 0 0 currentColor; }
+  .chip.heat-late::before { border-radius: 50%; }
+  .chip.heat-stale::before { border-radius: 1px; }
+  .heat-edge { border-left: 4px solid var(--heat-fg, var(--hairline)); }
   .chip-warn::before { display: none; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }

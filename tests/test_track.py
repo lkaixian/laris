@@ -453,3 +453,27 @@ def test_dashboard_track_counters_and_failure_isolation(env, monkeypatch):
     monkeypatch.setattr(track.tr, "overdue_reason", boom)
     r = e.c.get("/api/dashboard", headers=e.O)
     assert r.status_code == 200 and r.json()["track"] is None and "open_quotes" in r.json() and "jobs" in r.json()
+
+
+# ---------------------------------------------------------------- heat (age colour bands)
+@pytest.mark.parametrize("days,band", [(0, "fresh"), (1, "fresh"), (2, "waiting"), (3, "waiting"), (4, "late"), (7, "late"), (8, "stale"), (90, "stale")])
+def test_heat_bands_by_days_waiting(days, band):
+    assert tr.heat("sent", days) == band
+
+
+def test_heat_is_none_once_finished():
+    assert all(tr.heat(s, 30) is None for s in tr.TERMINAL)
+
+
+def test_track_heat_field_counts_and_filter(env):
+    e = env
+    world(e)
+    out = ZZ(e)
+    its = out["items"]
+    assert all(i["heat"] == tr.heat(i["status"], i["days_in_stage"]) for i in its)
+    assert all(i["heat"] is None for i in its if i["status"] in tr.TERMINAL)
+    assert out["heat_counts"] == {b: sum(i["heat"] == b for i in its) for b in tr.HEAT_BANDS}
+    for b in tr.HEAT_BANDS:
+        f = ZZ(e, extra=f"&heat={b}")
+        assert [i["id"] for i in f["items"]] == [i["id"] for i in its if i["heat"] == b] and f["heat_counts"] == out["heat_counts"]
+    assert ZZ(e, extra="&heat=late")["items"] and e.c.get("/api/track?heat=red", headers=e.O).status_code == 422

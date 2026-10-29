@@ -49,7 +49,7 @@ Try it with the live app and the Telegram bot. All data is synthetic.
 2. Open the new draft quote, adjust, approve and send it. Export it as PDF, XLSX or CSV.
 3. Open the tracker to see the quote's timeline and follow-up reminders.
 
-The first catalog photo after the GPU has been idle can take a few minutes while the model loads. A recording script for the signage sample data is in [`docs/demo-script.md`](docs/demo-script.md).
+The first catalog photo after the GPU has been idle can take a few minutes while the model loads. A recording script for the signage sample data is in [`docs/demo-script.md`](docs/demo-script.md). A step-by-step user manual for owners and staff is in [`docs/user-manual.md`](docs/user-manual.md).
 
 ## Overview
 
@@ -100,7 +100,7 @@ The full model and library list with licences is in `submission/SDC2026_SparkSur
 ├── config/templates/     # Trade templates (YAML)
 ├── scripts/              # Channel setup, licence tools, checks
 ├── tests/                # pytest suite and PGlite schema/role checks
-├── docs/                 # PRD, deployment, API contract, roles, licensing, privacy runbook, build log
+├── docs/                 # PRD, user manual, deployment, API contract, roles, licensing, privacy runbook, build log
 ├── knowledge/            # Research notes, sources, decisions
 ├── submission/           # Final submission PDFs (Preliminary, TechDeclaration, Replit and RunPod proof of use)
 ├── .replit, replit.nix, run.sh   # Replit run and deploy configuration

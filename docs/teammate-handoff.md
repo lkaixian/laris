@@ -176,4 +176,16 @@ Items 4 and 5 shipped in row 150: `listing_items.price_tiers` and `stock_qty` (`
 
 ## 8. Status refresh
 
-This file is a snapshot of 2026-10-29 (BUILD_LOG row 147). CI was green on the row 146 and row 147 commits. Re-check against `docs/BUILD_LOG.md` and `next_step.txt` after any new row. Still to do on the code side: open the polished screens in a real browser and fix what is off, then the Section 7 plan.
+This file was refreshed on 2026-10-29 at BUILD_LOG row 164. CI is green on master (backend groups on PGlite and on Postgres 16, checks, web). Re-check against `docs/BUILD_LOG.md` and `next_step.txt` after any new row.
+
+Done since row 147:
+- Section 7 items 4 and 5: catalog per-size prices, quantity tiers and stock counts (row 150).
+- Manual brief features (row 154): age colours on Track and Follow-ups, Activity log filters with a CSV or PDF download of chosen entries, jobs made by hand, a floating Ask button whose Assistant can move a job or skip a follow-up after the person confirms.
+- Four languages on the menus and main work screens: English, Bahasa Melayu, Chinese, Tamil (row 160).
+- User manual for owners and staff: `docs/user-manual.md` (row 164).
+
+Still to do:
+- Replit: `git fetch origin && git reset --hard origin/master`, Run once (new columns: listing_items.price_tiers and stock_qty, jobs.title, party_id and amount), then Redeploy. Until then the live demo lacks rows 150 to 163.
+- Native-speaker review of the Malay, Chinese and Tamil text (`web/src/strings.ts`).
+- The Assistant's proposed actions against a live model; the new screens on a real phone and with a screen reader.
+- Section 7 items 1, 2, 3 and 6 are unchanged (timing study, live Manglish accuracy, WhatsApp through Meta, lawyer review and DPO).

@@ -19,6 +19,7 @@ const make = (id: string, minsAgo: number) => ({
   items: [item(0), item(1, { sku: 'BK-25-B', reasons: ['unverified_sku', 'no_ocr_check'] }), item(2, { price: null }), item(3, { status: 'confirmed', item_key: 'leather_belt', stock_qty: '14.000',
     price_tiers: [{ size: null, min_qty: '10', price: '19.50' }, { size: 'L', min_qty: '1', price: '23.00' }] }), item(4, { status: 'confirmed', stock_qty: '0.000' }), item(5)],
 })
+const CATS = ['Footwear', 'Hardware', 'Bags', 'Belts', 'Hardware', 'Rubber']  // what the pretend photo reader proposes
 const listings = [make('lst-1', 90)]
 
 // Returns undefined when the path is not a listings route.
@@ -29,10 +30,13 @@ export function mockListings(method: string, p: string, owner: boolean, body: an
   if (p === '/listings' && method === 'POST') {
     if (!(body.get('image') instanceof Blob)) throw new ApiError(422, 'image_required', 'image is required')
     const l = make(`lst-${listings.length + 1}`, 0)
+    const mode = body.get('categorize') ?? 'suggest'
+    l.items.forEach((i: any, k) => { const guess = CATS[k]; if (mode === 'auto') i.category = guess; else if (mode === 'suggest') i.category_suggestion = guess })
     listings.unshift(l)
     return { listing_id: l.id, item_count: l.items.length, items: view(l).items }
   }
   if (p === '/listings' && method === 'GET') return listings.map(l => ({ id: l.id, party_id: l.party_id, party_name: l.party_name, note: l.note, source_channel: l.source_channel, created_at: l.created_at, image_url: l.image_url, thumb_url: l.image_url, items: l.items.length, to_review: l.items.filter(i => i.status === 'needs_review').length }))
+  if (p === '/listings/categories' && method === 'GET') return [...new Set(listings.flatMap(l => l.items.map((i: any) => i.category).filter(Boolean)))].sort()
   if ((m = p.match(/^\/listings\/([^/]+)$/)) && method === 'GET') return view(find(m[1]))
   if ((m = p.match(/^\/listings\/([^/]+)\/items\/([^/]+)$/)) && method === 'PATCH') {
     const it: any = find(m[1]).items.find(x => x.id === m![2])
@@ -44,6 +48,7 @@ export function mockListings(method: string, p: string, owner: boolean, body: an
     const bad = tiers.find(t => t.size && !sizes.includes(t.size.toLowerCase()))
     if (bad) throw new ApiError(422, 'bad_tier', `size '${bad.size}' is not one of this product's sizes; add it to sizes first`)
     Object.assign(it, body)
+    if ('category' in body) { it.category = (body.category ?? '').trim() || null; it.category_suggestion = null }
     if (body.price_tiers !== undefined) it.price_tiers = (body.price_tiers ?? []).map((t: any) => ({ size: t.size ?? null, min_qty: String(Number(t.min_qty ?? 1)), price: String(Number(t.price)) }))
     if (body.stock_qty !== undefined) it.stock_qty = body.stock_qty === null ? null : Number(body.stock_qty).toFixed(3)
     if (body.price !== undefined) it.price = Number(body.price).toFixed(2)

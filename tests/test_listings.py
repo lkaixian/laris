@@ -271,6 +271,26 @@ def test_ask_suppliers_about_one_crop_reuses_rfq(lenv, monkeypatch):
     assert e.c.post(f"/api/listings/{lid}/items/{iid}/ask", json={"supplier_ids": []}, headers=e.S).status_code == 422
 
 
+def test_category_modes_suggest_accept_clear_and_list(lenv):
+    e = lenv
+    e.vis.answers = [[item(category="PLA filament"), item(description="blue shoe", bbox=[0.5, 0.5, 0.9, 0.95])]]
+    rows = lambda: e.sql("select category c, category_suggestion s from listing_items order by position")
+    assert up(e).status_code == 201 and rows() == [{"c": None, "s": "PLA filament"}, {"c": None, "s": None}]  # default: only proposed
+    e.sql("delete from listings")
+    assert up(e, categorize="auto").status_code == 201 and rows()[0] == {"c": "PLA filament", "s": None}
+    e.sql("delete from listings")
+    assert up(e, categorize="manual").status_code == 201 and rows()[0] == {"c": None, "s": None}
+    assert up(e, categorize="nonsense").status_code == 422
+    e.sql("delete from listings")
+    j = up(e).json()
+    iid = j["items"][0]["id"]
+    assert j["items"][0]["category_suggestion"] == "PLA filament"
+    patch = lambda body: e.c.patch(f"/api/listings/{j['listing_id']}/items/{iid}", json=body, headers=e.S)
+    assert patch({"category": "  Filament "}).json()["category"] == "Filament" and rows()[0] == {"c": "Filament", "s": None}  # accepting drops the proposal
+    assert e.c.get("/api/listings/categories", headers=e.S).json() == ["Filament"]
+    assert patch({"category": ""}).json()["category"] is None and rows()[0]["c"] is None
+
+
 def test_apply_schema_twice_keeps_data_and_rls_forced(lenv, pg_url):
     e = lenv
     up(e)

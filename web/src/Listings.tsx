@@ -11,7 +11,7 @@ interface Item {
   id: string; position: number; description: string; labels: string[]; sku: string | null; sizes: string[]
   price: string | number | null; currency: string | null; bbox: [number, number, number, number]
   status: Status; reasons: string[]; item_key: string | null; crop_url: string
-  price_tiers?: Tier[]; stock_qty?: string | number | null
+  price_tiers?: Tier[]; stock_qty?: string | number | null; category?: string | null; category_suggestion?: string | null
 }
 // One customer price: for one size (or every size when size is null) from min_qty up. Priced by the rules engine, never the model.
 interface Tier { size: string | null; min_qty: string | number; price: string | number }
@@ -55,6 +55,14 @@ function Pic({ url, alt, className }: { url: string; alt: string; className?: st
 }
 
 // ---------- Upload ----------
+type CatMode = 'auto' | 'suggest' | 'manual'
+const CAT_MODES: [CatMode, string, string][] = [
+  ['auto', 'Auto', 'The photo reader sets the category of each product. You can still change it.'],
+  ['suggest', 'Suggest', 'The photo reader proposes a category and you accept it with one click.'],
+  ['manual', 'Manual', 'No category is proposed. Pick or type one yourself.'],
+]
+const MODE_KEY = 'laris.catmode'
+const readMode = (): CatMode => { try { const v = localStorage.getItem(MODE_KEY); return v === 'auto' || v === 'manual' ? v : 'suggest' } catch { return 'suggest' } }
 function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: Supplier[]; onDone: (id: string) => void }) {
   const [file, setFile] = useState<File>()
   const [sup, setSup] = useState('')
@@ -62,6 +70,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
   const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<{ text: string; retry: boolean }>()
+  const [mode, setMode] = useState<CatMode>(readMode)
   const input = useRef<HTMLInputElement>(null)
 
   const send = async () => {
@@ -73,6 +82,7 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
       fd.append('image', file)
       if (sup) fd.append('supplier_id', sup)
       if (note.trim()) fd.append('note', note.trim())
+      fd.append('categorize', mode)
       const r = await api<{ listing_id: string }>('POST', '/listings', fd)
       setFile(undefined); setNote(''); if (input.current) input.current.value = ''
       onDone(r.listing_id)
@@ -100,6 +110,14 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
         <label className="flex flex-col gap-1 text-sm font-semibold">Note (optional)
           <input className="input font-normal" maxLength={300} value={note} onChange={e => setNote(e.target.value)} />
         </label>
+        <fieldset className="grid gap-1">
+          <legend className="text-sm font-semibold">Categories</legend>
+          <div role="group" aria-label="How products are categorised" className="flex flex-wrap gap-2">
+            {CAT_MODES.map(([k, name]) => <button key={k} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={mode === k}
+              onClick={() => { setMode(k); try { localStorage.setItem(MODE_KEY, k) } catch { /* storage blocked: lasts for this visit */ } }}>{name}</button>)}
+          </div>
+          <p className="text-sm text-muted">{CAT_MODES.find(([k]) => k === mode)?.[2]}</p>
+        </fieldset>
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Reading the photo...' : 'Read the photo'}</button></div>
         <p role="status" className="text-sm text-muted">{busy ? 'Reading the photo… the first run after a quiet period can take a few minutes. Please keep this page open.' : ''}</p>
@@ -115,9 +133,9 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
 }
 
 // ---------- One product ----------
-function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid: string; n: number; it: Item; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onChanged: () => void }) {
+function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }: { lid: string; n: number; it: Item; cats: string[]; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onChanged: () => void }) {
   const [edit, setEdit] = useState(false)
-  const [f, setF] = useState({ description: '', sku: '', sizes: '', item_key: '', price: '', stock: '' })
+  const [f, setF] = useState({ description: '', category: '', sku: '', sizes: '', item_key: '', price: '', stock: '' })
   const [tiers, setTiers] = useState<TierRow[]>([])
   const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -137,7 +155,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
     try { await api('PATCH', `/listings/${lid}/items/${it.id}`, body); done?.(); onChanged() } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   const open = () => {
-    setF({ description: it.description, sku: it.sku ?? '', sizes: it.sizes.join(', '), item_key: it.item_key ?? '', price: it.price === null ? '' : String(it.price),
+    setF({ description: it.description, category: it.category ?? '', sku: it.sku ?? '', sizes: it.sizes.join(', '), item_key: it.item_key ?? '', price: it.price === null ? '' : String(it.price),
       stock: it.stock_qty === null || it.stock_qty === undefined ? '' : String(Number(it.stock_qty)) })
     setTiers((it.price_tiers ?? []).map(t => ({ size: t.size ?? '', min_qty: String(Number(t.min_qty)), price: String(Number(t.price)) })))
     setFormErr(''); setEdit(true)
@@ -159,6 +177,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
       if (new Set(keys).size !== keys.length) return setFormErr('Two price rows have the same size and minimum quantity.')
     }
     if (f.description.trim() !== it.description) body.description = f.description.trim()
+    if (f.category.trim() !== (it.category ?? '')) body.category = f.category.trim() || null
     if (f.sku.trim() !== (it.sku ?? '')) body.sku = f.sku.trim() || null
     if (sizes.join(',') !== it.sizes.join(',')) body.sizes = sizes
     if (f.item_key.trim() && f.item_key.trim() !== (it.item_key ?? '')) body.item_key = f.item_key.trim()
@@ -193,7 +212,12 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
           <h3 id={`${id}-h`} className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{n}. <span className={off ? 'line-through' : undefined}>{it.description}</span></span>
             <Chip v={it.status} />
+            {it.category && <span className="rounded-ui border border-soft px-1.5 text-sm font-normal">{it.category}</span>}
           </h3>
+          {!it.category && it.category_suggestion && (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm"><span className="text-muted">Suggested category:</span> <b>{it.category_suggestion}</b>
+              <button type="button" className="btn min-h-9 px-2" aria-disabled={busy || undefined} onClick={() => patch({ category: it.category_suggestion })}>Use this category</button></p>
+          )}
           {it.labels.length > 0 && (
             <p className="mt-1 text-sm"><span className="text-muted">Printed on the label:</span>{' '}
               {it.labels.map((l, i) => <span key={i} dir="auto" className="mr-2 inline-block rounded-ui border border-soft px-1.5">{l}</span>)}</p>
@@ -225,6 +249,10 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
         <form className="mt-3 grid gap-3 border-t border-hairline pt-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); save() }}>
           <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Description
             <input className="input font-normal" maxLength={300} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} autoFocus />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Category
+            <input className="input font-normal" maxLength={60} list={`${id}-cats`} value={f.category} onChange={e => setF({ ...f, category: e.target.value })} />
+            <datalist id={`${id}-cats`}>{cats.map(c => <option key={c} value={c} />)}</datalist>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">SKU
             <input className="input font-normal" maxLength={80} value={f.sku} onChange={e => setF({ ...f, sku: e.target.value })} />
@@ -342,6 +370,7 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
 // ---------- Whole photo + products ----------
 function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onList: () => void }) {
   const s = useFetch<Detail>(`/listings/${id}`)
+  const cats = useFetch<string[]>('/listings/categories')
   const jump = (itemId: string) => { const el = document.getElementById(`it-${itemId}`); el?.scrollIntoView({ block: 'center' }); el?.focus() }
   const d = s.data
   return (
@@ -366,7 +395,7 @@ function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; 
               })}
             </div>
             <ul className="grid gap-4">
-              {d.items.map((it, i) => <ItemCard key={it.id} lid={id} n={i + 1} it={it} showPrice={showPrice} suppliers={suppliers} supErr={supErr} onChanged={() => { s.reload(); onList() }} />)}
+              {d.items.map((it, i) => <ItemCard key={it.id} lid={id} n={i + 1} it={it} cats={cats.data ?? []} showPrice={showPrice} suppliers={suppliers} supErr={supErr} onChanged={() => { s.reload(); cats.reload(); onList() }} />)}
             </ul>
           </>
         )}

@@ -24,7 +24,7 @@ PROMPT = (
     "'36码', sometimes a price). Reply with ONLY a JSON object, no prose, in exactly this shape:\n"
     '{"items":[{"description":"short plain description of the product",'
     '"labels":["every text visible on or next to THIS product, verbatim, in any language"],'
-    '"sku":null,"sizes":["size values"],"price":null,"currency":null,'
+    '"sku":null,"sizes":["size values"],"price":null,"currency":null,"category":"the product type in 1 to 3 words, e.g. PLA filament",'
     '"bbox":[x0,y0,x1,y1]}]}\n'
     "bbox is the box around this product and its label as fractions between 0 and 1 of the image width and height "
     "(x0,y0 top-left; x1,y1 bottom-right).\n"
@@ -128,7 +128,7 @@ def parse_items(content: str, w: int, h: int) -> list[dict]:
         out.append({
             "description": desc, "labels": labels, "sku": _str(it.get("sku"), 80) or None,
             "sizes": [s for s in (_str(str(x), 20) for x in sizes[:MAX_SIZES] if isinstance(x, (str, int, float))) if s],
-            "price": _price(it.get("price")), "currency": _str(it.get("currency"), 8) or None,
+            "price": _price(it.get("price")), "currency": _str(it.get("currency"), 8) or None, "category": _str(it.get("category"), 60) or None,
             "bbox": box, "status": "needs_review", "reasons": []})
     return out
 

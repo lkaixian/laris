@@ -23,7 +23,8 @@ r = APIRouter(prefix="/api")
 
 MAX_IMAGE = 8_000_000
 IMAGES = ("image/jpeg", "image/png", "image/webp")
-COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key, price_tiers, stock_qty"
+COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key, price_tiers, stock_qty, category, category_suggestion"
+CATEGORIZE = Literal["auto", "suggest", "manual"]  # auto keeps the reader's category, suggest only proposes it, manual ignores it
 
 
 def describe(data: bytes, *, http=None, ocr=None) -> dict:
@@ -38,17 +39,18 @@ def describe(data: bytes, *, http=None, ocr=None) -> dict:
     return {"data": data, "mime": mime, "items": items, "pics": vision.crops(data, items)}
 
 
-def store(conn, tenant_id, user_id, d: dict, *, party_id=None, note=None, channel="upload") -> dict:
+def store(conn, tenant_id, user_id, d: dict, *, party_id=None, note=None, channel="upload", categorize: str = "suggest") -> dict:
     """Store what describe() read, with one cropped picture per product. The items are all 'needs_review'."""
     items, data = d["items"], d["data"]
     lid = conn.execute("""insert into listings(tenant_id,created_by,party_id,note,source_channel,image,image_mime)
                           values (%s,%s,%s,%s,%s,%s,%s) returning id""",
                        (tenant_id, user_id, party_id, note, channel, data, d["mime"])).fetchone()["id"]
     for n, (it, pic) in enumerate(zip(items, d["pics"])):
-        conn.execute("""insert into listing_items(listing_id,tenant_id,position,description,labels,sku,sizes,price,currency,bbox,crop,status,reasons)
-                        values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'needs_review',%s)""",
+        guess = it.get("category") if categorize != "manual" else None
+        conn.execute("""insert into listing_items(listing_id,tenant_id,position,description,labels,sku,sizes,price,currency,bbox,crop,status,reasons,category,category_suggestion)
+                        values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'needs_review',%s,%s,%s)""",
                      (lid, tenant_id, n, it["description"], Jsonb(it["labels"]), it["sku"], Jsonb(it["sizes"]), it["price"], it["currency"],
-                      Jsonb(it["bbox"]), pic, Jsonb(it["reasons"])))
+                      Jsonb(it["bbox"]), pic, Jsonb(it["reasons"]), guess if categorize == "auto" else None, guess if categorize == "suggest" else None))
     conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event,after) values (%s,%s,'listings',%s,%s,%s)",
                  (tenant_id, str(user_id) if user_id else f"system:{channel}", lid, f"catalog photo read: {len(items)} item(s) to review",
                   Jsonb({"items": len(items), "channel": channel})))
@@ -73,7 +75,7 @@ open_write = contextmanager(write_ctx)  # the same identity, licence gate and te
 
 @r.post("/listings")
 def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | None = Form(None),
-           note: str | None = Form(None, max_length=300)):
+           note: str | None = Form(None, max_length=300), categorize: CATEGORIZE = Form("suggest")):
     """No Depends(write_ctx): its transaction would stay open for the whole model call. Check inside one short transaction, read the photo
     with none open, then store in a second one."""
     with open_write(request) as ctx:
@@ -94,7 +96,7 @@ def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | 
     except vision.VisionError as e:
         raise ApiError(502, "vision_unavailable", f"{e}; try again, or key the products in by hand")
     with open_write(request) as ctx:
-        res = store(ctx.conn, ctx.tenant_id, ctx.user_id, d, party_id=supplier_id, note=(note or "").strip() or None)
+        res = store(ctx.conn, ctx.tenant_id, ctx.user_id, d, party_id=supplier_id, note=(note or "").strip() or None, categorize=categorize)
         return reply(ctx, {**res, "items": _items(ctx, res["listing_id"])}, 201)
 
 
@@ -114,6 +116,13 @@ def _listing(ctx: Ctx, lid) -> dict:
     if not x:
         raise ApiError(404, "not_found", "catalog photo not found")
     return x
+
+
+@r.get("/listings/categories")
+def categories(ctx: Ctx = Depends(read_ctx)):
+    """The business's own categories, for the picker."""
+    return reply(ctx, [x["category"] for x in ctx.conn.execute(
+        "select distinct category from listing_items where tenant_id=%s and category is not null order by category limit 200", (ctx.tenant_id,)).fetchall()])
 
 
 @r.get("/listings/{listing_id}")
@@ -179,6 +188,7 @@ class ItemPatch(BaseModel, extra="forbid"):
     item_key: str | None = Field(None, pattern=r"^[a-z][a-z0-9_]{0,60}$")
     price_tiers: list[Tier] | None = Field(None, max_length=50)    # per size and quantity; [] clears them
     stock_qty: Decimal | None = Field(None, ge=0, lt=Decimal(10) ** 11, decimal_places=3)  # null = not counted
+    category: str | None = Field(None, max_length=60)  # null or blank clears it; setting one also drops the reader's pending suggestion
 
 
 def _tiers(tiers: list[Tier], sizes: list[str]) -> list[dict]:
@@ -207,6 +217,9 @@ def edit_item(listing_id: UUID, item_id: UUID, body: ItemPatch, ctx: Ctx = Depen
         require_perm(ctx, "view_costs")  # a price is a supplier cost
     if "price_tiers" in ch and ch["price_tiers"] is None:
         ch["price_tiers"] = []
+    if "category" in ch:
+        ch["category"] = (ch["category"] or "").strip() or None
+        ch["category_suggestion"] = None
     if "sizes" in ch:
         ch["sizes"] = [s.strip()[:20] for s in ch["sizes"] or [] if s.strip()]
     c = ctx.conn

@@ -36,7 +36,7 @@ import { AiSettingsView } from './AiSettings'
 import { TourHost } from './Tour'
 import { TrackerView } from './TrackerPage'
 import { DetailView } from './DocDetail'
-import { FilterBar, ToggleChip } from './kit'
+import { FilterBar, Tabs, ToggleChip } from './kit'
 import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
 import type { Heat } from './ui'
 import type { Role, Me, Alert, Followup, MarginReport, Settings, Proposal } from './api'
@@ -75,6 +75,7 @@ function SettingsView({ owner }: { owner: boolean }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [logoErr, setLogoErr] = useState('')
+  const [tab, setTab] = useState<'business' | 'quotes' | 'channels'>('business')
   const toast = useToast()
   useEffect(() => { if (s.data) setF(s.data) }, [s.data])
   if (!owner) return <><PageHeader title="Settings" /><p className="card text-muted">You do not have access. Only the owner changes settings.</p></>
@@ -116,10 +117,12 @@ function SettingsView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Settings" description="The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save." />
-      <Async s={s} empty={false} rows={4}>
+      <Tabs label="Settings sections" value={tab} onChange={v => setTab(v as typeof tab)}
+        options={[{ value: 'business', label: 'Business' }, { value: 'quotes', label: 'Quotes' }, { value: 'channels', label: 'Channels' }]} />
+      {tab !== 'channels' && <Async s={s} empty={false} rows={4}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
-            <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
+            {tab === 'business' && <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
               <legend className="px-1 text-sm font-semibold">Branding (everyone sees this)</legend>
               <label className="flex flex-col gap-1 text-sm font-semibold">Organisation display name
                 <input className="input font-normal" maxLength={120} value={f.display_name ?? ''} onChange={e => setF({ ...f, display_name: e.target.value })} /></label>
@@ -143,23 +146,25 @@ function SettingsView({ owner }: { owner: boolean }) {
                       <button type="button" className="btn" onClick={() => setF({ ...f, logo_data_url: null })}>Remove logo</button></div>
                   : <p className="text-sm text-muted">No logo: initials are shown instead.</p>}
               </div>
-            </fieldset>
-            <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
+            </fieldset>}
+            {tab === 'quotes' && <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
               <input className="input font-normal" inputMode="decimal" aria-describedby="mf-help" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} />
-              <Hint id="mf-help">Margin is profit as a share of the selling price. A quote below this is flagged for review.</Hint></label>
-            {text('ssm_no', 'SSM registration number')}
-            {text('address', 'Business address')}
-            {text('bank_details', 'Bank details for payment')}
-            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" checked={f.sst_registered} onChange={e => setF({ ...f, sst_registered: e.target.checked })} /> Registered for SST</label>
-            {f.sst_registered && text('sst_no', 'SST registration number')}
+              <Hint id="mf-help">Margin is profit as a share of the selling price. A quote below this is flagged for review.</Hint></label>}
+            {tab === 'business' && <>
+              {text('ssm_no', 'SSM registration number')}
+              {text('address', 'Business address')}
+              {text('bank_details', 'Bank details for payment')}
+              <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" checked={f.sst_registered} onChange={e => setF({ ...f, sst_registered: e.target.checked })} /> Registered for SST</label>
+              {f.sst_registered && text('sst_no', 'SST registration number')}
+            </>}
             {err && <p role="alert" className="text-sm text-warn">{err}</p>}
             <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save settings'}</button></div>
           </form>
         )}
-      </Async>
-      <ChannelsCard />
-      <QuoteSettingsCard />
+      </Async>}
+      {tab === 'quotes' && <QuoteSettingsCard />}
+      {tab === 'channels' && <ChannelsCard />}
     </>
   )
 }

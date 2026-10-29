@@ -159,6 +159,21 @@
   .toast { @apply flex w-full items-start gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink shadow-2; animation: page-in 150ms ease-out; }
   .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
   .page-in { animation: page-in 150ms ease-out; }
+  /* Ask Laris. The panel grows out of its button and stays mounted, so reopening is instant and the conversation is kept; closed, it is
+     visibility:hidden once the exit ends (out of the tab order and the accessibility tree). The button folds to its icon while the panel is
+     open. Every part stops under prefers-reduced-motion (the rule at the top of this file). */
+  .ask-panel { transform-origin: bottom right; opacity: 0; transform: translateY(10px) scale(0.96); visibility: hidden;
+    transition: opacity 140ms ease-in, transform 180ms ease-in, visibility 0s linear 180ms; }
+  .ask-panel[data-open="true"] { opacity: 1; transform: none; visibility: visible;
+    transition: opacity 180ms ease-out, transform 260ms var(--ease-tile), visibility 0s; }
+  .ask-fab { transition: transform 160ms var(--ease-tile), background-color 150ms, box-shadow 160ms; }
+  .ask-fab:active { transform: scale(0.94); }
+  .ask-fab-label { display: inline-block; max-width: 10rem; margin-left: 0.5rem; overflow: hidden; white-space: nowrap;
+    transition: max-width 240ms var(--ease-tile), margin-left 240ms var(--ease-tile), opacity 160ms; }
+  .ask-fab[data-open="true"] .ask-fab-label { max-width: 0; margin-left: 0; opacity: 0; }
+  .ask-icon { animation: ask-icon-in 220ms var(--ease-tile) both; }
+  .ask-turn { animation: page-in 180ms ease-out both; }
+  .ask-dots > span { animation: ask-dot 1s ease-in-out infinite; animation-delay: calc(var(--i) * 150ms); }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
   th { @apply bg-surface-2 px-3 py-2 text-left text-xs font-medium text-muted; }
   td { @apply px-3 py-2 align-top text-sm text-ink-2; }
@@ -249,6 +264,8 @@
 }
 
 @keyframes tile-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes ask-icon-in { from { opacity: 0; transform: rotate(-70deg) scale(0.6); } }
+@keyframes ask-dot { 0%, 80%, 100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes pulse-soft { 50% { opacity: 0.55; } }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }

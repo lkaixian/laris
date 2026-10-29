@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { api } from './api'
 import { AiActivity } from './AiActivity'
 import { PageHeader, msg, useFetch } from './ui'
@@ -34,7 +35,7 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
   const [done, setDone] = useState<Set<string>>(new Set())
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [turns])
+  useEffect(() => { end.current?.scrollIntoView({ block: 'end', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }, [turns])
 
   const ask = async (q: string) => {
     const t = q.trim()
@@ -69,13 +70,13 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
       <div role="log" aria-live="polite" aria-label={tx('as.conversation')} className={`flex flex-col gap-3 ${compact ? 'min-h-0 flex-1 overflow-y-auto pr-1' : 'min-h-48'}`}>
         {turns.length === 0 && <p className="text-sm text-muted">{tx('as.empty')}</p>}
         {turns.map((t, i) => t.from === 'me' ? (
-          <p key={i} className="self-end rounded-ui bg-tint px-3 py-2 text-sm"><span className="sr-only">{tx('as.you')}</span>{t.text}</p>
+          <p key={i} className="ask-turn self-end rounded-ui bg-tint px-3 py-2 text-sm"><span className="sr-only">{tx('as.you')}</span>{t.text}</p>
         ) : t.from === 'err' ? (
-          <p key={i} role="alert" className="self-start rounded-ui border border-warn bg-warn-bg px-3 py-2 text-sm text-warn">{t.text}</p>
+          <p key={i} role="alert" className="ask-turn self-start rounded-ui border border-warn bg-warn-bg px-3 py-2 text-sm text-warn">{t.text}</p>
         ) : t.from === 'done' ? (
-          <p key={i} className="self-start rounded-ui border border-soft px-3 py-2 text-sm font-semibold"><Icon name="check" className="mr-1 inline size-4" />{t.text}</p>
+          <p key={i} className="ask-turn self-start rounded-ui border border-soft px-3 py-2 text-sm font-semibold"><Icon name="check" className="mr-1 inline size-4" />{t.text}</p>
         ) : (
-          <div key={i} className="self-start rounded-ui border border-soft px-3 py-2 text-sm">
+          <div key={i} className="ask-turn self-start rounded-ui border border-soft px-3 py-2 text-sm">
             <p><span className="sr-only">{tx('as.bot')}</span>{t.a.reply}</p>
             {t.a.items.length > 0 && <ul className="mt-2 grid gap-1">{t.a.items.map((it, j) => <li key={j}><a className="link inline-flex min-h-11 items-center" href={it.href} onClick={onNavigate}>{it.label}</a></li>)}</ul>}
             {!!t.a.actions?.length && (
@@ -94,7 +95,11 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
             {t.a.suggestions.length > 0 && <p className="mt-2 flex flex-wrap gap-2">{t.a.suggestions.map(s => <button key={s} type="button" className="btn" onClick={() => ask(s)}>{s}</button>)}</p>}
           </div>
         ))}
-        {busy && <p role="status" className="text-sm text-muted">{tx('as.working')}</p>}
+        {busy && (
+          <p role="status" className="ask-turn flex items-center gap-2 text-sm text-muted">
+            <span aria-hidden="true" className="ask-dots inline-flex gap-1">{[0, 1, 2].map(i => <span key={i} style={{ '--i': i } as CSSProperties} className="size-1.5 rounded-full bg-current" />)}</span>
+            {tx('as.working')}
+          </p>)}
         <div ref={end} />
       </div>
       {sug.error && turns.length === 0 && <p className="text-sm text-muted">{tx('as.sugFailed')}</p>}
@@ -128,6 +133,7 @@ export function AssistantView() {
 export function AssistantWidget({ hidden }: { hidden?: boolean }) {
   useLang()  // redraw in the chosen language (the widget is outside the page that is redrawn)
   const [open, setOpen] = useState(false)
+  const [warm, setWarm] = useState(false)  // the chat is mounted from the first hover, focus or touch of the button, so its suggestions are loaded before the click
   const btn = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -141,19 +147,19 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
   return (
     <>
       <div aria-hidden="true" className="h-16" />{/* room at the end of every page, so the button never covers the last line */}
-      {open && (
-        <section ref={panel} role="dialog" aria-modal="false" aria-labelledby="ask-w-h"
-          className="fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 rounded-card border border-hairline bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
-          <div className="flex items-center justify-between gap-2">
-            <h2 id="ask-w-h" className="text-md font-semibold">{tx('as.title')}</h2>
-            <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>{tx('as.close')}<span className="sr-only">{tx('as.theAssistant')}</span></button>
-          </div>
-          <AssistantChat compact onNavigate={() => setOpen(false)} />
-        </section>
-      )}
-      <button ref={btn} type="button" aria-expanded={open} data-guide="ask-laris"
-        className="btn btn-primary fixed right-4 bottom-4 z-40 min-h-12 gap-2 rounded-full px-4 shadow-lg" onClick={() => setOpen(!open)}>
-        <Icon name="ask" className="size-5" />{tx('as.button')}<span className="sr-only">{tx('as.theAssistant')}</span>
+      <section ref={panel} role="dialog" aria-modal="false" aria-labelledby="ask-w-h" data-open={open}
+        className="ask-panel fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 rounded-card border border-hairline bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="ask-w-h" className="text-md font-semibold">{tx('as.title')}</h2>
+          <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>{tx('as.close')}<span className="sr-only">{tx('as.theAssistant')}</span></button>
+        </div>
+        {warm && <AssistantChat compact onNavigate={() => setOpen(false)} />}
+      </section>
+      <button ref={btn} type="button" aria-expanded={open} data-open={open} data-guide="ask-laris"
+        className="btn btn-primary ask-fab fixed right-4 bottom-4 z-40 min-h-12 rounded-full px-4 shadow-lg"
+        onPointerEnter={() => setWarm(true)} onFocus={() => setWarm(true)} onClick={() => { setWarm(true); setOpen(!open) }}>
+        <Icon key={open ? 'close' : 'ask'} name={open ? 'close' : 'ask'} className="ask-icon size-5" />
+        <span className="ask-fab-label">{tx('as.button')}</span><span className="sr-only">{tx('as.theAssistant')}</span>
       </button>
     </>
   )

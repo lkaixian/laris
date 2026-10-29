@@ -5,22 +5,22 @@ import hashlib
 import json
 import logging
 import re
-import secrets
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from statistics import mean
 
 from psycopg.types.json import Jsonb
 
-from . import ilmu, mailer, ocr as ocr_mod, pricing, quote_doc, quote_pdf, tabular, tgbots, validate
-from .auth import token_hash
-from .channels import telegram
+from . import ilmu, ocr as ocr_mod, pricing, tabular, validate
 from .errors import ApiError
 from .templates import load_template
+from .quote_send import (_record_message, _target, deliver_quote, followup_text, new_link, recipient,  # noqa: F401  re-exported
+                         send_followup, send_quote)
+from .rfq_reply import (RFQ_MAX_TIERS, RFQ_OPEN_DAYS, RFQ_SCHEMA, record_rfq_reply, rfq_price, rfq_send_for)  # noqa: F401
+from .parse_util import BIG, PII, _date, _dec, redact  # noqa: F401
 
 log = logging.getLogger("laris")
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
-BIG = Decimal(10) ** 10
 
 SUPPLIER_SCHEMA = {
     "type": "object",
@@ -74,17 +74,6 @@ def next_quote_no(conn, tenant_id, prefix="QT") -> str:
     return f"{prefix}-{year}-{n + 1:04d}"
 
 
-PII = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}"                       # email
-                 r"|(?<!\d)(?:\+?60|0)1\d[ -]?\d{3,4}[ -]?\d{4}(?!\d)"       # Malaysian mobile
-                 r"|(?<!\d)\d{6}-?\d{2}-?\d{4}(?!\d)")                       # NRIC
-
-
-def redact(text: str) -> str:
-    """Strip contact details and NRIC numbers before text leaves for the LLM (PDPA cross-border transfer).
-    Prices, quantities and document numbers are untouched. ponytail: regex only; names and addresses pass through."""
-    return PII.sub("[redacted]", text)
-
-
 MAX_QTY, MAX_ITEMS, MAX_ATTRS = Decimal(1_000_000), 50, 20
 
 
@@ -102,23 +91,6 @@ def clean_items(items) -> list:
                                       if isinstance(v, (str, int, float)) and not isinstance(v, bool)}}
         out.append(i)
     return out
-
-
-def _dec(x, lo=Decimal(0)):
-    if x is None or isinstance(x, bool):
-        return None
-    try:
-        d = Decimal(str(x).replace(",", "").strip())
-    except (InvalidOperation, ValueError):
-        return None
-    return d if d.is_finite() and lo <= d < BIG else None
-
-
-def _date(s):
-    try:
-        return date.fromisoformat(s) if s else None
-    except (ValueError, TypeError):
-        return None
 
 
 def party(conn, tenant_id, role, name, contact=None):
@@ -180,11 +152,6 @@ def _log_ai(conn, tenant_id, action, input_ref, payload, confidence=None):
     """Every model call that fed a document is recorded (suggestions only; the DB rejects price keys in payload)."""
     conn.execute("insert into ai_actions(tenant_id,action,input_ref,payload,model,confidence) values (%s,%s,%s,%s,%s,%s)",
                  (tenant_id, action, input_ref, Jsonb(payload), ilmu.LLM_MODEL, confidence))
-
-
-def _record_message(conn, enquiry_id, doc_id, direction, channel, body, external_id):
-    return conn.execute("""insert into messages(enquiry_id,document_id,direction,channel,body,external_id)
-                           values (%s,%s,%s,%s,%s,%s) returning id""", (enquiry_id, doc_id, direction, channel, body, external_id)).fetchone()["id"]
 
 
 # ---------------------------------------------------------------- (a) supplier document in
@@ -389,183 +356,3 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
             {"items": [{"item_key": i["item_key"], "qty": str(i["qty"])} for i in items]})
     _record_message(conn, enq, doc_id, "in", channel, text[:2000], external_id)
     return {"doc_id": doc_id, "doc_no": doc_no, "flagged_lines": sorted(flagged)}
-
-
-# ---------------------------------------------------------------- quote out
-def _target(conn, doc_id):
-    """The quote plus where to reach its customer, or None when there is no chat contact on file."""
-    d = conn.execute("""select d.doc_no, d.valid_until, d.currency, d.party_id, p.name, p.contact, e.channel,
-                               t.wa_phone_number_id pn, d.tenant_id from documents d
-                        join parties p on p.id=d.party_id join enquiries e on e.id=d.enquiry_id join tenants t on t.id=d.tenant_id
-                        where d.id=%s and d.direction='out'""", (doc_id,)).fetchone()
-    return d if d and d["contact"] and d["channel"] in ("whatsapp", "telegram") else None
-
-
-def followup_text(conn, doc_id) -> str | None:
-    """Suggested chase message (deterministic template, no model). The owner reads it before it goes out."""
-    d = _target(conn, doc_id)
-    if not d:
-        return None
-    total = conn.execute("""select coalesce(sum(round(qty * unit_price * (1 - coalesce(discount_pct, 0) / 100), 2)), 0) t
-                            from document_lines where document_id=%s and not is_header""", (doc_id,)).fetchone()["t"]
-    until = f", valid until {d['valid_until']}" if d["valid_until"] else ""
-    return (f"Hi {d['name']}, just checking if you had a chance to look at quotation {d['doc_no']} "
-            f"({d['currency']} {total:.2f}{until}). Happy to adjust it if needed.")
-
-
-def send_followup(conn, send, doc_id) -> bool:
-    d, body = _target(conn, doc_id), followup_text(conn, doc_id)
-    if not d:
-        return False
-    _record_message(conn, None, doc_id, "out", d["channel"], body, send(d["channel"], d["contact"], body, tgbots.via(conn, d["tenant_id"], d["channel"], d["pn"])))
-    return True
-
-
-def recipient(p: dict, channel: str) -> str | None:
-    """Where this customer is reached on a channel: email -> parties.email; telegram -> a tg:<id> contact; whatsapp -> any other contact."""
-    if channel == "email":
-        return (p["email"] or "").strip() or None
-    c = (p["contact"] or "").strip()
-    if channel == "telegram":
-        return telegram.chat_of(c)
-    return c if c and not re.match(r"(?i)(tg|telegram):", c) else None  # a tg: contact is never read as a phone number
-
-
-def new_link(conn, doc_id, actor, revoke: bool = False) -> tuple[str | None, object]:
-    """A fresh customer accept link (db/accept.sql) for an out quote: (url, expires_at), or (None, None) when APP_PUBLIC_URL is unset.
-    Expires at the end of valid_until (Kuala Lumpur), else in 30 days. Only the token's SHA-256 is stored. revoke=True kills the quote's
-    older unused links (the owner's explicit "new link"); a send leaves them, so a resend on another channel does not break the first link.
-    The caller has checked the quote is the tenant's and open (approved / sent / read)."""
-    base = mailer.base_url()
-    if not base:
-        return None, None
-    tok = secrets.token_urlsafe(24)
-    if revoke:
-        conn.execute("update quote_accept_links set revoked_at = now() where quote_id=%s and decided_at is null and revoked_at is null", (doc_id,))
-    row = conn.execute(
-        """insert into quote_accept_links(tenant_id, quote_id, token_hash, created_by, expires_at)
-           select d.tenant_id, d.id, %s, %s, case when d.valid_until is not null then (d.valid_until + 1)::timestamp at time zone 'Asia/Kuala_Lumpur'
-                                                  else now() + interval '30 days' end
-           from documents d where d.id=%s returning tenant_id, id, expires_at""", (token_hash(tok), actor, doc_id)).fetchone()
-    conn.execute("insert into audit_log(tenant_id,actor,entity,entity_id,event) values (%s,%s,'documents',%s,'customer accept link created')",
-                 (row["tenant_id"], str(actor), doc_id))
-    return f"{base}/#/q/{tok}", row["expires_at"]
-
-
-def deliver_quote(conn, svc, doc_id, channel: str, to: str, note: str | None = None, accept_url: str | None = None) -> None:
-    """Send the customer PDF (selling prices only) on one channel and record a short note of it on the quote. Raises when it fails.
-    accept_url (a secret link) goes out with the message but is never written to the recorded note."""
-    m = quote_doc.load(conn, doc_id)
-    pdf, name = quote_pdf.render_model(m), re.sub(r"[^A-Za-z0-9_-]", "_", m["doc_no"] or "quote") + ".pdf"
-    if channel == "email":
-        if not svc.mail(to, *mailer.quote_mail(m, note, accept_url), "quote", attachments=[{"filename": name, "content": pdf, "mime": "application/pdf"}]):
-            raise RuntimeError("the email was not accepted (email is off, the provider refused it, or the PDF is over 8 MB)")
-        wid = None
-    else:
-        pn = conn.execute("select wa_phone_number_id from tenants where id=(select tenant_id from documents where id=%s)", (doc_id,)).fetchone()["wa_phone_number_id"]
-        wid = svc.send_document(channel, to, pdf, name, f"Quotation {m['doc_no']}" + (f"\n{note}" if note else "")
-                                + (f"\nReview and accept: {accept_url}" if accept_url else ""), pn)
-    _record_message(conn, None, doc_id, "out", channel, f"Quotation {m['doc_no']} sent as a PDF" + (f": {note}" if note else ""), wid)
-
-
-def send_quote(conn, svc, doc_id, accept_url: str | None = None) -> bool:
-    """Send an approved quote to the customer on the channel the enquiry came in on (text, then the PDF), else by email with the PDF
-    when the customer has an email. Selling prices only. False = nowhere to send it; raises when the text could not be sent."""
-    d = _target(conn, doc_id)
-    if not d:
-        p = conn.execute("select p.email from documents d join parties p on p.id=d.party_id where d.id=%s and d.direction='out'", (doc_id,)).fetchone()
-        if not (p and recipient(p, "email")):
-            return False
-        deliver_quote(conn, svc, doc_id, "email", recipient(p, "email"), accept_url=accept_url)
-        return True
-    ls = conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    total = sum((pricing._q(l["qty"] * l["unit_price"] * (1 - (l["discount_pct"] or 0) / Decimal(100))) for l in ls), Decimal(0))
-    body = "\n".join(
-        [f"Quotation {d['doc_no']}"]
-        + [f"{l['line_no']}. {l['description']} x {l['qty']:f} {l['uom']} @ {d['currency']} {l['unit_price']:.2f}" for l in ls]
-        + [f"Total: {d['currency']} {total:.2f}"] + ([f"Valid until {d['valid_until']}"] if d["valid_until"] else []))
-    wid = svc.send(d["channel"], d["contact"], body + (f"\nReview and accept: {accept_url}" if accept_url else ""), tgbots.via(conn, d["tenant_id"], d["channel"], d["pn"]))
-    _record_message(conn, None, doc_id, "out", d["channel"], body, wid)
-    try:  # the text is out; the PDF is a bonus that must not turn a delivered quote into a failed one
-        deliver_quote(conn, svc, doc_id, d["channel"], d["contact"])
-    except Exception as e:
-        log.warning("quote %s: PDF not attached on %s (%s)", d["doc_no"], d["channel"], type(e).__name__)
-    return True
-
-
-# ---------------------------------------------------------------- supplier price replies (Ask suppliers)
-RFQ_SCHEMA = {"type": "object", "properties": {
-    "unit_price": {"type": ["number", "null"], "description": "price per unit for the smallest order they quote"},
-    "min_qty": {"type": ["number", "null"], "description": "minimum order quantity, if stated"},
-    "tiers": {"type": "array", "description": "bulk price breaks, if stated", "items": {"type": "object", "properties": {
-        "min_qty": {"type": "number"}, "unit_price": {"type": "number"}}, "required": ["min_qty", "unit_price"]}},
-    "currency": {"type": ["string", "null"]}}}
-RFQ_OPEN_DAYS, RFQ_MAX_TIERS = 7, 20
-
-
-def rfq_send_for(conn, party_id, reply_to, media_kind=None):
-    """The ask a supplier's message answers: the send whose wamid it replies to, else their newest send still waiting
-    (7 days). A photo or PDF is only taken as a reply when it quotes our message: otherwise it is their price list."""
-    s = conn.execute("select id, tenant_id from rfq_sends where wamid=%s and supplier_id=%s", (reply_to, party_id)).fetchone() if reply_to else None
-    if s or media_kind in ("image", "document"):
-        return s
-    return conn.execute("""select s.id, s.tenant_id from rfq_sends s where s.supplier_id=%s and s.status='sent'
-                             and s.created_at > now() - %s * interval '1 day'
-                             and exists (select 1 from rfq_replies r where r.send_id=s.id and r.status='waiting')
-                           order by s.created_at desc limit 1""", (party_id, RFQ_OPEN_DAYS)).fetchone()
-
-
-def rfq_price(out, currency):
-    """-> (unit_price, min_qty, tiers [(min_qty, unit_price)], clean). clean only when a positive price came through every
-    check; the model's words never set a status, this does."""
-    out = out if isinstance(out, dict) else {}
-    clean, up, mq = True, _dec(out.get("unit_price")), _dec(out.get("min_qty"))
-    if out.get("unit_price") is not None and not up:
-        up, clean = None, False
-    if mq is not None and mq <= 0:
-        mq = None
-    raw = out.get("tiers") if isinstance(out.get("tiers"), list) else []
-    tiers = []
-    for t in raw[:RFQ_MAX_TIERS]:
-        tm, tp = (_dec(t.get(k)) for k in ("min_qty", "unit_price")) if isinstance(t, dict) else (None, None)
-        if tm and tp:
-            tiers.append((tm, tp))
-        else:
-            clean = False
-    tiers.sort()
-    # a bigger order must not cost more per unit, and a break quoted twice is ambiguous
-    if len(raw) > RFQ_MAX_TIERS or len({m for m, _ in tiers}) < len(tiers) or any(b[1] > a[1] for a, b in zip(tiers, tiers[1:])):
-        clean = False
-    if up is None and tiers:
-        up, mq = tiers[0][1], tiers[0][0]  # headline = the smallest order they quote
-    if up is None:
-        return None, None, [], False
-    up, mq = up.quantize(Decimal("0.0001")), mq and mq.quantize(Decimal("0.001"))  # the column's precision
-    if not up or mq == 0:
-        return None, None, [], False
-    if str(out.get("currency") or "").upper() not in ("", "RM", "MYR", currency):
-        clean = False  # a foreign price must not be read as ringgit
-    return up, mq, tiers, clean
-
-
-def record_rfq_reply(conn, send, m, ilmu_client=None):
-    """Store a supplier's WhatsApp reply on its ask. ILMU down or unreadable -> needs_review with the raw text kept."""
-    if m.media_kind:  # voice notes and photos are not transcribed or read here: a person looks
-        text, up, mq, tiers, clean = f"[{m.media_kind}] {m.text or ''}".strip(), None, None, [], False
-    else:
-        text = (m.text or "")[:2000]
-        cur = conn.execute("select currency from tenants where id=%s", (send["tenant_id"],)).fetchone()["currency"]
-        try:
-            up, mq, tiers, clean = rfq_price(ilmu.extract_json(redact(text), RFQ_SCHEMA, client=ilmu_client), cur)
-        except ilmu.IlmuError:
-            up, mq, tiers, clean = None, None, [], False
-    vals = (text, m.external_id, up, mq, Jsonb([{"min_qty": f"{a:f}", "unit_price": f"{b:f}"} for a, b in tiers]),
-            "ready" if clean else "needs_review")
-    w = conn.execute("select id from rfq_replies where send_id=%s and status='waiting' order by created_at limit 1 for update",
-                     (send["id"],)).fetchone()
-    if w:
-        conn.execute("""update rfq_replies set message_text=%s, external_id=%s, unit_price=%s, min_qty=%s, tiers=%s, status=%s
-                        where id=%s""", (*vals, w["id"]))
-    else:  # a second message on the same ask (a correction, an extra tier) is its own row
-        conn.execute("""insert into rfq_replies(message_text, external_id, unit_price, min_qty, tiers, status, send_id, tenant_id)
-                        values (%s,%s,%s,%s,%s,%s,%s,%s)""", (*vals, send["id"], send["tenant_id"]))

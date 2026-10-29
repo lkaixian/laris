@@ -4,6 +4,7 @@ import { MOCK, canOpen, getToken, logout } from './api'
 import { Palette } from './Palette'
 import { LANGS, setLang, t, useLang } from './i18n'
 import { tx, txOr } from './strings'
+import { hasGuide, startGuide } from './Guide'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
 import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
@@ -35,11 +36,13 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
     { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
+  ] },
+  { label: 'Insight', items: [
     { key: 'alerts', label: 'Stale costs', icon: 'alerts' },
   ] },
-  { label: 'Insights', items: [
-    { key: 'activity', label: 'Activity', icon: 'activity' },
-    { key: 'assistant', label: 'Assistant', icon: 'assistant' },
+  // Ask Laris (the assistant) is the floating button on every page, so it has no sidebar entry; #/assistant still opens it full page.
+  { label: 'Audit Log', items: [
+    { key: 'activity', label: 'Audit log', icon: 'activity' },
   ] },
   { label: 'Admin', items: [
     { key: 'team', label: 'Team', icon: 'team' },
@@ -74,15 +77,20 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
                 <li key={i.key} className="group relative">
-                  <a className={`sidelink ${!collapsed && articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${!collapsed && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>
-                  {!collapsed && (a => a && (
-                    <a href={`#/help/${a.id}`} aria-label={tx('nav.help', txOr(`nav.${i.key}`, i.label))} onClick={() => onNavigate?.(`#/help/${a.id}`)}
-                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:size-11">
+                  {!collapsed && (hasGuide(i.key) ? (
+                    <button type="button" aria-label={tx('guide.open', txOr(`nav.${i.key}`, i.label))} onClick={() => { onNavigate?.(`#/${i.key}`); startGuide(i.key) }}
+                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                       <span aria-hidden="true">?</span>
-                    </a>))(articleForNav(i.key))}
+                    </button>
+                  ) : (a => a && (
+                    <a href={`#/help/${a.id}`} aria-label={tx('nav.help', txOr(`nav.${i.key}`, i.label))} onClick={() => onNavigate?.(`#/help/${a.id}`)}
+                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                      <span aria-hidden="true">?</span>
+                    </a>))(articleForNav(i.key)))}
                 </li>
               ))}
             </ul>

@@ -420,46 +420,99 @@ function DetailView({ id, showPrice, suppliers, supErr, onList }: { id: string; 
   )
 }
 
-// Recent photos as a grid of the photos themselves: the card is one link, so the date is its name.
-function Gallery({ rows, current }: { rows: ListingRow[]; current?: string }) {
+// Recent photos as a grid of the photos themselves. The photo and the date open the full review; View (beside the date)
+// shows the photo and its products in a dialog without leaving the list.
+function Gallery({ rows, current, onView }: { rows: ListingRow[]; current?: string; onView: (id: string) => void }) {
   return (
     <ul aria-label="Recent catalog photos, newest first" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {rows.map(l => (
-        <li key={l.id}>
-          <a href={`#/catalog/${l.id}`} aria-current={l.id === current ? 'page' : undefined}
-            className={`block overflow-hidden rounded-ui border bg-surface hover:border-accent ${l.id === current ? 'border-accent ring-2 ring-accent' : 'border-hairline'}`}>
-            <div className="flex aspect-4/3 items-center justify-center bg-tint">
-              <Pic url={l.thumb_url ?? l.image_url} alt={`Catalog photo from ${when(l.created_at)}`} className="size-full object-cover" />
-            </div>
-            <div className="grid gap-1 p-2 text-sm">
-              <time dateTime={l.created_at} className="font-semibold">{when(l.created_at)}</time>
-              <span className="truncate text-muted">{l.party_name ?? 'No supplier'}</span>
-              <span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{l.items} {l.items === 1 ? 'product' : 'products'}</span><Chip v={l.to_review ? 'needs_review' : 'confirmed'} /></span>
-            </div>
+        <li key={l.id} className={`overflow-hidden rounded-ui border bg-surface hover:border-accent ${l.id === current ? 'border-accent ring-2 ring-accent' : 'border-hairline'}`}>
+          <a href={`#/catalog/${l.id}`} aria-current={l.id === current ? 'page' : undefined} tabIndex={-1} aria-hidden="true" className="flex aspect-4/3 items-center justify-center bg-tint">
+            <Pic url={l.thumb_url ?? l.image_url} alt="" className="size-full object-cover" />
           </a>
+          <div className="grid gap-1 p-2 text-sm">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <a href={`#/catalog/${l.id}`} aria-current={l.id === current ? 'page' : undefined} className="font-semibold hover:underline"><time dateTime={l.created_at}>{when(l.created_at)}</time></a>
+              <button type="button" className="btn min-h-8 px-3 text-sm" data-guide="cat-view" onClick={() => onView(l.id)}>View<span className="sr-only"> photo and details from {when(l.created_at)}</span></button>
+            </span>
+            <span className="truncate text-muted">{l.party_name ?? 'No supplier'}</span>
+            <span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{l.items} {l.items === 1 ? 'product' : 'products'}</span><Chip v={l.to_review ? 'needs_review' : 'confirmed'} /></span>
+          </div>
         </li>
       ))}
     </ul>
   )
 }
 
+// The photo and its products at a glance, from the list (View beside the date). The full review stays at #/catalog/<id>.
+function PhotoDialog({ id, showPrice, onClose }: { id: string; showPrice: boolean; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  const s = useFetch<Detail>(`/listings/${id}`)
+  useEffect(() => { const d = ref.current; if (d && !d.open) d.showModal() }, [])
+  const d = s.data
+  const counts = d ? (['confirmed', 'needs_review', 'discarded'] as const).map(k => [k, d.items.filter(i => i.status === k).length] as const) : []
+  return (
+    <dialog ref={ref} aria-labelledby="pd-title" onCancel={e => { e.preventDefault(); onClose() }} onClose={onClose}
+      className="m-auto w-[calc(100%-2rem)] max-w-3xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
+      <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
+        <div className="min-w-0">
+          <h2 id="pd-title" className="text-md font-semibold">Photo from {d ? when(d.created_at) : '...'}</h2>
+          {d && <p className="text-sm text-muted">{d.party_name ? `Supplier: ${d.party_name}` : 'No supplier'}{d.note ? ` · ${d.note}` : ''}</p>}
+        </div>
+        <button type="button" className="btn" onClick={onClose} autoFocus>Close</button>
+      </div>
+      <div className="max-h-[70vh] overflow-y-auto p-4">
+        <Async s={s} rows={3} shape="detail">
+          {d && (
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <Pic url={d.image_url} alt="The whole catalog photo" className="block h-auto max-w-full rounded-ui border border-soft" />
+              <div className="min-w-0">
+                <p className="mb-2 flex flex-wrap gap-2 text-sm">{counts.map(([k, n]) => <span key={k} className="inline-flex items-center gap-1"><Chip v={k} />{n}</span>)}</p>
+                <ul className="grid gap-2">
+                  {d.items.map((it, n) => (
+                    <li key={it.id} className="flex gap-3 rounded-ui border border-hairline p-2 text-sm">
+                      <Pic url={it.crop_url} alt={`Product ${n + 1}`} className="h-14 w-14 shrink-0 rounded-ui object-contain" />
+                      <div className="min-w-0">
+                        <p className="break-words font-semibold">{n + 1}. {it.description}</p>
+                        <p className="text-muted">{[it.sku && `SKU ${it.sku}`, it.sizes.length ? `Sizes ${it.sizes.join(', ')}` : '', showPrice && it.price !== null ? money(it.currency, it.price) : '',
+                          it.stock_qty != null ? `Stock ${qtyText(it.stock_qty)}` : ''].filter(Boolean).join(' · ') || 'No details yet'}</p>
+                        <Chip v={it.status} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </Async>
+      </div>
+      <div className="flex justify-end border-t border-hairline p-4">
+        <a className="btn btn-primary" href={`#/catalog/${id}`} onClick={onClose}>Open to review and edit</a>
+      </div>
+    </dialog>
+  )
+}
+
+
 export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: string }) {
   const list = useFetch<ListingRow[]>('/listings')
   const sup = useFetch<Supplier[]>('/contacts?role=supplier')
   const [up, setUp] = useState<boolean>()
+  const [viewing, setViewing] = useState<string>()
   const upOpen = up ?? (list.loading && !list.data ? false : !list.data?.length)  // open until the first photo exists
   return (
     <>
       <PageHeader title="Catalog photos" description="Photograph shelves of labelled products, then check what LARIS read."
-        actions={<button type="button" className={`btn ${upOpen ? '' : 'btn-primary'}`} aria-expanded={upOpen} aria-controls="cat-up" onClick={() => setUp(!upOpen)}>Upload photo</button>} />
+        actions={<button type="button" className={`btn ${upOpen ? '' : 'btn-primary'}`} aria-expanded={upOpen} aria-controls="cat-up" data-guide="cat-upload" onClick={() => setUp(!upOpen)}>Upload photo</button>} />
       {upOpen && <UploadCard owner={owner} suppliers={sup.data ?? []} onDone={lid => { list.reload(); location.hash = `#/catalog/${lid}` }} />}
-      <section aria-labelledby="cat-list" className="mt-8">
+      <section aria-labelledby="cat-list" className="mt-8" data-guide="cat-list">
         <h2 id="cat-list" className="mb-3 text-md font-semibold">Recent photos</h2>
         <Async s={list} rows={5} shape="table" empty={!list.data?.length} emptyText="No catalog photos yet." emptyHint="Photograph a page or shelf of labelled products and LARIS lists each one for you to check."
           emptyAction={{ label: 'Read your first catalog photo', onClick: () => { setUp(true); requestAnimationFrame(() => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() }) } }}>
-          <Gallery rows={list.data ?? []} current={id} />
+          <Gallery rows={list.data ?? []} current={id} onView={setViewing} />
         </Async>
       </section>
+      {viewing && <PhotoDialog key={viewing} id={viewing} showPrice={canSeePrice(me, owner)} onClose={() => setViewing(undefined)} />}
       {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}
     </>
   )

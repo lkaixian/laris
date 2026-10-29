@@ -78,6 +78,46 @@ def audit_facets(ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, {"people": [x["actor"] for x in people], "modules": [x["entity"] for x in modules]})
 
 
+@r.get("/audit/days")
+def audit_days(limit: int = Query(60, ge=1, le=366), ctx: Ctx = Depends(read_ctx)):
+    """The activity log grouped by Malaysian calendar day, newest day first: how many entries each day has. Click a day to search it."""
+    require_perm(ctx, "view_audit")
+    rows = ctx.conn.execute("select (x.at at time zone 'Asia/Kuala_Lumpur')::date as day, count(*)::int as entries, count(distinct x.actor)::int as people, "
+                            "count(distinct x.entity)::int as modules from (" + AUDIT_COLS + ") x group by 1 order by 1 desc limit %(n)s",
+                            {"t": ctx.tenant_id, "o": ctx.costs, "n": limit}).fetchall()
+    return reply(ctx, [{**r, "day": r["day"].isoformat()} for r in rows])
+
+
+_ALWAYS_HIDDEN = ("token", "password", "secret", "logo", "key_hash")
+_MONEY = ("cost", "margin", "price")
+
+
+def _scrub(v, costs: bool):
+    """Before/after values for the detail view: never secrets or images, and no money fields for someone without view_costs."""
+    if isinstance(v, dict):
+        out = {}
+        for k, x in list(v.items())[:80]:
+            lk = k.lower()
+            out[k] = "[hidden]" if any(h in lk for h in _ALWAYS_HIDDEN) or (not costs and any(h in lk for h in _MONEY)) else _scrub(x, costs)
+        return out
+    if isinstance(v, list):
+        return [_scrub(x, costs) for x in v[:50]]
+    if isinstance(v, str) and len(v) > 500:
+        return v[:500] + "..."
+    return v
+
+
+@r.get("/audit/{entry:int}")
+def audit_entry(entry: int, ctx: Ctx = Depends(read_ctx)):
+    """One activity log entry in full: who, when, which module and record, and what changed (before and after), scrubbed."""
+    require_perm(ctx, "view_audit")
+    row = ctx.conn.execute(AUDIT_COLS + " and a.id = %(id)s", {"t": ctx.tenant_id, "o": ctx.costs, "id": entry}).fetchone()
+    if not row:
+        raise ApiError(404, "not_found", "no such entry")
+    ba = ctx.conn.execute("select before, after from audit_log where id=%s and tenant_id=%s", (entry, ctx.tenant_id)).fetchone()
+    return reply(ctx, {**row, "entity_id": str(row["entity_id"]), "before": _scrub(ba["before"], ctx.costs), "after": _scrub(ba["after"], ctx.costs)})
+
+
 MAX_EXPORT = 1000
 
 

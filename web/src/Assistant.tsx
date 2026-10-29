@@ -149,9 +149,9 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
           <AssistantChat compact onNavigate={() => setOpen(false)} />
         </section>
       )}
-      <button ref={btn} type="button" aria-expanded={open}
+      <button ref={btn} type="button" aria-expanded={open} data-guide="ask-laris"
         className="btn btn-primary fixed right-4 bottom-4 z-40 min-h-12 gap-2 rounded-full px-4 shadow-lg" onClick={() => setOpen(!open)}>
-        <Icon name="ask" className="size-5" />{tx('as.ask')}<span className="sr-only">{tx('as.theAssistant')}</span>
+        <Icon name="ask" className="size-5" />{tx('as.button')}<span className="sr-only">{tx('as.theAssistant')}</span>
       </button>
     </>
   )

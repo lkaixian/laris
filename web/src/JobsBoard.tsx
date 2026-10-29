@@ -24,6 +24,24 @@ export const todayMY = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/
 const mondayOf = (s: string) => { const d = new Date(s + 'T00:00:00Z'); return addDays(s, -((d.getUTCDay() + 6) % 7)) }
 const fmt = (s: string, o: Intl.DateTimeFormatOptions) => new Date(s + 'T00:00:00Z').toLocaleDateString(locale(), { timeZone: 'UTC', ...o })
 
+// Due-date colour bands, the same four colours as the follow-up ages: green on track (4+ days), yellow due soon (1 to 3),
+// orange due today, red overdue. Done jobs and jobs with no due date get no colour.
+type Band = 'fresh' | 'waiting' | 'late' | 'stale'
+const BANDS: Band[] = ['fresh', 'waiting', 'late', 'stale']
+export function dueBand(j: Job): Band | null {
+  if (j.status === 'done' || !j.due_on || j.days_to_due == null) return null
+  const d = j.days_to_due
+  return d < 0 ? 'stale' : d === 0 ? 'late' : d <= 3 ? 'waiting' : 'fresh'
+}
+function DueLegend() {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted" data-guide="jobs-legend">
+      <span>{tx('jobs.legend')}</span>
+      {BANDS.map(b => <span key={b} className={`chip heat-${b}`}>{`${txOr(`jobs.band.${b}`, b)}, ${txOr(`jobs.range.${b}`, '')}`}</span>)}
+    </p>
+  )
+}
+
 function dueText(j: Job): { text: string; late: boolean } {
   if (!j.due_on) return { text: tx('jobs.noDue'), late: false }
   const d = j.days_to_due
@@ -123,12 +141,12 @@ function JobCard({ j, people, me, compact, onChanged }: { j: Job; people: Assign
   }
   const pr = j.priority ?? 'normal'
   return (
-    <li className="card min-w-0 p-3 text-sm">
+    <li className={`card min-w-0 p-3 text-sm ${dueBand(j) ? `heat-edge heat-${dueBand(j)}` : ''}`}>
       <p className="break-words font-semibold">{j.quote_id ? <a className="text-ink underline-offset-2 hover:underline" href={`#/doc/${j.quote_id}`}>{jl(j)}</a> : jl(j)}
         {j.customer && <span className="font-normal">{tx('jobs.for', j.customer)}</span>}{j.manual && <span className="badge ml-2 font-normal">{tx('jobs.byHand')}</span>}</p>
       {j.summary && <p className="mt-1 break-words text-sm">{j.summary}</p>}
       {j.total != null && <p className="mt-1 text-sm text-muted">{tx('jobs.total', rm(j.total))}</p>}
-      <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">{due.text}{due.late && <OverdueChip />}</p>
+      <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">{dueBand(j) && dueBand(j) !== 'stale' ? <span className={`chip heat-${dueBand(j)}`}>{txOr(`jobs.band.${dueBand(j)}`, '')}</span> : null}{due.text}{due.late && <OverdueChip />}</p>
       <p className="mt-1 flex flex-wrap items-center gap-1 text-sm">
         {compact && <span className="badge">{colName(j.status)}</span>}
         <span className={`badge ${pr === 'high' ? 'badge-warn' : ''}`}>{txOr(`jobs.pri.${pr}`, pr)}</span>
@@ -172,7 +190,7 @@ function Board({ f, me, people }: { f: Filters; me: Me; people: Assignee[] }) {
     <Async s={s} rows={3} shape="list" empty={empty}
       emptyText={active ? tx('jobs.noMatch') : tx('jobs.none')} emptyHint={active ? undefined : tx('jobs.noneHint')}
       emptyAction={active ? undefined : { label: tx('jobs.openTracker'), href: '#/tracker/open' }}>
-      <div className={`grid gap-4 ${cols.length > 1 ? 'md:grid-cols-3' : ''}`}>
+      <div data-guide="jobs-board" className={`grid gap-4 ${cols.length > 1 ? 'md:grid-cols-3' : ''}`}>
         {cols.map(([st, title]) => {
           const list = (s.data ?? []).filter(j => j.status === st)
           return (
@@ -317,18 +335,19 @@ export function JobsView({ me }: { me: Me }) {
   return (
     <>
       <PageHeader title={tx('jobs.title')} description={tx('jobs.lead')}
-        actions={can('manage_contacts') ? <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} onClick={() => setAdding(!adding)}>{tx('jobs.new')}</button> : undefined} />
+        actions={can('manage_contacts') ? <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} data-guide="jobs-new" onClick={() => setAdding(!adding)}>{tx('jobs.new')}</button> : undefined} />
       {adding && <NewJobForm me={me} people={people} onCancel={() => setAdding(false)} onDone={t => { setAdding(false); setRev(r => r + 1); toast(tx('jobs.added', t)) }} />}
       {peopleFailed && <p role="alert" className="mb-2 text-sm text-warn">{tx('jobs.teamFailed')}</p>}
       {!can('manage_contacts') && <p className="mb-2 text-sm text-muted">{tx('jobs.needPerm', why('manage_contacts'))}</p>}
-      <FilterBar label={tx('jobs.filters')} chips={chips} onClear={filtered ? clear : undefined}
+      <div data-guide="jobs-filters"><FilterBar label={tx('jobs.filters')} chips={chips} onClear={filtered ? clear : undefined}
         right={<div role="group" aria-label={tx('jobs.view')} className="inline-flex gap-1">{tab('board', tx('jobs.board'))}{tab('agenda', tx('jobs.agenda'))}</div>}>
         <ToggleChip pressed={f.mine} onClick={() => set({ mine: !f.mine })}>{tx('jobs.mine')}</ToggleChip>
         {f.view === 'board' && <>
           <ToggleChip pressed={f.overdue} onClick={() => set({ overdue: !f.overdue })}>{tx('common.overdue')}</ToggleChip>
           <FilterSelect label={tx('common.status')} value={f.status} onChange={v => set({ status: v })}><option value="">{tx('common.all')}</option>{COLS().map(([v, t]) => <option key={v} value={v}>{t}</option>)}</FilterSelect>
         </>}
-      </FilterBar>
+      </FilterBar></div>
+      <div className="mb-3"><DueLegend /></div>
       {f.view === 'board' ? <Board key={rev} f={f} me={me} people={people} /> : <AgendaView key={rev} f={f} me={me} people={people} />}
     </>
   )

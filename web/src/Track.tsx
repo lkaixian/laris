@@ -177,8 +177,8 @@ export function TrackView() {
   return (
     <>
       <PageHeader title={tx('tr.title')} description={tx('tr.lead')} />
-      <Tabs label={tx('tr.kind')} value={f.kind} options={tabs} onChange={v => set({ kind: v })} />
-      <FilterBar label={tx('tr.filters')} search={{ value: f.q, onChange: v => set({ q: v }), label: tx('tr.search') }} chips={chips} onClear={reset}
+      <div data-guide="tr-kind"><Tabs label={tx('tr.kind')} value={f.kind} options={tabs} onChange={v => set({ kind: v })} /></div>
+      <div data-guide="tr-filters"><FilterBar label={tx('tr.filters')} search={{ value: f.q, onChange: v => set({ q: v }), label: tx('tr.search') }} chips={chips} onClear={reset}
         right={<>
           <ToggleChip pressed={f.view === 'list'} onClick={() => set({ view: 'list' })}><Icon name="tracker" className="size-4" />{tx('tr.list')}</ToggleChip>
           <ToggleChip pressed={f.view === 'board'} onClick={() => set({ view: 'board' })}><Icon name="pipeline" className="size-4" />{tx('jobs.board')}</ToggleChip>
@@ -194,12 +194,12 @@ export function TrackView() {
         <ToggleChip pressed={f.overdue} warn={(data?.overdue_total ?? 0) > 0} onClick={() => set({ overdue: !f.overdue })}>
           {(data?.overdue_total ?? 0) > 0 && <Icon name="warn" className="size-4" />}{tx('common.overdue')} <span className="tabular-nums">{data?.overdue_total ?? 0}</span>
         </ToggleChip>
-      </FilterBar>
+      </FilterBar></div>
 
       <div className="mb-3"><HeatLegend counts={data?.heat_counts} /></div>
       <p role="status" className="sr-only">{!loading && !err ? tx('tr.shown', items.length, more) : ''}</p>
       <ActionError err={err} onRetry={() => void load(0)} label={tx('common.retry')} />
-      {body}
+      <div data-guide="tr-list">{body}</div>
       {items.length > 0 && !err && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm text-muted">{tx('tr.shown', items.length, more)}</span>

@@ -19,6 +19,7 @@ import { QuoteSettingsCard } from './QuoteSettings'
 import { ContactDetail, ContactsView } from './Contacts'
 import { SearchView } from './Search'
 import { AssistantView, AssistantWidget } from './Assistant'
+import { GuidePanel } from './Guide'
 import { HomeView } from './Home'
 import { TrackView } from './Track'
 import { JobsView } from './JobsBoard'
@@ -110,16 +111,15 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
   )
   const colour = (f?.brand_color ?? '').trim()
   const colourOk = colour === '' || /^#[0-9a-f]{6}$/i.test(colour)
-  // Logo: png, jpeg or webp up to 200 KB, read in the browser into a data URL. The server checks the real bytes again.
-  const pickLogo = (file?: File) => {
+  // Logo: png, jpeg or webp up to 10 MB. The browser shrinks it (longest side 512 px, then lower quality if needed) so what is
+  // stored stays under the server's 200 KB limit. The server checks the real bytes again.
+  const pickLogo = async (file?: File) => {
     setLogoErr('')
     if (!file || !f) return
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return setLogoErr('Use a PNG, JPEG or WebP image. SVG is not accepted.')
-    if (file.size > 200 * 1024) return setLogoErr('That image is over 200 KB. Use a smaller one.')
-    const r = new FileReader()
-    r.onload = () => setF(p => p && { ...p, logo_data_url: String(r.result) })
-    r.onerror = () => setLogoErr('Could not read that file. Try another image.')
-    r.readAsDataURL(file)
+    if (file.size > 10 * 1024 * 1024) return setLogoErr('That image is over 10 MB. Use a smaller one.')
+    try { const url = await shrinkLogo(file); setF(p => p && { ...p, logo_data_url: url }) }
+    catch { setLogoErr('Could not read that image, or it is still too large after shrinking. Try another image.') }
   }
   const save = async () => {
     if (!f || busy) return
@@ -134,7 +134,7 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
       setF(out); toast('Settings saved.')
       window.dispatchEvent(new Event('laris:branding'))
     } catch (e) {
-      setErr(e instanceof ApiError && e.status === 413 ? 'The logo is too large. Use an image under 200 KB.'
+      setErr(e instanceof ApiError && e.status === 413 ? 'The logo is still too large after shrinking. Try a simpler image.'
         : e instanceof ApiError && e.status === 415 ? 'The logo must be a PNG, JPEG or WebP image.'
         : e instanceof ApiError && e.status === 422 && /colou?r/i.test(e.code + e.message) ? 'The brand colour is not valid. Use a hex colour like #0f5c47.' : msg(e))
     } finally { setBusy(false) }
@@ -163,7 +163,7 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
               </div>
               <p id="bc-help" className="text-sm text-muted">{colour ? (colourOk ? `Colour ${colour.toLowerCase()} is used for main buttons and the active tab.` : 'Not a valid colour yet. Use # and six hex digits.') : 'No colour set: the standard LARIS green is used.'}</p>
               <div className="grid gap-2">
-                <label className="flex flex-col gap-1 text-sm font-semibold">Logo (PNG, JPEG or WebP, up to 200 KB)
+                <label className="flex flex-col gap-1 text-sm font-semibold">Logo (PNG, JPEG or WebP, up to 10 MB; shrunk for you)
                   <input type="file" accept="image/png,image/jpeg,image/webp" className="input py-2 font-normal" aria-describedby={logoErr ? 'logo-err' : undefined}
                     onChange={e => { pickLogo(e.target.files?.[0]); e.target.value = '' }} /></label>
                 {logoErr && <p id="logo-err" role="alert" className="text-sm text-warn">{logoErr}</p>}
@@ -214,16 +214,16 @@ function Followups() {
       <PageHeader title={tx('fu.title')} description={tx('fu.lead')} />
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       {!!s.data?.length && <>
-        <FilterBar label={tx('fu.filters')} chips={band ? [{ label: tx('fu.ageChip', heatName(band)), onRemove: () => setBand('') }] : []} onClear={band ? () => setBand('') : undefined}>
+        <div data-guide="fu-bands"><FilterBar label={tx('fu.filters')} chips={band ? [{ label: tx('fu.ageChip', heatName(band)), onRemove: () => setBand('') }] : []} onClear={band ? () => setBand('') : undefined}>
           {HEAT_BANDS.map(h => <ToggleChip key={h} pressed={band === h} onClick={() => setBand(band === h ? '' : h)}><span aria-hidden="true" className={`heat-${h} size-2.5 rounded-full`} style={{ background: 'var(--heat-fg)' }} />{heatName(h)} <span className="tabular-nums">{counts[h]}</span></ToggleChip>)}
-        </FilterBar>
-        <div className="mb-3"><HeatLegend /></div>
+        </FilterBar></div>
+        <div className="mb-3" data-guide="fu-legend"><HeatLegend /></div>
       </>}
       <Async s={s} rows={2} empty={!s.data?.length} emptyText={tx('fu.none')} emptyHint={tx('fu.noneHint')}>
         {shown.length === 0 ? <p className="card text-sm text-muted">{tx('fu.noneInBand')} <button type="button" className="link" onClick={() => setBand('')}>{tx('fu.showAll')}</button></p> : (
         <ul className="grid gap-2 md:grid-cols-2">
-          {shown.map(f => (
-            <li key={f.id} className={`card ${f.heat ? `heat-edge heat-${f.heat}` : ''}`}>
+          {shown.map((f, k) => (
+            <li key={f.id} data-guide={k === 0 ? 'fu-card' : undefined} className={`card ${f.heat ? `heat-edge heat-${f.heat}` : ''}`}>
               <p className="flex flex-wrap items-center gap-2 font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">{tx('fu.for', f.customer)}</span>
                 {f.days_waiting != null && <HeatChip heat={f.heat} days={f.days_waiting} />}</p>
               <p className="mt-1 text-sm text-muted">{txOrReason(f.reason)}{f.days_waiting != null ? `, ${tx('fu.sentAgo', f.days_waiting)}` : ''}</p>
@@ -328,7 +328,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   contact: { title: 'Contact', render: c => c.arg ? <ContactDetail id={c.arg} owner={can('view_costs')} /> : <NotFound /> },
   ask: { title: 'Ask suppliers', render: () => <AskView owner={can('view_replies_prices')} /> },
   catalog: { title: 'Catalog photos', render: c => <CatalogView me={c.me} owner={c.owner} id={c.arg} /> },
-  assistant: { title: 'Assistant', render: () => <AssistantView /> },
+  assistant: { title: 'Ask Laris', render: () => <AssistantView /> },
   search: { title: 'Search', render: c => <SearchView q={safeDecode(c.arg)} /> },
   track: { title: 'Track', render: () => <TrackView /> },
   jobs: { title: 'Jobs', render: c => <JobsView me={c.me} /> },
@@ -339,7 +339,7 @@ const PAGES: Record<string, { title: string; render: (c: PageCtx) => ReactNode }
   'ai-settings': { title: 'AI settings', render: () => <AiSettingsView /> },
   roles: { title: 'Roles', render: c => <RolesView owner={c.owner} /> },
   account: { title: 'Account', render: c => <AccountView name={c.me.name} role={c.me.role_name ?? c.me.role} linked={c.me.telegram_linked} onChange={() => window.dispatchEvent(new Event('laris:branding'))} /> },
-  activity: { title: 'Activity log', render: () => <ActivityView /> },
+  activity: { title: 'Audit log', render: () => <ActivityView /> },
   status: { title: 'System status', render: () => <StatusView /> },
   licence: { title: 'Licence', render: c => <LicenceView owner={c.owner} /> },
   issuer: { title: 'Issue licences', render: () => <IssuerView /> },
@@ -492,10 +492,31 @@ function AppShell() {
           </div>
         )}
         {me && lic && <AssistantWidget hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
+        {me && lic && <GuidePanel />}
       </Shell>
       {me && <TourHost me={me} owner={owner} />}
       {!MOCK && getAccount() && <IdleGuard />}
     </OrgCtx>
     </LicenseProvider>
   )
+}
+
+// Shrink a logo in the browser: draw it at most 512 px on its longest side, then step WebP quality down until it fits 190 KB
+// (the stored limit is 200 KB). PNG keeps transparency when it already fits.
+const LOGO_MAX = 190 * 1024
+const dataUrlBytes = (u: string) => Math.ceil((u.length - u.indexOf(',') - 1) * 3 / 4)
+export async function shrinkLogo(file: File): Promise<string> {
+  const read = () => new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = bad; r.readAsDataURL(file) })
+  const src = await read()
+  const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = src })
+  const scale = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight))
+  if (scale === 1 && file.size <= LOGO_MAX) return src
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(img.naturalWidth * scale)); c.height = Math.max(1, Math.round(img.naturalHeight * scale))
+  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+  const png = c.toDataURL('image/png')
+  if (dataUrlBytes(png) <= LOGO_MAX) return png
+  for (const q of [0.92, 0.85, 0.75, 0.6, 0.45]) { const u = c.toDataURL('image/webp', q); if (u.startsWith('data:image/webp') && dataUrlBytes(u) <= LOGO_MAX) return u }
+  for (const q of [0.85, 0.7, 0.5]) { const u = c.toDataURL('image/jpeg', q); if (dataUrlBytes(u) <= LOGO_MAX) return u }
+  throw new Error('too large')
 }

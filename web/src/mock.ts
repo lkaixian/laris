@@ -107,10 +107,16 @@ const log = (actor: string, entity_id: string, event: string) => audit.push({ id
   [6, 'SAMPLE Owner', 'documents', 'insert'], [5, 'SAMPLE Owner', 'documents', 'status draft->approved'], [4, 'SAMPLE Staff', 'jobs', 'job changed: status'],
   [3, 'SAMPLE Owner', 'followups', 'follow-up skipped'], [2, 'SAMPLE Owner', 'jobs', 'insert'], [1, 'SAMPLE Staff', 'parties', 'contact created'], [0.2, 'SAMPLE Owner', 'jobs', 'job changed: priority']] as const)
   .forEach(([d, actor, entity, event]) => audit.push({ id: audit.length + 1, at: new Date(Date.now() - d * 864e5).toISOString(), actor, entity, entity_id: `sample-${audit.length + 1}`, event }))
+// Sample before/after for a few entries so the detail view has something to show.
+const BA: Record<string, [Record<string, unknown>, Record<string, unknown>]> = {
+  'job changed: priority': [{ priority: 'normal' }, { priority: 'urgent' }], 'job changed: status': [{ status: 'todo' }, { status: 'doing' }],
+  'status draft->approved': [{ status: 'draft' }, { status: 'approved' }], 'settings changed: name': [{ display_name: 'SAMPLE Shop' }, { display_name: 'SAMPLE Signs Sdn Bhd' }],
+}
+const myDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' })
 const actionOf = (e: string) => e === 'insert' ? 'created' : /^status .+->/.test(e) ? 'status' : 'other'
 function auditMatch(q: URLSearchParams) {
   const from = q.get('from'), to = q.get('to'), words = (q.get('q') ?? '').toLowerCase()
-  return audit.map(e => ({ ...e, action: actionOf(e.event) })).filter(e => (!from || e.at.slice(0, 10) >= from) && (!to || e.at.slice(0, 10) <= to)
+  return audit.map(e => ({ ...e, action: actionOf(e.event) })).filter(e => (!from || myDay(e.at) >= from) && (!to || myDay(e.at) <= to)
     && (!q.get('actor') || e.actor === q.get('actor')) && (!q.get('module') || e.entity === q.get('module')) && (!q.get('action') || e.action === q.get('action'))
     && (!words || e.event.toLowerCase().includes(words))).sort((a, b) => b.id - a.id)
 }
@@ -690,6 +696,17 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   }
   if (p.startsWith('/listings')) { const r = mockListings(method, p, owner, body); if (r !== undefined) return r }
   if (p === '/audit/facets') return { people: [...new Set(audit.map(e => e.actor))].sort(), modules: [...new Set(audit.map(e => e.entity))].sort() }
+  if (p === '/audit/days') {
+    const n: Record<string, number> = {}
+    audit.forEach(e => { n[myDay(e.at)] = (n[myDay(e.at)] ?? 0) + 1 })
+    return Object.keys(n).sort().reverse().map(day => ({ day, entries: n[day] }))
+  }
+  if ((m = p.match(/^\/audit\/(\d+)$/))) {
+    const e = audit.find(x => x.id === Number(m![1]))
+    if (!e) throw new ApiError(404, 'not_found', 'no such entry')
+    const [before, after] = BA[e.event] ?? [null, null]
+    return { ...e, action: actionOf(e.event), before, after }
+  }
   if (p === '/audit/search') {
     const sp = new URLSearchParams(q), after = Number(sp.get('after') ?? 0), before = Number(sp.get('before') ?? 0), limit = Number(sp.get('limit') ?? 100)
     const hit = auditMatch(sp).filter(e => e.id > after && (!before || e.id < before))

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError, DENIED } from './api'
 import { tx, txOr } from './strings'
+import { hasGuide, openGuide } from './Guide'
 import type { Me } from './api'
 import { Icon } from './icons'
 
@@ -119,6 +120,13 @@ export const OrgCtx = createContext('LARIS')
 // Standard top of every page: optional Back link (detail pages), the one h1 (focus target on navigation), description,
 // meta line, and a slot for the page's primary action. Also keeps <title> in step. Pass no title while loading: a skeleton shows and no h1 exists yet.
 export interface Crumb { href?: string; label: string }
+// "? How to" beside a page title: opens the step-by-step guide for this page, when it has one.
+function GuideButton() {
+  const key = (location.hash.split('/')[1] || 'home').split('?')[0]
+  if (!hasGuide(key)) return null
+  return <button type="button" className="btn min-h-8 gap-1 rounded-full px-3 text-sm" data-guide="how-to" onClick={() => openGuide(key)}><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-accent text-xs font-bold text-on-accent">?</span>{tx('guide.button')}</button>
+}
+
 export function PageHeader({ title, description, meta, actions, back, crumbs, status }: {
   title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }; crumbs?: Crumb[]; status?: ReactNode
 }) {
@@ -149,6 +157,7 @@ export function PageHeader({ title, description, meta, actions, back, crumbs, st
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {title !== undefined ? <h1 tabIndex={-1} className="break-words text-lg font-semibold">{title}</h1> : <div aria-hidden="true" className="skeleton h-7 w-56 max-w-full" />}
             {status}
+            {!trail && <GuideButton />}
           </div>
           {meta && <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{meta}</div>}
           {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}

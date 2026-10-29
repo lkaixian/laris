@@ -103,3 +103,28 @@ def test_permissions_and_tenant_isolation(a):
     x = other_tenant(e)
     assert all(i["id"] not in e.ids.values() for i in search(e, "limit=500", who=x)["items"])
     assert e.c.get(f"/api/audit/export?ids={e.ids['job']}", headers=x).status_code == 404
+
+
+def test_days_count_entries_per_malaysian_day_newest_first(a):
+    e = a
+    days = e.c.get("/api/audit/days", headers=e.O).json()
+    assert [d["day"] for d in days] == sorted([d["day"] for d in days], reverse=True)
+    today = pipeline.today_my().isoformat()
+    assert any(d["day"] == today and d["entries"] >= 2 for d in days)
+    assert any(d["day"] == (pipeline.today_my() - timedelta(days=40)).isoformat() for d in days)
+    assert e.c.get("/api/audit/days?limit=0", headers=e.O).status_code == 422
+
+
+def test_entry_detail_scrubs_secrets_and_money_without_view_costs(a):
+    e = a
+    i = e.sql("""insert into audit_log(tenant_id, actor, entity, entity_id, event, before, after) values (%s, %s, 'jobs', gen_random_uuid(),
+                 'job changed: notes', '{"notes": "old", "unit_cost": 5}', '{"notes": "new", "api_token": "abc", "unit_cost": 7}') returning id""",
+              (tid(e), e.owner))[0]["id"]
+    d = e.c.get(f"/api/audit/{i}", headers=e.O).json()
+    assert d["before"]["notes"] == "old" and d["after"]["notes"] == "new" and d["after"]["api_token"] == "[hidden]" and d["after"]["unit_cost"] == 7
+    s = e.c.get(f"/api/audit/{i}", headers=e.S)
+    assert s.status_code == 200 and s.json()["after"].get("unit_cost", "[hidden]") == "[hidden]" and s.json()["after"]["notes"] == "new"
+    assert e.c.get("/api/audit/999999999", headers=e.O).status_code == 404
+    assert e.c.get("/api/audit/export?ids=" + str(i), headers=e.O).status_code == 200  # the {entry} route does not swallow export
+    x = other_tenant(e)
+    assert e.c.get(f"/api/audit/{i}", headers=x).status_code == 404

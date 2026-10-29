@@ -6,6 +6,7 @@ import { Async, EmptyState, PageHeader, Status, rm, useFetch } from './ui'
 import { MoreMenu } from './kit'
 import { CountUp, Metric, Pipeline, Ring, StatRows, Tile, TileHead, TileIcon } from './dash'
 import { Icon } from './icons'
+import { AreaBento } from './Areas'
 
 interface Dash {
   contacts: { customers: number; suppliers: number; contractors: number }
@@ -88,7 +89,8 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
     <>
       <PageHeader title="Home" description={`Hello, ${me.name}. Here is where things stand.`} actions={actions} />
       <Async s={s} empty={false} rows={4} shape="tiles">
-        {s.data && <><GetStarted d={s.data} owner={owner} /><Bento d={s.data} owner={owner} /></>}
+        {s.data && <><GetStarted d={s.data} owner={owner} /><AreaBento d={s.data} owner={owner} />
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Details</h2><Bento d={s.data} owner={owner} /></>}
       </Async>
     </>
   )

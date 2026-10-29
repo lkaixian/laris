@@ -27,15 +27,15 @@ export function StatusView() {
       <PageHeader title="System status" description="Checks that LARIS is set up and working, and what to do about anything that is not." />
       <Async s={s} empty={!!h && !items.length} emptyText="Everything is set up" emptyHint="Nothing needs your attention right now." rows={3}>
         {h && <>
-          <p role="status" className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold">Overall: <LevelBadge level={h.level} /> <span className="text-sm font-normal text-muted">{items.length} {items.length === 1 ? 'item' : 'items'}</span></p>
+          <p role="status" data-guide="sys-overall" className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold">Overall: <LevelBadge level={h.level} /> <span className="text-sm font-normal text-muted">{items.length} {items.length === 1 ? 'item' : 'items'}</span></p>
           {ORDER.map(l => {
             const g = items.filter(i => i.level === l)
             return g.length > 0 && (
-              <section key={l} aria-labelledby={`st-${l}`} className="mb-6">
+              <section key={l} aria-labelledby={`st-${l}`} className="mb-6" data-guide="sys-group">
                 <h2 id={`st-${l}`} className="mb-2 text-lg font-semibold">{GROUP[l]} <span className="text-sm font-normal text-muted">({g.length})</span></h2>
                 <ul className="grid gap-2">
                   {g.map(i => (
-                    <li key={i.code} className={`card ${l === 'info' ? '' : 'border-l-4 border-l-amber'}`}>
+                    <li key={i.code} data-guide="sys-fix" className={`card ${l === 'info' ? '' : 'border-l-4 border-l-amber'}`}>
                       <p className="flex flex-wrap items-center gap-2"><LevelBadge level={l} /><span className="font-semibold">{i.message}</span></p>
                       <p className="mt-2 text-sm"><strong>How to fix: </strong>{i.fix}</p>
                     </li>

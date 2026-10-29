@@ -39,7 +39,7 @@ function Editor({ role, data, onDone }: { role: RoleRow | null; data: Roles; onD
     })
   }
   return (
-    <form className="card mt-2 grid gap-3 border-l-4 border-l-accent" aria-label={role ? `Edit role ${role.name}` : 'New role'} onSubmit={e => { e.preventDefault(); save() }}>
+    <form className="card mt-2 grid gap-3 border-l-4 border-l-accent" data-guide="rl-editor" aria-label={role ? `Edit role ${role.name}` : 'New role'} onSubmit={e => { e.preventDefault(); save() }}>
       <label className="flex max-w-sm flex-col gap-1 text-sm font-semibold">Role name
         <input className="input font-normal" value={name} disabled={!!role?.is_system} maxLength={60} autoFocus={!role} onChange={e => setName(e.target.value)} /></label>
       {role?.is_system && <p className="text-sm text-muted">{readOnly ? 'The Owner role is read only: it always holds every permission.' : 'The Staff role cannot be renamed, but its permissions can change.'}</p>}
@@ -88,11 +88,11 @@ export function RolesView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Roles" description="A role is a set of permissions. Everyone holds one role, chosen on the Team page. Changing what a role can do applies at once."
-        actions={editing !== 'new' && <button type="button" className="btn btn-primary" {...gate(() => { setEditing('new'); setConfirm('') })}>New role</button>} />
+        actions={editing !== 'new' && <button type="button" className="btn btn-primary" data-guide="rl-new" {...gate(() => { setEditing('new'); setConfirm('') })}>New role</button>} />
       <ActionError err={del.err} onRetry={() => last.current?.()} label="Try again" />
       <Async s={s} rows={3} empty={!d} emptyText="No roles.">
         {d && <>
-          <ul className="grid gap-2">
+          <ul className="grid gap-2" data-guide="rl-list">
             {d.roles.map(r => (
               <li key={r.id} className="card">
                 <p className="flex flex-wrap items-center gap-2">
@@ -116,7 +116,7 @@ export function RolesView({ owner }: { owner: boolean }) {
             ))}
           </ul>
           {editing === 'new' && <div className="mt-4"><Editor role={null} data={d} onDone={done} /></div>}
-          <section className="mt-8 border-t border-soft pt-6" aria-labelledby="oo">
+          <section className="mt-8 border-t border-soft pt-6" aria-labelledby="oo" data-guide="rl-owner">
             <h2 id="oo" className="text-base font-semibold">Always owner-only</h2>
             <p className="mb-2 text-sm text-muted">These cannot be given to any role. Only people who hold the Owner role can do them.</p>
             <ul className="list-disc pl-5 text-sm">{d.non_assignable.map(p => <li key={p.key}>{p.label}</li>)}</ul>

@@ -171,9 +171,9 @@ export function LicenceView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title="Licence" description={owner ? 'Your plan, seats and expiry. Activate a new key here to renew.' : 'The licence status of your organisation. Only the owner can change it.'} />
-      {owner && lic.offer && <div className="max-w-xl"><OfferCard offer={lic.offer} onDone={reload} /></div>}
+      {owner && lic.offer && <div className="max-w-xl" data-guide="lic-offer"><OfferCard offer={lic.offer} onDone={reload} /></div>}
       {lic.clock?.rollback && <p role="alert" className="card mb-4 border-warn bg-warn-bg text-warn">The computer clock appears to have been set back. Licence checks may be wrong until the date is corrected.</p>}
-      <section aria-labelledby="lic-s" className="card max-w-xl">
+      <section aria-labelledby="lic-s" className="card max-w-xl" data-guide="lic-status">
         <h2 id="lic-s" className="sr-only">Licence status</h2>
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
           {row('Status', <span className={`badge ${lic.read_only ? 'badge-warn' : ''}`}>{STATUS[lic.status]}</span>)}
@@ -185,10 +185,10 @@ export function LicenceView({ owner }: { owner: boolean }) {
         {lic.read_only && <p className="mt-3 text-sm text-warn">Read-only mode is on: you can look but changes are blocked.</p>}
       </section>
       {owner ? (
-        <section aria-labelledby="lic-a" className="card mt-4 max-w-xl">
+        <section aria-labelledby="lic-a" className="card mt-4 max-w-xl" data-guide="lic-activate">
           {lic.offer ? <details><summary id="lic-a" className="cursor-pointer font-semibold">Have a key instead?</summary><div className="mt-3"><KeyForm onDone={reload} /></div></details>
             : <><h2 id="lic-a" className="mb-2 font-semibold">Activate or renew</h2><KeyForm onDone={reload} /></>}
-          <p className="mt-3 text-sm">Need a new key? <a className="link" href="#/purchase">Request a licence</a></p>
+          <p className="mt-3 text-sm">Need a new key? <a className="link" data-guide="lic-request" href="#/purchase">Request a licence</a></p>
         </section>
       ) : <p className="mt-4 max-w-xl text-sm text-muted">Ask the owner to activate or renew the licence.</p>}
     </>

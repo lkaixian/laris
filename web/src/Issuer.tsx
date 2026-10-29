@@ -87,7 +87,7 @@ function KeyStep({ cfg, key_, setKey, reload }: { cfg: Config; key_: Key | null;
   }
   const match = !key_ ? null : !cfg.public_key ? 'none' : key_.pub === cfg.public_key ? 'yes' : 'no'
   return (
-    <section aria-labelledby={`${id}-h`} className="card mb-6">
+    <section aria-labelledby={`${id}-h`} className="card mb-6" data-guide="iss-key">
       <h2 id={`${id}-h`} className="text-lg font-semibold">Step 1. Signing key</h2>
       <p className="mt-1 text-sm text-muted">The private key stays in this browser tab. It is never uploaded and never stored, so you load it again each time you open this page.</p>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
@@ -112,11 +112,11 @@ function KeyStep({ cfg, key_, setKey, reload }: { cfg: Config; key_: Key | null;
         {saveErr && <p role="alert" className="mt-2 text-warn">{saveErr}</p>}
       </div>}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2" data-guide="iss-create">
         <button type="button" className="btn" onClick={create}>Create new keys</button>
         {key_ && <button type="button" className="btn" onClick={() => { setKey(null); setFresh(null) }}>Remove key from this tab</button>}
       </div>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-4 grid gap-2" data-guide="iss-load">
         <p className="text-sm font-semibold">Or load my private key</p>
         <label className="flex flex-col gap-1 text-sm">Choose private.pem
           <input type="file" accept=".pem,text/plain" className="input py-2" onChange={async e => { const f = e.target.files?.[0]; if (f) await load(await f.text()); e.target.value = '' }} />
@@ -168,7 +168,7 @@ function RequestCard({ r, plans, key_, ready, onIssued }: { r: Request; plans: P
       {r.note && <p className="mt-1 text-sm text-muted">Note: {r.note}</p>}
       {r.status === 'issued' && <p className="mt-1 text-sm">{r.offer_expires_at ? `Licence valid until ${date(r.offer_expires_at)}.` : 'Licence issued.'}</p>}
       {r.status === 'pending' && (
-        <form className="mt-3 grid gap-3 sm:grid-cols-3" onSubmit={e => { e.preventDefault(); if (!busy) issue() }} aria-label={`Issue licence for ${r.org}`}>
+        <form className="mt-3 grid gap-3 sm:grid-cols-3" data-guide="iss-issue" onSubmit={e => { e.preventDefault(); if (!busy) issue() }} aria-label={`Issue licence for ${r.org}`}>
           <label className="flex flex-col gap-1 text-sm font-semibold">Plan
             <select className="input font-normal" value={plan} onChange={e => setPlan(e.target.value)}>
               {options.map(k => <option key={k} value={k}>{plans.find(p => p.key === k)?.name ?? cap(k)}</option>)}
@@ -194,7 +194,7 @@ function RequestsStep({ key_, ready }: { key_: Key | null; ready: boolean }) {
   const s = useFetch<Request[]>('/license/admin/requests')
   const plans = useFetch<{ plans: Plan[] }>('/license/plans')
   return (
-    <section aria-labelledby="iss-r">
+    <section aria-labelledby="iss-r" data-guide="iss-requests">
       <h2 id="iss-r" className="mb-1 text-lg font-semibold">Step 2. Requests</h2>
       <p className="mb-3 text-sm text-muted">Seats and plan can be lowered but never raised above what was asked for.</p>
       <Async s={s} empty={s.data?.length === 0} emptyText="No licence requests yet." emptyHint="When a business asks for a licence it appears here." rows={3}>

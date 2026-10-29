@@ -79,7 +79,7 @@ function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) =>
   const [lang] = useLang()
   return (
     <div className="grid max-w-xl gap-4">
-      <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
+      <fieldset className="grid gap-2 rounded-ui border border-soft p-3" data-guide="st-general">
         <legend className="px-1 text-sm font-semibold">Language</legend>
         <div role="group" aria-label="Language" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {LANGS.map(([l, n]) => <button key={l} type="button" lang={l} className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={lang === l} onClick={() => setLang(l)}>{n}</button>)}
@@ -142,13 +142,13 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
   return (
     <>
       <PageHeader title="Settings" description="The margin floor flags thin quotes for review. The business details are printed on the quote PDF. Branding shows in the header for everyone after you save." />
-      <Tabs label="Settings sections" value={tab} onChange={v => { setTab(v as SettingsTab); history.replaceState(null, '', `#/settings/${v}`) }}
-        options={[{ value: 'general', label: 'General' }, { value: 'business', label: 'Business' }, { value: 'quotes', label: 'Quotes' }, { value: 'channels', label: 'Channels' }]} />
+      <div data-guide="st-tabs"><Tabs label="Settings sections" value={tab} onChange={v => { setTab(v as SettingsTab); history.replaceState(null, '', `#/settings/${v}`) }}
+        options={[{ value: 'general', label: 'General' }, { value: 'business', label: 'Business' }, { value: 'quotes', label: 'Quotes' }, { value: 'channels', label: 'Channels' }]} /></div>
       {tab === 'general' && <GeneralTab dark={dark} setDark={setDark} />}
       {(tab === 'business' || tab === 'quotes') && <Async s={s} empty={false} rows={4}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
-            {tab === 'business' && <fieldset className="grid gap-3 rounded-ui border border-soft p-3">
+            {tab === 'business' && <fieldset className="grid gap-3 rounded-ui border border-soft p-3" data-guide="st-business">
               <legend className="px-1 text-sm font-semibold">Branding (everyone sees this)</legend>
               <label className="flex flex-col gap-1 text-sm font-semibold">Organisation display name
                 <input className="input font-normal" maxLength={120} value={f.display_name ?? ''} onChange={e => setF({ ...f, display_name: e.target.value })} /></label>
@@ -173,7 +173,7 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
                   : <p className="text-sm text-muted">No logo: initials are shown instead.</p>}
               </div>
             </fieldset>}
-            {tab === 'quotes' && <label className="flex flex-col gap-1 text-sm font-semibold">Margin floor (%)
+            {tab === 'quotes' && <label className="flex flex-col gap-1 text-sm font-semibold" data-guide="st-margin">Margin floor (%)
               <input className="input font-normal" inputMode="decimal" aria-describedby="mf-help" value={f.min_margin_pct} onChange={e => setF({ ...f, min_margin_pct: e.target.value })} />
               <Hint id="mf-help">Margin is profit as a share of the selling price. A quote below this is flagged for review.</Hint></label>}
             {tab === 'business' && <>
@@ -185,7 +185,7 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
               {f.sst_registered && text('sst_no', 'SST registration number')}
             </>}
             {err && <p role="alert" className="text-sm text-warn">{err}</p>}
-            <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save settings'}</button></div>
+            <div><button type="submit" className="btn btn-primary" data-guide="st-save" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save settings'}</button></div>
           </form>
         )}
       </Async>}
@@ -290,7 +290,7 @@ function AlertsView() {
       {can('view_reports') && can('view_costs') && <Report />}
       <p role="status" className={s.data && n ? 'mb-4 border-l-4 border-amber pl-3 text-xl font-semibold' : 'sr-only'}>{s.data && n ? `${n} open ${n === 1 ? 'quote' : 'quotes'} affected, margin down ${rm(String(Math.abs(lost)))} in total` : ''}</p>
       <Async s={s} empty={!n} emptyText="No open quote is affected by a newer supplier cost." emptyHint="You will see a quote here if a supplier raises a price after you quoted.">
-        <ul className="grid gap-2">
+        <ul data-guide="al-list" className="grid gap-2">
           {s.data?.map(a => (
             <li key={a.quote_id + a.item_key} className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-l-4 border-l-amber">
               <div className="min-w-0 flex-1 basis-64">
@@ -298,7 +298,7 @@ function AlertsView() {
               <p className="mt-1 text-sm">{a.item_key}: cost {rm(a.old_cost)} to {rm(a.current_cost)}</p>
               <p className="mt-2 flex flex-wrap items-center gap-2"><span className="badge badge-warn">Margin down {rm(String(Math.abs(Number(a.margin_delta) || 0)))}</span><Status v={a.status} /></p>
               </div>
-              <a className="btn" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
+              <a className="btn" data-guide="al-review" href={`#/doc/${a.quote_id}`}>Review {a.quote_no}</a>
             </li>
           ))}
         </ul>

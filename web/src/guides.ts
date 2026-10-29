@@ -1,15 +1,17 @@
-import type { Text } from './i18n'
 import { ARTICLES } from './help/articles'
+import { S } from './guideKit'
+import type { Guide } from './guideKit'
+import { SUPPLIER_GUIDES } from './guides.suppliers'
+import { ADMIN_GUIDES } from './guides.admin'
+
+export type { Guide, GuideStep, GuideSample } from './guideKit'
 
 // Step-by-step guides behind every "?" button: what to do on a page and how, one step at a time.
 // A step with `target` can point at the part of the page it talks about: an element with data-guide="<target>".
 // Pages without their own guide here use the steps of their help article (no pointing).
-export interface GuideStep { text: Text; target?: string }
-export interface Guide { title: Text; steps: GuideStep[] }
-
-const S = (en: string, ms: string, zh: string, ta: string, target?: string): GuideStep => ({ text: { en, ms, zh, ta }, ...(target ? { target } : {}) })
-
 export const GUIDES: Record<string, Guide> = {
+  ...SUPPLIER_GUIDES,
+  ...ADMIN_GUIDES,
   home: { title: { en: 'Using Home', ms: 'Menggunakan Utama', zh: '使用首页', ta: 'முகப்பைப் பயன்படுத்துதல்' }, steps: [
     S('The four tiles sum up your business: Work, Suppliers, Insight and Audit Log.', 'Empat jubin meringkaskan perniagaan anda: Kerja, Pembekal, Wawasan dan Log Audit.', '四个区块概括您的业务：工作、供应商、洞察和审计日志。', 'நான்கு கட்டங்கள் உங்கள் வணிகத்தைச் சுருக்குகின்றன: பணி, சப்ளையர்கள், நுண்ணறிவு, தணிக்கைப் பதிவு.', 'home-tiles'),
     S('Work shows each stage of a quote, from enquiry to job, with how many are in each.', 'Kerja menunjukkan setiap peringkat sebut harga, dari pertanyaan hingga kerja, dengan bilangan di setiap peringkat.', '“工作”显示报价从询问到工单的每个阶段及数量。', 'பணி: விசாரணை முதல் வேலை வரை மேற்கோளின் ஒவ்வொரு கட்டமும் எண்ணிக்கையும்.', 'home-work'),

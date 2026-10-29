@@ -107,13 +107,13 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       <PageHeader title="Contacts" description="Customers, suppliers and contractors in one place. Chat numbers saved here are how LARIS recognises who is writing."
         actions={<>
           {can('export_data') && !MOCK && <button type="button" className="btn" onClick={() => download('/export/contacts.csv', 'contacts.csv').catch(e => setErr(msg(e)))}>Export contacts (csv)</button>}
-          <button type="button" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...(can('manage_contacts') ? gate(() => setAdding(!adding)) : needs('manage_contacts'))}>Add contact</button>
+          <button type="button" data-guide="ct-add" className={`btn ${adding ? '' : 'btn-primary'}`} aria-expanded={adding} {...(can('manage_contacts') ? gate(() => setAdding(!adding)) : needs('manage_contacts'))}>Add contact</button>
         </>} />
-      <Tabs label="Filter by type" value={kind} options={KINDS.map(([k, t]) => ({ value: k, label: t }))} onChange={v => setKind(v as Kind | '')} />
+      <div data-guide="ct-tabs"><Tabs label="Filter by type" value={kind} options={KINDS.map(([k, t]) => ({ value: k, label: t }))} onChange={v => setKind(v as Kind | '')} /></div>
       <FilterBar label="Contact search" search={{ value: q, onChange: setQ, label: 'Search name, number, email, notes' }}
         chips={q ? [{ label: `Search: ${q}`, onRemove: () => setQ('') }] : []} />
       {adding && (
-        <form className="card mb-4 grid gap-3" onSubmit={e => { e.preventDefault(); add() }} aria-label="Add contact">
+        <form data-guide="ct-form" className="card mb-4 grid gap-3" onSubmit={e => { e.preventDefault(); add() }} aria-label="Add contact">
           <Fields f={f} set={setF} kind kindRef={first} />
           {err && <p role="alert" className="text-sm text-warn">{err}</p>}
           <div className="flex gap-2"><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Saving...' : 'Save contact'}</button>
@@ -125,7 +125,7 @@ export function ContactsView({ owner, arg, initialQuery = '' }: { owner: boolean
       <Async s={s} rows={8} shape="table" empty={!n} emptyText={filtered ? 'No contact matches.' : 'No contacts yet.'}
         emptyHint={filtered ? 'Try fewer words or another type.' : 'Add your first supplier or customer. Saved chat numbers let LARIS recognise who is writing.'}
         emptyAction={filtered ? { label: 'Clear search', onClick: () => { setQ(''); setApplied(''); setKind('') } } : can('manage_contacts') ? { label: 'Add the first contact', onClick: () => setAdding(true) } : undefined}>
-        <DataTable label="Contacts" caption="Contacts" rows={s.data ?? []} rowKey={c => c.id} cols={cols(owner)} />
+        <div data-guide="ct-list"><DataTable label="Contacts" caption="Contacts" rows={s.data ?? []} rowKey={c => c.id} cols={cols(owner)} /></div>
       </Async>
     </>
   )

@@ -5,8 +5,9 @@ import { t, useLang } from './i18n'
 import { tx } from './strings'
 
 // The "?" guide: one step at a time, beside the page, pointing at the part of the page each step is about.
-// While it is open the rest of the page is blurred and dimmed (a mask with a hole over this step's part), and it closes by
-// itself when you go to another page.
+// A step that points at a part of the page blurs and dims the rest (a mask with a hole over that part); a step with nothing
+// to point at leaves the page alone. When the part is not there yet (an empty list) the panel shows an Example of it instead.
+// It closes by itself when you go to another page.
 const EVENT = 'laris:guide'
 export const openGuide = (navKey: string) => dispatchEvent(new CustomEvent(EVENT, { detail: navKey }))
 export const hasGuide = (navKey: string) => !!guideFor(navKey)
@@ -67,8 +68,11 @@ export function GuidePanel() {
       setSpot({ top: Math.max(8, r.top - 14), left: Math.max(8, r.left - 14), n: i + 1, hole: { x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 } })
     }
     const t1 = setTimeout(place, 400)
+    // "Try it" step: the person really clicks the ringed element, then the guide moves on.
+    const tryIt = (e: MouseEvent) => { if (guide!.steps[i].act && el.contains(e.target as Node)) setTimeout(() => setI(n => Math.min(n + 1, guide!.steps.length - 1)), 0) }
+    document.addEventListener('click', tryIt, true)
     addEventListener('scroll', place, true); addEventListener('resize', place)
-    return () => { clearTimeout(t1); removeEventListener('scroll', place, true); removeEventListener('resize', place); el.classList.remove('guide-spot') }
+    return () => { clearTimeout(t1); removeEventListener('scroll', place, true); removeEventListener('resize', place); document.removeEventListener('click', tryIt, true); el.classList.remove('guide-spot') }
   }, [key, i, guide])
 
   if (!guide) return null
@@ -78,7 +82,7 @@ export function GuidePanel() {
   // The mask goes straight under <body>: a blur only reaches what is behind it when no parent has its own filter or animation.
   return (
     <>
-      {createPortal(<Mask hole={spot?.hole} />, document.body)}
+      {spot && createPortal(<Mask hole={spot.hole} />, document.body)}
       {spot && <span aria-hidden="true" className="guide-badge" style={{ top: spot.top, left: spot.left }}>{spot.n}</span>}
       <section ref={box} role="dialog" aria-modal="false" aria-labelledby="guide-h" className="guide-panel">
         <div className="flex items-start justify-between gap-2">
@@ -100,6 +104,14 @@ export function GuidePanel() {
           <p className="text-base leading-relaxed">{t(step.text)}</p>
         </div>
         {step.target && <p className="mt-2 text-xs text-muted">{missing ? tx('guide.notHere') : tx('guide.pointing')}</p>}
+        {step.act && !missing && <p className="mt-2 rounded-ui border border-accent bg-tint p-2 text-sm font-semibold">{tx('guide.tryIt')}</p>}
+        {missing && step.sample && (
+          <div className="mt-3 rounded-ui border border-dashed border-line bg-tint p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{tx('guide.example')}</p>
+            <p className="mt-1 text-sm font-semibold">{t(step.sample.title)}</p>
+            <ul className="mt-1 grid gap-1 text-sm">{step.sample.lines.map((l, j) => <li key={j}>{t(l)}</li>)}</ul>
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap justify-between gap-2">
           <button type="button" className="btn" aria-disabled={i === 0 || undefined} onClick={() => i > 0 && setI(i - 1)}>{tx('guide.back')}</button>
           {i < n - 1
@@ -111,10 +123,9 @@ export function GuidePanel() {
   )
 }
 
-// Blur and dim everything except the hole: four panels round it (top, bottom, left, right). No hole: the whole page.
+// Blur and dim everything except the hole: four panels round it (top, bottom, left, right).
 // The panels take the clicks, so only this step's part of the page (and the guide itself) can be used.
-function Mask({ hole }: { hole?: { x: number; y: number; w: number; h: number } }) {
-  if (!hole) return <div aria-hidden="true" className="guide-mask" style={{ inset: 0 }} />
+function Mask({ hole }: { hole: { x: number; y: number; w: number; h: number } }) {
   const { x, y, w, h } = hole
   return (
     <>

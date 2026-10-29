@@ -64,7 +64,7 @@ export function QuoteSettingsCard() {
     )
   }
   return (
-    <section className="card mt-8 max-w-xl" aria-labelledby="qs">
+    <section className="card mt-8 max-w-xl" aria-labelledby="qs" data-guide="st-quotes">
       <h2 id="qs" className="text-lg font-semibold">Quotations</h2>
       <p className="mb-3 text-sm text-muted">Defaults for every new quote. Quotes you already made keep the values they had.</p>
       {s.error ? <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>

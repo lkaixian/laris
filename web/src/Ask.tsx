@@ -115,7 +115,7 @@ function AskForm({ onSent }: { onSent: () => void }) {
       <h2 id="ask-form" className="mb-2 text-lg font-semibold">Ask for a price</h2>
       <form className="grid max-w-2xl gap-4" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Photo of the item (take one or choose from the gallery)
-          <input id="ask-photo" ref={file} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => choose(e.target.files?.[0])} />
+          <input id="ask-photo" data-guide="ask-photo" ref={file} type="file" accept="image/*" capture="environment" className="input py-2 font-normal" onChange={e => choose(e.target.files?.[0])} />
         </label>
 
         {img && (
@@ -142,7 +142,7 @@ function AskForm({ onSent }: { onSent: () => void }) {
           <input ref={descBox} className="input font-normal" maxLength={200} placeholder="ballet flat, cream, strap" value={desc} onChange={e => setDesc(e.target.value)} />
         </label>
 
-        <fieldset className="min-w-0">
+        <fieldset data-guide="ask-suppliers" className="min-w-0">
           <legend className="mb-1 text-sm font-semibold">Which suppliers to ask? (choose at least one)</legend>
           <Async s={sup} rows={3} empty={!sup.data?.length} emptyText="No suppliers yet." emptyHint="Add the suppliers you want to ask under Contacts first." emptyAction={{ label: 'Add a supplier', href: '#/contacts/new' }}>
             <ul className="grid gap-1">
@@ -163,7 +163,7 @@ function AskForm({ onSent }: { onSent: () => void }) {
         </label>
 
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
-        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Sending...' : 'Send on WhatsApp'}</button></div>
+        <div><button type="submit" data-guide="ask-send" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? 'Sending...' : 'Send on WhatsApp'}</button></div>
       </form>
       <ActionError err={a.err} onRetry={submit} label="Retry sending" />
       {res && (
@@ -259,7 +259,7 @@ function Comparison({ q, onDone }: { q: Rfq; onDone: () => void }) {
 
 function Replies({ owner, s }: { owner: boolean; s: ReturnType<typeof useFetch<Rfq[]>> }) {
   return (
-    <section className="mt-10 border-t border-soft pt-6" aria-labelledby="ask-replies">
+    <section data-guide="ask-replies" className="mt-10 border-t border-soft pt-6" aria-labelledby="ask-replies">
       <h2 id="ask-replies" className="mb-2 text-lg font-semibold">Replies</h2>
       <Async s={s} rows={2} shape="cards" empty={!s.data?.length} emptyText="No price requests yet." emptyHint="Photograph an item above and ask your suppliers how much it costs. Their replies are compared here."
         emptyAction={{ label: 'Ask suppliers for a price', onClick: () => { const f = document.getElementById('ask-photo'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>

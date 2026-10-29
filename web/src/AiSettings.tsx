@@ -94,7 +94,7 @@ export function AiSettingsView() {
         {d && (
           <form className="grid max-w-3xl gap-5" onSubmit={e => { e.preventDefault(); if (!busy) save() }}>
             {d.legacy_assistant && <p className="card border-l-4 border-l-amber text-sm">{t(S.legacy, lang)}</p>}
-            <fieldset className="grid gap-1">
+            <fieldset className="grid gap-1" data-guide="ai-mode">
               <legend className="mb-1 text-sm font-semibold">{t(S.mode, lang)}</legend>
               {radio('ai-mode', mode === 'off', () => pick('off'), t(S.off, lang), t(S.offH, lang))}
               {radio('ai-mode', mode === 'guide', () => pick('guide'), t(S.guide, lang), t(S.guideH, lang))}
@@ -102,7 +102,7 @@ export function AiSettingsView() {
               {radio('ai-mode', mode === 'rag', () => pick('rag'), t(S.rag, lang), t(S.ragH, lang))}
             </fieldset>
             {mode !== 'off' && <>
-              <fieldset className="grid gap-1">
+              <fieldset className="grid gap-1" data-guide="ai-provider">
                 <legend className="mb-1 text-sm font-semibold">{t(S.prov, lang)}</legend>
                 {radio('ai-prov', prov === 'ilmu', () => setProv('ilmu'), t(S.ilmu, lang), d.available.ilmu ? undefined : t(S.noIlmu, lang), !d.available.ilmu)}
                 {radio('ai-prov', prov === 'custom', () => setProv('custom'), t(S.own, lang))}
@@ -123,7 +123,7 @@ export function AiSettingsView() {
                     </div>
                   </div>)}
               </fieldset>
-              <section className="rounded-ui border border-soft p-3" aria-labelledby="ai-notice">
+              <section className="rounded-ui border border-soft p-3" aria-labelledby="ai-notice" data-guide="ai-notice">
                 <h2 id="ai-notice" className="mb-1 text-sm font-semibold">{t(S.notice, lang)}</h2>
                 <p className="text-sm">{(mode === 'rag' ? d.rag_disclosure : d.disclosure).text}</p>
               </section>
@@ -131,7 +131,7 @@ export function AiSettingsView() {
                 <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={agree} aria-required="true" onChange={e => setAgree(e.target.checked)} />{t(S.agree, lang)}</label>
             </>}
             {err && <p role="alert" className="card border-warn bg-warn-bg text-warn">{err}</p>}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-guide="ai-save">
               <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? t(S.saving, lang) : t(S.save, lang)}</button>
               {d.mode !== 'off' && <button type="button" className="btn" aria-disabled={busy || undefined} onClick={() => !busy && test()}>{t(S.test, lang)}</button>}
               <span role="status" className="text-sm">{status}</span>
@@ -139,7 +139,7 @@ export function AiSettingsView() {
             {d.consent.at && d.mode !== 'off' && <p className="text-sm text-muted">{t(S.by, lang)} {d.consent.by} {t(S.on, lang)} {new Date(d.consent.at).toLocaleDateString()}</p>}
           </form>)}
       </Async>
-      <div className="mt-8"><AiActivity /></div>
+      <div className="mt-8" data-guide="ai-activity"><AiActivity /></div>
     </>
   )
 }

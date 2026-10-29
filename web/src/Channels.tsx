@@ -35,7 +35,7 @@ export function ChannelsCard() {
   return (
     <>
     <TelegramCards />
-    <section className="card mt-8 max-w-xl" aria-labelledby="ch">
+    <section className="card mt-8 max-w-xl" aria-labelledby="ch" data-guide="st-channels">
       <h2 id="ch" className="text-md font-semibold">Channels</h2>
       <p className="mb-3 text-sm text-muted">Tell LARIS which chat number is yours, so customer messages reach your business.</p>
       {s.error ? <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>Retry loading</button></div>

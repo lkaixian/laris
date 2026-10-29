@@ -53,7 +53,7 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
     })
   }
   return (
-    <details className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
+    <details data-guide="tk-form" className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Upload supplier quote</summary>
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Quote file (PDF, photo or text)
@@ -70,7 +70,7 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
       </form>
       <ActionError err={a.err} onRetry={submit} label="Retry reading the quote" />
       {res && (
-        <div ref={out} tabIndex={-1} className="card mt-3" aria-labelledby="up-res">
+        <div ref={out} data-guide="tk-result" tabIndex={-1} className="card mt-3" aria-labelledby="up-res">
           <h3 id="up-res" className="font-semibold">Added {res.doc.doc_no ?? 'supplier quote'} from {res.doc.party.name}</h3>
           <p className="text-sm">Status: {label(res.doc.status)}. <a className="link" href={`#/doc/${res.doc.id}`}>Open the supplier quote</a></p>
           {res.review.length > 0
@@ -99,7 +99,7 @@ function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: bool
     })
   }
   return (
-    <details className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
+    <details data-guide="tk-sim" className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Simulate customer enquiry</summary>
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">Channel it arrived on
@@ -147,7 +147,7 @@ export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   const shown = pick(all).length
   const filterName = filter === 'review' ? 'needing review' : filter === 'open' ? 'open customer quotes' : `with status ${label(filter)}`
   const lane = (title: string, hint: string, l: DocSummary[], extra: ReactNode, empty: { title: string; hint: string; action?: { label: string; onClick: () => void } }) => (
-    <section aria-labelledby={title} className="min-w-0">
+    <section aria-labelledby={title} data-guide={`tk-${title.toLowerCase()}`} className="min-w-0">
       <h2 id={title} className="border-b border-hairline pb-2 text-md font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
       {extra}
       {l.length ? <ul className="mt-3 divide-y divide-hairline rounded-card border border-hairline bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
@@ -157,7 +157,7 @@ export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   return (
     <>
       <PageHeader title="Quote tracker" description="Supplier quotes you received and customer quotes you sent, in one place."
-        actions={can('upload_documents') && <button type="button" className="btn btn-primary" {...gate(() => openForm('quote-file'))}>Upload quote</button>} />
+        actions={can('upload_documents') && <button type="button" data-guide="tk-upload" className="btn btn-primary" {...gate(() => openForm('quote-file'))}>Upload quote</button>} />
       <FilterBar label="Tracker filter" chips={filter ? [{ label: `Showing: ${filterName}`, onRemove: () => setFilter('') }] : []} onClear={() => setFilter('')}>
         <FilterSelect label="Filter" value={filter} onChange={setFilter}>
           <option value="">All documents</option>

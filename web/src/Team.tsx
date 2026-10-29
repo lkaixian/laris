@@ -35,8 +35,8 @@ function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; on
     <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv" data-tour="team-invite">
       <h2 id="inv" className="text-base font-semibold">Invite by email</h2>
       <p className="mb-2 text-sm text-muted">We email a link. The person chooses their own username and password, so you never see it.</p>
-      <form className="card grid max-w-xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" noValidate onSubmit={e => { e.preventDefault(); send() }}>
-        <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2">Email address
+      <form className="card grid max-w-xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" data-guide="tm-invite" noValidate onSubmit={e => { e.preventDefault(); send() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2" data-guide="tm-email">Email address
           <input className="input font-normal" type="email" name="invite_email" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={email}
             aria-invalid={formErr ? true : undefined} aria-describedby={formErr ? 'inv-err' : undefined} onChange={e => { setEmail(e.target.value); setFormErr('') }} /></label>
         <label className="flex flex-col gap-1 text-sm font-semibold">Role
@@ -47,7 +47,7 @@ function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; on
       <ActionError err={a.err} onRetry={send} label="Try again" />
       <h3 className="mt-6 text-base font-semibold">Pending invitations</h3>
       {rowErr && <p role="alert" className="mt-2 text-sm text-warn">{rowErr}</p>}
-      <div className="mt-2">
+      <div className="mt-2" data-guide="tm-pending">
         <Async s={s} rows={2} empty={!list.length} emptyText="No pending invitations." emptyHint="Invite a colleague by email and they show up here until they accept.">
           <ul className="grid gap-2">
             {list.map(i => (
@@ -111,7 +111,7 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <ActionError err={a.err} onRetry={() => last.current?.()} label="Try again" />
       <Async s={s} rows={3} empty={!s.data?.length} emptyText="No users yet." emptyHint="Add the first person below." >
-        <ul className="grid gap-2">
+        <ul className="grid gap-2" data-guide="tm-list">
           {s.data?.map(m => (
             <li key={m.id} className="card">
               <p className="flex flex-wrap items-center gap-2">
@@ -158,7 +158,7 @@ export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
         </ul>
       </Async>
       <Invites opts={opts} onChange={s.reload} />
-      <section className="mt-8 border-t border-soft pt-6" aria-labelledby="newu">
+      <section className="mt-8 border-t border-soft pt-6" aria-labelledby="newu" data-guide="tm-password">
         <h2 id="newu" className="text-base font-semibold">Add with a password</h2>
         <p className="text-sm text-muted">For people without an email address. You set the first password and tell them in person.</p>
         <form className="mt-2 grid max-w-xl gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); add() }}>

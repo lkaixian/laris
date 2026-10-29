@@ -12,7 +12,7 @@ function UsageCard() {
   const s = useFetch<Usage>('/usage')
   const u = s.data
   return (
-    <section className="mb-6" aria-labelledby="usage">
+    <section className="mb-6" aria-labelledby="usage" data-guide="api-usage">
       <h2 id="usage" className="mb-2 text-lg font-semibold">Usage this month</h2>
       <Async s={s} empty={false} rows={2}>
         {u && <>
@@ -63,12 +63,12 @@ function Keys() {
     <section className="mb-6" aria-labelledby="keys">
       <h2 id="keys" className="text-lg font-semibold">API keys</h2>
       <p className="mb-3 mt-1 text-sm text-muted">A key lets another program ask LARIS for prices. Each key works for your business only and can only read prices. It cannot see costs or margins.</p>
-      <form className="mb-4 flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); create() }}>
+      <form className="mb-4 flex flex-wrap items-end gap-2" data-guide="api-create" onSubmit={e => { e.preventDefault(); create() }}>
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-semibold">New key name
           <input className="input font-normal" maxLength={60} value={name} onChange={e => setName(e.target.value)} /></label>
         <button type="submit" className="btn btn-primary" aria-disabled={add.busy || undefined}>{add.busy ? 'Creating...' : 'Create key'}</button>
         <div className="w-full">
-          <label className="flex min-h-11 items-start gap-2 text-sm font-semibold">
+          <label className="flex min-h-11 items-start gap-2 text-sm font-semibold" data-guide="api-mcp">
             <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={ai} onChange={e => setAi(e.target.checked)} />
             <span>This key is for an AI tool (MCP)<span className="block font-normal text-muted">The tool can search your quotes, contacts and catalog, limited to what the role below may see. It needs your agreement under AI settings first. Names and contact details are replaced by placeholders, but addresses are not.</span></span></label>
           {ai && (
@@ -94,7 +94,7 @@ function Keys() {
         </div>
       )}
       <Async s={s} rows={2} empty={!list.length} emptyText="No API keys yet." emptyHint="Create a key above when another program needs to ask LARIS for prices.">
-        <ul className="grid gap-2">
+        <ul className="grid gap-2" data-guide="api-list">
           {list.map(k => (
             <li key={k.id} className="card">
               <p className="flex flex-wrap items-center gap-2"><span className="font-semibold">{k.name}</span>{k.mcp_role && <span className="badge">AI tool, acts as {k.mcp_role}</span>}{k.revoked && <span className="badge badge-warn">Revoked</span>}</p>
@@ -122,7 +122,7 @@ export function ApiAccessView() {
       <PageHeader title="API access" description="Let another program, such as your own system, ask LARIS for selling prices." />
       <UsageCard />
       <Keys />
-      <section className="card" aria-labelledby="how">
+      <section className="card" aria-labelledby="how" data-guide="api-how">
         <h2 id="how" className="text-lg font-semibold">How to call it</h2>
         <p className="mt-1 text-sm text-muted">Send your key in the X-API-Key header. Replace YOUR_API_KEY with your own key. Up to 60 requests a minute per key.</p>
         <pre className="mt-2 whitespace-pre-wrap break-all rounded-ui bg-soft p-3 font-mono text-xs">{`curl -H "X-API-Key: YOUR_API_KEY" ${base}/recipes

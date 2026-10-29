@@ -32,7 +32,7 @@ function DpoCard() {
       <input className="input font-normal" type={type} maxLength={k === 'dpo_email' ? 254 : 120} value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} /></label>
   )
   return (
-    <section className="card mb-6" aria-labelledby="dpo">
+    <section className="card mb-6" aria-labelledby="dpo" data-guide="pv-dpo">
       <h2 id="dpo" className="text-lg font-semibold">Who customers contact about their data</h2>
       <p className="mt-1 text-sm text-muted">Malaysian privacy law (PDPA) asks a business to publish a contact person for questions about personal data. Customers use it to ask what you hold about them.</p>
       <Async s={s} empty={false} rows={2}>
@@ -63,7 +63,7 @@ function AddIncident({ onDone }: { onDone: () => void }) {
     })
   }
   return (
-    <details className="card mb-4">
+    <details className="card mb-4" data-guide="pv-add">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">Add incident</summary>
       <form className="mt-2 grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">When did you find out?
@@ -157,7 +157,7 @@ function BreachRegister() {
   const list = s.data?.incidents ?? []
   const [confirmOn, setConfirmOn] = useState(readConfirm)
   return (
-    <section className="mb-6" aria-labelledby="breach">
+    <section className="mb-6" aria-labelledby="breach" data-guide="pv-breach">
       <h2 id="breach" className="text-lg font-semibold">Breach register</h2>
       <p className="mb-3 mt-1 text-sm text-muted">Write down any time personal data was lost, sent to the wrong person or seen by someone who should not. Incidents are kept as a record and cannot be deleted.</p>
       <label className="mb-3 flex min-h-11 items-center gap-2 text-sm">
@@ -201,7 +201,7 @@ function DataRequests() {
   const pick = (r: Req, action: 'erase' | 'dismiss') => { setNote(''); if (readConfirm()) setAsk({ r, action }); else decide(r, action) }
   const ch = (r: Req) => (r.channel === 'telegram' ? 'Telegram' : 'WhatsApp')
   return (
-    <section className="card" aria-labelledby="dsr">
+    <section className="card" aria-labelledby="dsr" data-guide="pv-requests">
       <h2 id="dsr" className="text-lg font-semibold">Customer data requests</h2>
       <p className="mt-1 text-sm">Customers can send /forget to your bot to ask you to erase their data. Nothing is erased until you decide here. To download a person&apos;s data, open their page in <a className="link" href="#/contacts">Contacts</a>.</p>
       {note && <p role="status" className="mt-2 text-sm font-semibold">{note}</p>}

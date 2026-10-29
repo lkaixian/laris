@@ -16,7 +16,7 @@ interface Row { key: string; title: string; path: string; href: string; icon: Ic
 interface Found { contacts: { id: string; name: string; role: string }[]; documents: DocSummary[] }
 
 const S = {
-  placeholder: { en: 'Search or jump to...', ms: 'Cari atau pergi ke...' },
+  placeholder: { en: 'Search or jump to...', ms: 'Cari atau pergi ke...', zh: '搜索或跳转...', ta: 'தேடு அல்லது செல்...' },
   fns: { en: 'Functions', ms: 'Fungsi' }, recs: { en: 'Records', ms: 'Rekod' }, recent: { en: 'Recent', ms: 'Terkini' },
   try: { en: 'Try: invite, export, approve', ms: 'Cuba: jemput, eksport, lulus' },
   none: { en: 'Nothing matches', ms: 'Tiada padanan untuk' }, tryNone: { en: 'Try: invite, export, quote.', ms: 'Cuba: jemput, eksport, sebut harga.' },

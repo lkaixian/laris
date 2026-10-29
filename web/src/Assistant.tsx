@@ -4,6 +4,8 @@ import { PageHeader, msg, useFetch } from './ui'
 import { ConfirmDialog } from './kit'
 import { useToast } from './Toast'
 import { Icon } from './icons'
+import { tx } from './strings'
+import { useLang } from './i18n'
 
 // Look-up assistant. The server lets the model pick what to look up; the answer is built from your data. For two safe actions (move a job,
 // skip a follow-up) it only PROPOSES: this screen shows a confirm step, then calls the normal route, which checks the permission again.
@@ -53,8 +55,8 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
     try {
       await api('POST', req[0], req[1])
       setDone(d => new Set(d).add(a.kind + a.id))
-      setTurns(x => [...x, { from: 'done', text: `Done: ${a.label}.` }])
-      toast(`Done: ${a.label}.`)
+      setTurns(x => [...x, { from: 'done', text: tx('as.done', a.label) }])
+      toast(tx('as.done', a.label))
       dispatchEvent(new Event('laris:changed'))
     } catch (e) { setTurns(x => [...x, { from: 'err', text: msg(e) }]) }
     finally { setBusy(false); input.current?.focus() }
@@ -63,48 +65,48 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
   const id = compact ? 'ask-w' : 'ask'
   return (
     <div className={`flex flex-col gap-3 ${compact ? 'min-h-0 flex-1' : 'card max-w-2xl'}`}>
-      <div role="log" aria-live="polite" aria-label="Conversation" className={`flex flex-col gap-3 ${compact ? 'min-h-0 flex-1 overflow-y-auto pr-1' : 'min-h-48'}`}>
-        {turns.length === 0 && <p className="text-sm text-muted">Ask about your quotes, contacts, costs and jobs, or ask me to move a job or skip a follow-up. You confirm every change.</p>}
+      <div role="log" aria-live="polite" aria-label={tx('as.conversation')} className={`flex flex-col gap-3 ${compact ? 'min-h-0 flex-1 overflow-y-auto pr-1' : 'min-h-48'}`}>
+        {turns.length === 0 && <p className="text-sm text-muted">{tx('as.empty')}</p>}
         {turns.map((t, i) => t.from === 'me' ? (
-          <p key={i} className="self-end rounded-ui bg-tint px-3 py-2 text-sm"><span className="sr-only">You: </span>{t.text}</p>
+          <p key={i} className="self-end rounded-ui bg-tint px-3 py-2 text-sm"><span className="sr-only">{tx('as.you')}</span>{t.text}</p>
         ) : t.from === 'err' ? (
           <p key={i} role="alert" className="self-start rounded-ui border border-warn bg-warn-bg px-3 py-2 text-sm text-warn">{t.text}</p>
         ) : t.from === 'done' ? (
           <p key={i} className="self-start rounded-ui border border-soft px-3 py-2 text-sm font-semibold"><Icon name="check" className="mr-1 inline size-4" />{t.text}</p>
         ) : (
           <div key={i} className="self-start rounded-ui border border-soft px-3 py-2 text-sm">
-            <p><span className="sr-only">Assistant: </span>{t.a.reply}</p>
+            <p><span className="sr-only">{tx('as.bot')}</span>{t.a.reply}</p>
             {t.a.items.length > 0 && <ul className="mt-2 grid gap-1">{t.a.items.map((it, j) => <li key={j}><a className="link inline-flex min-h-11 items-center" href={it.href} onClick={onNavigate}>{it.label}</a></li>)}</ul>}
             {!!t.a.actions?.length && (
-              <ul className="mt-2 grid gap-2" aria-label="Proposed actions">
+              <ul className="mt-2 grid gap-2" aria-label={tx('as.proposed')}>
                 {t.a.actions.map(a => (
                   <li key={a.kind + a.id}>
-                    {done.has(a.kind + a.id) ? <span className="text-muted">Done: {a.label}</span>
+                    {done.has(a.kind + a.id) ? <span className="text-muted">{tx('as.done', a.label)}</span>
                       : <button type="button" className="btn text-left" aria-disabled={busy || undefined} onClick={() => !busy && setPending(a)}>{a.label}...</button>}
                   </li>
                 ))}
               </ul>
             )}
-            {t.a.source === 'keywords' && <p className="mt-2 text-xs text-muted">The AI service is unavailable, so this answer used keywords only.</p>}
+            {t.a.source === 'keywords' && <p className="mt-2 text-xs text-muted">{tx('as.keywords')}</p>}
             {t.a.suggestions.length > 0 && <p className="mt-2 flex flex-wrap gap-2">{t.a.suggestions.map(s => <button key={s} type="button" className="btn" onClick={() => ask(s)}>{s}</button>)}</p>}
           </div>
         ))}
-        {busy && <p role="status" className="text-sm text-muted">Working...</p>}
+        {busy && <p role="status" className="text-sm text-muted">{tx('as.working')}</p>}
         <div ref={end} />
       </div>
-      {sug.error && turns.length === 0 && <p className="text-sm text-muted">Suggested questions could not be loaded. You can still type your own.</p>}
+      {sug.error && turns.length === 0 && <p className="text-sm text-muted">{tx('as.sugFailed')}</p>}
       {sug.data && turns.length === 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Suggested questions">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={tx('as.suggested')}>
           {sug.data.map(s => <button key={s} type="button" className="btn" onClick={() => ask(s)}>{s}</button>)}
         </div>
       )}
       <form className="flex gap-2" onSubmit={e => { e.preventDefault(); ask(text) }}>
-        <label className="sr-only" htmlFor={id}>Your question</label>
-        <input id={id} ref={input} className="input min-w-0 flex-1" maxLength={500} autoComplete="off" value={text} placeholder="For example: move job QT-0005 to done" onChange={e => setText(e.target.value)} />
-        <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>Ask</button>
+        <label className="sr-only" htmlFor={id}>{tx('as.question')}</label>
+        <input id={id} ref={input} className="input min-w-0 flex-1" maxLength={500} autoComplete="off" value={text} placeholder={tx('as.placeholder')} onChange={e => setText(e.target.value)} />
+        <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{tx('as.ask')}</button>
       </form>
-      <ConfirmDialog open={!!pending} title="Do this now?" confirmLabel="Yes, do it" onCancel={() => setPending(undefined)} onConfirm={() => pending && run(pending)}
-        body={<><p className="font-semibold">{pending?.label}</p><p className="mt-2 text-sm text-muted">It is saved under your name in the activity log, exactly as if you had clicked it on the page.</p></>} />
+      <ConfirmDialog open={!!pending} title={tx('as.confirmTitle')} confirmLabel={tx('as.confirmYes')} onCancel={() => setPending(undefined)} onConfirm={() => pending && run(pending)}
+        body={<><p className="font-semibold">{pending?.label}</p><p className="mt-2 text-sm text-muted">{tx('as.confirmNote')}</p></>} />
     </div>
   )
 }
@@ -112,7 +114,7 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
 export function AssistantView() {
   return (
     <>
-      <PageHeader title="Assistant" description="Ask about your quotes, contacts, costs and jobs. It can move a job or skip a follow-up after you confirm. It never prices, approves, sends or deletes anything." />
+      <PageHeader title={tx('as.title')} description={tx('as.lead')} />
       <AssistantChat />
     </>
   )
@@ -120,6 +122,7 @@ export function AssistantView() {
 
 // Floating "Ask" button on every page (bottom right) that opens the same chat in a side panel. Hidden on the Assistant page itself.
 export function AssistantWidget({ hidden }: { hidden?: boolean }) {
+  useLang()  // redraw in the chosen language (the widget is outside the page that is redrawn)
   const [open, setOpen] = useState(false)
   const btn = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)
@@ -138,15 +141,15 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
         <section ref={panel} role="dialog" aria-modal="false" aria-labelledby="ask-w-h"
           className="fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 rounded-card border border-hairline bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="ask-w-h" className="text-md font-semibold">Assistant</h2>
-            <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>Close<span className="sr-only"> the assistant</span></button>
+            <h2 id="ask-w-h" className="text-md font-semibold">{tx('as.title')}</h2>
+            <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>{tx('as.close')}<span className="sr-only">{tx('as.theAssistant')}</span></button>
           </div>
           <AssistantChat compact onNavigate={() => setOpen(false)} />
         </section>
       )}
       <button ref={btn} type="button" aria-expanded={open}
         className="btn btn-primary fixed right-4 bottom-4 z-40 min-h-12 gap-2 rounded-full px-4 shadow-lg" onClick={() => setOpen(!open)}>
-        <Icon name="ask" className="size-5" />Ask<span className="sr-only"> the assistant</span>
+        <Icon name="ask" className="size-5" />{tx('as.ask')}<span className="sr-only">{tx('as.theAssistant')}</span>
       </button>
     </>
   )

@@ -136,6 +136,7 @@
   .chip.heat-stale::before { border-radius: 1px; }
   .heat-edge { border-left: 4px solid var(--heat-fg, var(--hairline)); }
   .chip-warn::before { display: none; }
+  .chip-warn { white-space: normal; max-width: 100%; height: auto; }  /* an overdue reason can be long, and longer in Malay or Tamil: let it wrap */
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .badge-warn { @apply border-warn bg-warn-bg text-warn; }
   .link { @apply text-accent underline underline-offset-2 transition-colors hover:text-accent-hover; }

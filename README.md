@@ -79,7 +79,7 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS (English and Bahasa Melayu help, tour and command palette) |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS (language switch: English, Bahasa Melayu, Chinese, Tamil) |
 | Backend | Python, FastAPI, uvicorn, APScheduler |
 | Database | PostgreSQL (row-level security); PGlite for tests |
 | AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR (PaddleOCR optional) |
@@ -194,7 +194,8 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
   - OCR accuracy on real receipts is unmeasured. Minutes saved per quote and margin protected: [REAL DATA needed], nobody has timed a manual quote yet.
   - All data is synthetic. Single-process deployment with no failover; some rate limits and the 15-minute catalog memory are per process.
   - Row-level security and the database roles have not been tried on Replit's own Postgres, only on PGlite.
-  - Emails, the command palette, the guided tour and the customer accept page have not been checked in real mail clients, browsers or phones. Malay text is not reviewed by a native speaker.
+  - Emails, the command palette, the guided tour and the customer accept page have not been checked in real mail clients, browsers or phones. Malay, Chinese and Tamil text is not reviewed by native speakers.
+  - Chinese and Tamil cover the menus, status labels and the Jobs, Follow-ups, Track, Activity and Assistant screens; other pages, the help articles, the tour, server messages and Assistant answers still show in English (help, tour and palette also in Malay).
   - The AI guide has not been checked against a live model, and neither have the Assistant's proposed actions (move a job, skip a follow-up); they were tested with a mocked model and keyword fallback only.
   - Age colour bands are fixed (0 to 1, 2 to 3, 4 to 7, 8 or more days) and not set per business. The floating Ask panel, the activity log download and the New job form have been checked in mock mode at 1440px and 360px, not with a screen reader or on a real phone.
   - PDPA: the tools above exist, but the legal wording is not reviewed by a lawyer, the 72 hour and 7 day deadlines come from law-firm summaries and are not verified at pdp.gov.my, and no data protection officer is named. Do not use real customer data until `docs/privacy-and-breach-runbook.md` is completed.

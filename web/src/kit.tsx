@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { tx } from './strings'
 import type { ReactNode } from 'react'
 import { TableRegion } from './ui'
 import { Icon } from './icons'
@@ -78,11 +79,11 @@ export function FilterBar({ label, search, children, right, chips, onClear }: {
         {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
       </form>
       {chips && chips.length > 0 && (
-        <ul className="mt-2 flex flex-wrap items-center gap-2" aria-label="Active filters">
+        <ul className="mt-2 flex flex-wrap items-center gap-2" aria-label={tx('common.activeFilters')}>
           {chips.map(c => (
-            <li key={c.label}><button type="button" className="btn btn-sm gap-1 px-2 text-xs" aria-label={`Remove filter ${c.label}`} onClick={c.onRemove}>{c.label}<Icon name="close" className="size-3" /></button></li>
+            <li key={c.label}><button type="button" className="btn btn-sm gap-1 px-2 text-xs" aria-label={tx('common.removeFilter', c.label)} onClick={c.onRemove}>{c.label}<Icon name="close" className="size-3" /></button></li>
           ))}
-          {onClear && <li><button type="button" className="link inline-flex min-h-(--control-h-sm) items-center text-sm" onClick={onClear}>Clear all</button></li>}
+          {onClear && <li><button type="button" className="link inline-flex min-h-(--control-h-sm) items-center text-sm" onClick={onClear}>{tx('common.clearAll')}</button></li>}
         </ul>
       )}
     </div>
@@ -153,7 +154,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, danger, onConfi
       <h2 id="cd-title" className="text-md font-semibold">{title}</h2>
       <div className="mt-2 text-base text-ink-2">{body}</div>
       <div className="mt-5 flex justify-end gap-2">
-        <button ref={cancel} type="button" className="btn" onClick={onCancel}>Cancel</button>
+        <button ref={cancel} type="button" className="btn" onClick={onCancel}>{tx('common.cancel')}</button>
         <button type="button" className={`btn ${danger ? 'btn-danger bg-warn-bg font-bold' : 'btn-primary'}`} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </dialog>

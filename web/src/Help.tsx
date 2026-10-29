@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { EmptyState, PageHeader } from './ui'
-import { t, useLang } from './i18n'
+import { pick, t, useLang } from './i18n'
 import type { Lang, Text } from './i18n'
 import { ARTICLES, findArticle } from './help/articles'
 import type { Article } from './help/articles'
@@ -20,7 +20,7 @@ const S = {
   owner: { en: 'Owner', ms: 'Pemilik' }, staff: { en: 'Staff', ms: 'Staf' },
 } satisfies Record<string, Text>
 
-const hay = (a: Article, l: Lang) => [a.title[l], a.summary[l], ...a.keywords[l]].join(' ').toLowerCase()
+const hay = (a: Article, l: Lang) => [pick(a.title, l), pick(a.summary, l), ...pick(a.keywords, l)].join(' ').toLowerCase()
 // Every word typed must appear in the title, summary or keywords, in the current language or the other one.
 const matches = (a: Article, q: string) => q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay(a, 'en').includes(w) || hay(a, 'ms').includes(w))
 

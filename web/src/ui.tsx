@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError, DENIED } from './api'
+import { tx, txOr } from './strings'
 import type { Me } from './api'
 import { Icon } from './icons'
 
@@ -240,7 +241,7 @@ export const STATUS_LABEL: Record<string, string> = {
   job_created: 'Job created', expired: 'Expired', rejected: 'Rejected', cancelled: 'Cancelled', superseded: 'Superseded', waiting: 'Waiting for supplier', needs_review: 'Needs review', ready: 'Ready',
   confirmed: 'Confirmed', discarded: 'Discarded',
 }
-export const stageLabel = (s: string) => STATUS_LABEL[s] ?? s.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+export const stageLabel = (s: string) => txOr(`st.${s}`, STATUS_LABEL[s] ?? s.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()))
 export const STATUS_CHIP: Record<string, string> = {
   received: 'draft', draft: 'draft', parsed: 'draft', waiting: 'draft', needs_review: 'warn',
   reviewed: 'approved', approved: 'approved', ready: 'approved', confirmed: 'approved', in_cost_book: 'approved',
@@ -253,21 +254,23 @@ export function Status({ v }: { v: string }) {
 }
 // Age colour bands from the server (src/track_rules.py heat): fresh 0-1 days, waiting 2-3, late 4-7, stale 8+.
 export type Heat = 'fresh' | 'waiting' | 'late' | 'stale'
-export const HEAT: [Heat, string, string][] = [['fresh', 'Fresh', '0 to 1 day'], ['waiting', 'Waiting', '2 to 3 days'], ['late', 'Late', '4 to 7 days'], ['stale', 'Stale', '8 days or more']]
-export const heatName = (h: Heat) => HEAT.find(x => x[0] === h)?.[1] ?? h
-const dayWord = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
+export const HEAT_BANDS: Heat[] = ['fresh', 'waiting', 'late', 'stale']
+// [band, name, day range] in the current language
+export const heatRows = (): [Heat, string, string][] => HEAT_BANDS.map(h => [h, txOr(`heat.${h}`, h), txOr(`heat.range.${h}`, '')])
+export const heatName = (h: Heat) => txOr(`heat.${h}`, h)
+const dayWord = (n: number) => tx('common.days', n)
 export const HeatChip = ({ heat, days }: { heat?: Heat | null; days: number }) =>
   heat ? <span className={`chip heat-${heat} tabular-nums`}>{`${heatName(heat)}, ${dayWord(days)}`}</span> : <span className="text-muted tabular-nums">{dayWord(days)}</span>
 export function HeatLegend({ counts }: { counts?: Partial<Record<Heat, number>> }) {
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm text-muted" aria-label="Age colours">
-      <span>Age colours:</span>
-      {HEAT.map(([h, name, range]) => <span key={h} className={`chip heat-${h}`}>{`${name} ${range}${counts ? ` (${counts[h] ?? 0})` : ''}`}</span>)}
+      <span>{tx('heat.legend')}</span>
+      {heatRows().map(([h, name, range]) => <span key={h} className={`chip heat-${h}`}>{`${name} ${range}${counts ? ` (${counts[h] ?? 0})` : ''}`}</span>)}
     </p>
   )
 }
 
-export const OverdueChip = ({ reason }: { reason?: string | null }) => <span className="chip chip-warn"><Icon name="warn" className="size-3" />Overdue{reason ? `: ${reason}` : ''}</span>
+export const OverdueChip = ({ reason }: { reason?: string | null }) => <span className="chip chip-warn"><Icon name="warn" className="size-3" />{tx('common.overdue')}{reason ? `: ${txOr(`why.${reason}`, reason)}` : ''}</span>
 
 // Slim status line in the shell's banner slot. Offline: say changes cannot be saved. Back online: say so for 3 s and tell loaders that failed to try again ('laris:online').
 export function OfflineBanner() {

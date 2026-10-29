@@ -3,6 +3,8 @@ import { api, can, download, why } from './api'
 import { EmptyState, PageHeader, Skeleton, msg } from './ui'
 import { FilterBar, FilterSelect } from './kit'
 import { useToast } from './Toast'
+import { tx, txOr } from './strings'
+import { locale } from './i18n'
 
 // Activity log: filters (dates, person, module, action, words), newest first, older pages on demand, new rows every 4 s,
 // and a download of only the ticked entries (or of everything that matches the filters) as CSV or PDF.
@@ -14,14 +16,10 @@ const PAGE = 100
 const MAX_EXPORT = 1000
 
 // Friendly names for the modules the log records (the table each entry is about). Unknown ones show their own name.
-const MODULES: Record<string, string> = {
-  documents: 'Quotes and supplier documents', document_lines: 'Quote lines', cost_items: 'Cost book', jobs: 'Jobs', followups: 'Follow-ups',
-  parties: 'Contacts', listing_items: 'Catalog products', listings: 'Catalog photos', rfq_items: 'Ask suppliers', tenants: 'Settings',
-  users: 'Team', roles: 'Roles', audit_log: 'Activity log', licenses: 'Licence', api_keys: 'API access',
-}
-const ACTIONS: [string, string][] = [['created', 'Created'], ['status', 'Status changed'], ['other', 'Other changes']]
-const moduleName = (m: string) => MODULES[m] ?? m.replace(/_/g, ' ')
-const actionName = (a: string) => ACTIONS.find(x => x[0] === a)?.[1] ?? a
+// (strings.ts, keys mod.<table>; unknown tables show their own name)
+const ACTION_KEYS = ['created', 'status', 'other'] as const
+const moduleName = (m: string) => txOr(`mod.${m}`, m.replace(/_/g, ' '))
+const actionName = (a: string) => txOr(`act.a.${a}`, a)
 
 const qs = (f: Filters, extra: Record<string, string> = {}) => {
   const p = new URLSearchParams()
@@ -74,7 +72,7 @@ export function ActivityView() {
         if (d.items.length) {
           top.current = d.items[0].id
           setRows(r => [...d.items.filter(x => !r.some(y => y.id === x.id)), ...r])
-          setAnnounce(`${d.items.length} new ${d.items.length === 1 ? 'entry' : 'entries'}`)
+          setAnnounce(tx('act.newEntries', d.items.length))
         }
         setChecked(new Date().toLocaleTimeString())
       } catch { /* the next tick tries again; the error banner is for the main load */ }
@@ -85,12 +83,12 @@ export function ActivityView() {
   const set = (p: Partial<Filters>) => setF(x => ({ ...x, ...p }))
   const active = Object.values(f).some(v => v.trim())
   const chips = [
-    ...(f.from ? [{ label: `From ${f.from}`, onRemove: () => set({ from: '' }) }] : []),
-    ...(f.to ? [{ label: `To ${f.to}`, onRemove: () => set({ to: '' }) }] : []),
-    ...(f.actor ? [{ label: `Person: ${f.actor}`, onRemove: () => set({ actor: '' }) }] : []),
-    ...(f.module ? [{ label: `Module: ${moduleName(f.module)}`, onRemove: () => set({ module: '' }) }] : []),
-    ...(f.action ? [{ label: `Action: ${actionName(f.action)}`, onRemove: () => set({ action: '' }) }] : []),
-    ...(f.q ? [{ label: `Words: ${f.q}`, onRemove: () => { set({ q: '' }); setQd('') } }] : []),
+    ...(f.from ? [{ label: tx('act.chip.from', f.from), onRemove: () => set({ from: '' }) }] : []),
+    ...(f.to ? [{ label: tx('act.chip.to', f.to), onRemove: () => set({ to: '' }) }] : []),
+    ...(f.actor ? [{ label: tx('act.chip.person', f.actor), onRemove: () => set({ actor: '' }) }] : []),
+    ...(f.module ? [{ label: tx('act.chip.module', moduleName(f.module)), onRemove: () => set({ module: '' }) }] : []),
+    ...(f.action ? [{ label: tx('act.chip.action', actionName(f.action)), onRemove: () => set({ action: '' }) }] : []),
+    ...(f.q ? [{ label: tx('act.chip.words', f.q), onRemove: () => { set({ q: '' }); setQd('') } }] : []),
   ]
   const allShown = rows.length > 0 && rows.every(r => picked.has(r.id))
   const toggle = (id: number) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -98,70 +96,70 @@ export function ActivityView() {
 
   const exportAs = async (format: 'csv' | 'pdf', chosen: boolean) => {
     if (busy) return
-    if (chosen && picked.size > MAX_EXPORT) return setError(`Choose at most ${MAX_EXPORT} entries to download.`)
+    if (chosen && picked.size > MAX_EXPORT) return setError(tx('act.tooMany', MAX_EXPORT))
     setBusy(`${chosen ? 'sel' : 'all'}-${format}`); setError('')
     const day = new Date().toISOString().slice(0, 10)
     try {
       const p = chosen ? `format=${format}&ids=${[...picked].join(',')}` : qs(filters, { format })
       await download(`/audit/export?${p}`, `activity-log-${day}.${format}`)
-      toast(`Activity log downloaded as ${format.toUpperCase()}${chosen ? `, ${picked.size} ${picked.size === 1 ? 'entry' : 'entries'}` : ''}.`)
+      toast(tx('act.downloaded', format.toUpperCase(), chosen ? picked.size : 0))
     } catch (e) { setError(msg(e)) } finally { setBusy('') }
   }
 
   return (
     <>
-      <PageHeader title="Activity log" description={`Newest first. New entries appear every 4 seconds.${checked ? ` Last checked ${checked}.` : ''}`} />
+      <PageHeader title={tx('act.title')} description={tx('act.lead', checked)} />
       <p role="status" className="sr-only">{announce}</p>
-      <FilterBar label="Activity filters" search={{ value: f.q, onChange: v => set({ q: v }), label: 'Search the event words' }} chips={chips}
+      <FilterBar label={tx('act.filters')} search={{ value: f.q, onChange: v => set({ q: v }), label: tx('act.search') }} chips={chips}
         onClear={active ? () => { setF(EMPTY); setQd('') } : undefined}>
-        <label className="input flex items-center gap-1 bg-surface py-0"><span className="text-muted">From:</span>
+        <label className="input flex items-center gap-1 bg-surface py-0"><span className="text-muted">{tx('act.from')}:</span>
           <input type="date" className="min-w-0 bg-transparent py-1 font-medium text-ink" value={f.from} max={f.to || undefined} onChange={e => set({ from: e.target.value })} /></label>
-        <label className="input flex items-center gap-1 bg-surface py-0"><span className="text-muted">To:</span>
+        <label className="input flex items-center gap-1 bg-surface py-0"><span className="text-muted">{tx('act.to')}:</span>
           <input type="date" className="min-w-0 bg-transparent py-1 font-medium text-ink" value={f.to} min={f.from || undefined} onChange={e => set({ to: e.target.value })} /></label>
-        <FilterSelect label="Person" value={f.actor} onChange={v => set({ actor: v })}>
-          <option value="">Anyone</option>{facets.people.map(p => <option key={p} value={p}>{p}</option>)}
+        <FilterSelect label={tx('act.person')} value={f.actor} onChange={v => set({ actor: v })}>
+          <option value="">{tx('act.anyone')}</option>{facets.people.map(p => <option key={p} value={p}>{p}</option>)}
         </FilterSelect>
-        <FilterSelect label="Module" value={f.module} onChange={v => set({ module: v })}>
-          <option value="">All</option>{facets.modules.map(m => <option key={m} value={m}>{moduleName(m)}</option>)}
+        <FilterSelect label={tx('act.module')} value={f.module} onChange={v => set({ module: v })}>
+          <option value="">{tx('common.all')}</option>{facets.modules.map(m => <option key={m} value={m}>{moduleName(m)}</option>)}
         </FilterSelect>
-        <FilterSelect label="Action" value={f.action} onChange={v => set({ action: v })}>
-          <option value="">Any</option>{ACTIONS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+        <FilterSelect label={tx('act.action')} value={f.action} onChange={v => set({ action: v })}>
+          <option value="">{tx('common.any')}</option>{ACTION_KEYS.map(v => <option key={v} value={v}>{actionName(v)}</option>)}
         </FilterSelect>
       </FilterBar>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-hairline p-2" role="group" aria-label="Download">
-        <span className="text-sm font-semibold">{picked.size ? `${picked.size} ${picked.size === 1 ? 'entry' : 'entries'} chosen` : 'No entries chosen'}</span>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-hairline p-2" role="group" aria-label={tx('act.download')}>
+        <span className="text-sm font-semibold">{picked.size ? tx('act.chosen', picked.size) : tx('act.noneChosen')}</span>
         {exportOk ? <>
-          <button type="button" className="btn btn-primary" aria-disabled={!picked.size || !!busy || undefined} onClick={() => picked.size && exportAs('csv', true)}>{busy === 'sel-csv' ? 'Preparing...' : 'Download chosen as CSV'}</button>
-          <button type="button" className="btn" aria-disabled={!picked.size || !!busy || undefined} onClick={() => picked.size && exportAs('pdf', true)}>{busy === 'sel-pdf' ? 'Preparing...' : 'Download chosen as PDF'}</button>
-          <span className="text-sm text-muted">or everything that matches the filters (up to {MAX_EXPORT}):</span>
-          <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('csv', false)}>{busy === 'all-csv' ? 'Preparing...' : 'All matching as CSV'}</button>
-          <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('pdf', false)}>{busy === 'all-pdf' ? 'Preparing...' : 'All matching as PDF'}</button>
-        </> : <span className="text-sm text-muted">{why('export_data')} to download entries.</span>}
+          <button type="button" className="btn btn-primary" aria-disabled={!picked.size || !!busy || undefined} onClick={() => picked.size && exportAs('csv', true)}>{busy === 'sel-csv' ? tx('act.preparing') : tx('act.dlChosen', 'CSV')}</button>
+          <button type="button" className="btn" aria-disabled={!picked.size || !!busy || undefined} onClick={() => picked.size && exportAs('pdf', true)}>{busy === 'sel-pdf' ? tx('act.preparing') : tx('act.dlChosen', 'PDF')}</button>
+          <span className="text-sm text-muted">{tx('act.orAll', MAX_EXPORT)}</span>
+          <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('csv', false)}>{busy === 'all-csv' ? tx('act.preparing') : tx('act.dlAll', 'CSV')}</button>
+          <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('pdf', false)}>{busy === 'all-pdf' ? tx('act.preparing') : tx('act.dlAll', 'PDF')}</button>
+        </> : <span className="text-sm text-muted">{tx('act.needExport', why('export_data'))}</span>}
       </div>
 
-      {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button type="button" className="btn mt-3" onClick={() => void load()}>Retry loading</button></div>}
+      {error && <div role="alert" className="card mb-3 border-warn bg-warn-bg text-warn"><p>{error}</p><button type="button" className="btn mt-3" onClick={() => void load()}>{tx('common.retry')}</button></div>}
       {loading && !rows.length ? <Skeleton rows={5} shape="text" /> : !rows.length && !error
-        ? (active ? <EmptyState title="No entries match these filters." action={{ label: 'Clear filters', onClick: () => { setF(EMPTY); setQd('') } }} />
-          : <EmptyState title="No activity yet." hint="Uploads, approvals and sign-ins are listed here as they happen." />)
+        ? (active ? <EmptyState title={tx('act.noMatch')} action={{ label: tx('common.clearFilters'), onClick: () => { setF(EMPTY); setQd('') } }} />
+          : <EmptyState title={tx('act.none')} hint={tx('act.noneHint')} />)
         : <>
           <label className="mb-2 flex min-h-11 items-center gap-3 px-1 text-sm font-semibold">
-            <input type="checkbox" className="size-5" checked={allShown} onChange={toggleAll} />Choose all {rows.length} shown
+            <input type="checkbox" className="size-5" checked={allShown} onChange={toggleAll} />{tx('act.chooseAll', rows.length)}
           </label>
           <ol className="grid gap-2">
             {rows.map(e => (
               <li key={e.id} className={`card flex items-start gap-3 text-sm ${picked.has(e.id) ? 'bg-tint' : ''}`}>
-                <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={picked.has(e.id)} onChange={() => toggle(e.id)} aria-label={`Choose entry ${e.id}: ${e.event}`} />
+                <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={picked.has(e.id)} onChange={() => toggle(e.id)} aria-label={tx('act.chooseOne', e.id, e.event)} />
                 <div className="min-w-0">
                   <p className="break-words font-semibold">{e.event}</p>
-                  <p className="text-muted"><time dateTime={e.at}>{new Date(e.at).toLocaleString()}</time>, by {e.actor} · {moduleName(e.entity)} · {actionName(e.action)} · entry {e.id}</p>
+                  <p className="text-muted"><time dateTime={e.at}>{new Date(e.at).toLocaleString(locale())}</time>, {tx('act.by', e.actor)} · {moduleName(e.entity)} · {actionName(e.action)} · {tx('act.entry', e.id)}</p>
                 </div>
               </li>
             ))}
           </ol>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted">{rows.length} shown{more ? ', older entries available' : ''}</span>
-            {more && <button type="button" className="btn" aria-disabled={loading || undefined} onClick={() => !loading && void load(rows[rows.length - 1].id)}>{loading ? 'Loading...' : 'Load older entries'}</button>}
+            <span className="text-sm text-muted">{tx('act.shownOlder', rows.length, more)}</span>
+            {more && <button type="button" className="btn" aria-disabled={loading || undefined} onClick={() => !loading && void load(rows[rows.length - 1].id)}>{loading ? tx('common.loading') : tx('act.loadOlder')}</button>}
           </div>
         </>}
     </>

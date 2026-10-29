@@ -2,6 +2,7 @@ import { can, canOpen } from './api'
 import type { Me } from './api'
 import type { IconName } from './icons'
 import type { Lang, Text } from './i18n'
+import { pick } from './i18n'
 import { canUpload } from './Listings'
 import { licenceOn, issuerOn } from './Licence'
 import { ARTICLES } from './help/articles'
@@ -89,12 +90,12 @@ const rank = (term: string, q: string) => {
 export function matchFns(list: Fn[], query: string, lang: Lang): Fn[] {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  const other: Lang = lang === 'en' ? 'ms' : 'en'
+  const other: Lang = lang === 'en' ? 'ms' : 'en'  // Chinese and Tamil search the English and Malay words
   const scored: { f: Fn; s: number }[] = []
   for (const f of list) {
     let s = 99
     for (const [l, pen] of [[lang, 0], [other, 1]] as const)
-      for (const term of [f.label[l], ...f.keywords[l]]) { const r = rank(term, q); if (r >= 0) s = Math.min(s, r * 2 + pen) }
+      for (const term of [pick(f.label, l), ...pick(f.keywords, l)]) { const r = rank(term, q); if (r >= 0) s = Math.min(s, r * 2 + pen) }
     if (s < 99) scored.push({ f, s })
   }
   return scored.sort((a, b) => a.s - b.s).map(x => x.f)  // Array.sort is stable

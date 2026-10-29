@@ -27,6 +27,9 @@ import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
 import { StatusView, HealthBanner } from './Status'
 import { CatalogView } from './Listings'
+import { useLang } from './i18n'
+import { tx, txOr } from './strings'
+const txOrReason = (r: string) => txOr(`why.${r}`, r)
 import { ActivityView } from './Activity'
 import { HelpView } from './Help'
 import { PrivacyView } from './Privacy'
@@ -34,7 +37,7 @@ import { ApiAccessView } from './ApiAccess'
 import { AiSettingsView } from './AiSettings'
 import { TourHost } from './Tour'
 import { FilterBar, FilterSelect, ToggleChip } from './kit'
-import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT, HeatChip, HeatLegend, heatName } from './ui'
+import { rm, label, msg, REVIEWABLE, focusTop, useFetch, useAction, ActionError, Async, Skeleton, EmptyState, PageHeader, TableRegion, Hint, OrgCtx, Status, applyBrand, OfflineBanner, HEAT_BANDS, HeatChip, HeatLegend, heatName } from './ui'
 import type { Heat } from './ui'
 import type { Role, Me, Tracker, DocDetail, DocSummary, Line, Alert, Field, Followup, MarginReport, Settings, Proposal } from './api'
 
@@ -589,33 +592,33 @@ function Followups() {
   const act = async (f: Followup, action: 'send' | 'skip') => {
     if (busy) return
     setErr(''); setBusy(`${f.id}:${action}`)
-    try { await api('POST', `/followups/${f.id}`, { action }); toast(action === 'send' ? `Follow-up for ${f.doc_no} sent.` : `Follow-up for ${f.doc_no} skipped.`); s.reload() }
+    try { await api('POST', `/followups/${f.id}`, { action }); toast(action === 'send' ? tx('fu.sentToast', f.doc_no) : tx('fu.skippedToast', f.doc_no)); s.reload() }
     catch (e) { setErr(msg(e)) } finally { setBusy('') }
   }
-  const counts = Object.fromEntries(HEAT.map(([h]) => [h, (s.data ?? []).filter(f => f.heat === h).length])) as Record<Heat, number>
+  const counts = Object.fromEntries(HEAT_BANDS.map(h => [h, (s.data ?? []).filter(f => f.heat === h).length])) as Record<Heat, number>
   const shown = (s.data ?? []).filter(f => !band || f.heat === band)
   return (
-    <section id="followups" aria-label="Quotes waiting for a reply">
-      <PageHeader title="Follow-ups" description="Quotes with no answer after the follow-up window, longest wait first. Read the message, then send it or skip. Nothing is sent without you." />
+    <section id="followups" aria-label={tx('fu.aria')}>
+      <PageHeader title={tx('fu.title')} description={tx('fu.lead')} />
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       {!!s.data?.length && <>
-        <FilterBar label="Follow-up filters" chips={band ? [{ label: `Age: ${heatName(band)}`, onRemove: () => setBand('') }] : []} onClear={band ? () => setBand('') : undefined}>
-          {HEAT.map(([h, name]) => <ToggleChip key={h} pressed={band === h} onClick={() => setBand(band === h ? '' : h)}><span aria-hidden="true" className={`heat-${h} size-2.5 rounded-full`} style={{ background: 'var(--heat-fg)' }} />{name} <span className="tabular-nums">{counts[h]}</span></ToggleChip>)}
+        <FilterBar label={tx('fu.filters')} chips={band ? [{ label: tx('fu.ageChip', heatName(band)), onRemove: () => setBand('') }] : []} onClear={band ? () => setBand('') : undefined}>
+          {HEAT_BANDS.map(h => <ToggleChip key={h} pressed={band === h} onClick={() => setBand(band === h ? '' : h)}><span aria-hidden="true" className={`heat-${h} size-2.5 rounded-full`} style={{ background: 'var(--heat-fg)' }} />{heatName(h)} <span className="tabular-nums">{counts[h]}</span></ToggleChip>)}
         </FilterBar>
         <div className="mb-3"><HeatLegend /></div>
       </>}
-      <Async s={s} rows={2} empty={!s.data?.length} emptyText="No quote is waiting for a follow-up." emptyHint="When a customer has not answered after the follow-up window, the quote shows up here.">
-        {shown.length === 0 ? <p className="card text-sm text-muted">No follow-ups in this age band. <button type="button" className="link" onClick={() => setBand('')}>Show all</button></p> : (
+      <Async s={s} rows={2} empty={!s.data?.length} emptyText={tx('fu.none')} emptyHint={tx('fu.noneHint')}>
+        {shown.length === 0 ? <p className="card text-sm text-muted">{tx('fu.noneInBand')} <button type="button" className="link" onClick={() => setBand('')}>{tx('fu.showAll')}</button></p> : (
         <ul className="grid gap-2 md:grid-cols-2">
           {shown.map(f => (
             <li key={f.id} className={`card ${f.heat ? `heat-edge heat-${f.heat}` : ''}`}>
-              <p className="flex flex-wrap items-center gap-2 font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">for {f.customer}</span>
+              <p className="flex flex-wrap items-center gap-2 font-semibold"><a className="link" href={`#/doc/${f.document_id}`}>{f.doc_no}</a> <span className="font-normal">{tx('fu.for', f.customer)}</span>
                 {f.days_waiting != null && <HeatChip heat={f.heat} days={f.days_waiting} />}</p>
-              <p className="mt-1 text-sm text-muted">{f.reason}{f.days_waiting != null ? `, sent ${f.days_waiting} ${f.days_waiting === 1 ? 'day' : 'days'} ago` : ''}</p>
-              <p className="mt-2 text-sm">{f.suggested_text ?? 'No chat contact on file: call the customer, then skip this.'}</p>
+              <p className="mt-1 text-sm text-muted">{txOrReason(f.reason)}{f.days_waiting != null ? `, ${tx('fu.sentAgo', f.days_waiting)}` : ''}</p>
+              <p className="mt-2 text-sm">{f.suggested_text ?? tx('fu.noContact')}</p>
               {can('manage_followups') && <div className="mt-3 flex flex-wrap gap-2">
-                {f.suggested_text && <button type="button" className="btn btn-primary" aria-disabled={!!busy || undefined} onClick={() => act(f, 'send')}>{busy === `${f.id}:send` ? 'Sending...' : `Send follow-up for ${f.doc_no}`}</button>}
-                <button type="button" className="btn" aria-disabled={!!busy || undefined} onClick={() => act(f, 'skip')}>{busy === `${f.id}:skip` ? 'Skipping...' : `Skip ${f.doc_no}`}</button>
+                {f.suggested_text && <button type="button" className="btn btn-primary" aria-disabled={!!busy || undefined} onClick={() => act(f, 'send')}>{busy === `${f.id}:send` ? tx('fu.sending') : tx('fu.send', f.doc_no)}</button>}
+                <button type="button" className="btn" aria-disabled={!!busy || undefined} onClick={() => act(f, 'skip')}>{busy === `${f.id}:skip` ? tx('fu.skipping') : tx('fu.skip', f.doc_no)}</button>
               </div>}
             </li>
           ))}
@@ -761,6 +764,7 @@ export default function App() {
 function AppShell() {
   const toast = useToast()
   const [hash, setHash] = useState(location.hash)
+  const [lang] = useLang()  // a language change redraws the page in the new language
   const [role, setRoleState] = useState<Role>(getRole())
   const prev = useRef({ from: location.hash, now: location.hash })
   const seen = useRef(new Map<string, number>())  // route -> scrollY when it was left
@@ -863,7 +867,7 @@ function AppShell() {
             <button className="btn mt-3" onClick={() => setTries(t => t + 1)}>Retry identifying user</button>
           </div>
         ) : !me || !lic ? <Skeleton rows={4} /> : (
-          <div key={route + (route === 'doc' || route === 'contact' ? arg : '')} className="page-in">
+          <div key={route + (route === 'doc' || route === 'contact' ? arg : '') + lang} className="page-in">
             {!canOpen(route, owner) ? <>
               <PageHeader title={entry?.title ?? 'Page'} />
               <p role="alert" className="card text-muted">You do not have access to this page. Ask the owner to change your role if you need it.</p>

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { MOCK, canOpen, getToken, logout } from './api'
 import { Palette } from './Palette'
-import { setLang, t, useLang } from './i18n'
+import { LANGS, setLang, t, useLang } from './i18n'
+import { tx, txOr } from './strings'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
 import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
@@ -65,20 +66,20 @@ const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) ==
 function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: ReturnType<typeof visibleNav>; route: string; collapsed?: boolean; idp: string; onNavigate?: (href: string) => void }) {
   const here = PARENT[route] ?? route
   return (
-    <nav aria-label="Main" className="px-2 pb-2">
+    <nav aria-label={tx('nav.main')} className="px-2 pb-2">
       <ul>
         {groups.map(g => (
           <li key={g.label} className={collapsed ? 'mt-2 border-t border-hairline pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
-            <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{g.label}</p>
+            <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{txOr(`nav.group.${g.label}`, g.label)}</p>
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
                 <li key={i.key} className="group relative">
-                  <a className={`sidelink ${!collapsed && articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? i.label : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${!collapsed && articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
-                    <span className={collapsed ? 'sr-only' : ''}>{i.label}</span>
+                    <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>
                   {!collapsed && (a => a && (
-                    <a href={`#/help/${a.id}`} aria-label={`Help: ${i.label}`} onClick={() => onNavigate?.(`#/help/${a.id}`)}
+                    <a href={`#/help/${a.id}`} aria-label={tx('nav.help', txOr(`nav.${i.key}`, i.label))} onClick={() => onNavigate?.(`#/help/${a.id}`)}
                       className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:size-11">
                       <span aria-hidden="true">?</span>
                     </a>))(articleForNav(i.key))}
@@ -107,8 +108,8 @@ function RolePicker({ role, onRole }: { role: Role; onRole: (r: Role) => void })
 function LangSwitch() {
   const [lang] = useLang()
   return (
-    <div role="group" aria-label="Language / Bahasa" className="flex gap-1 px-2 py-1">
-      {([['en', 'English'], ['ms', 'Bahasa Melayu']] as const).map(([l, n]) => <button key={l} type="button" lang={l} className="btn min-h-11 flex-1 px-2 text-sm aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={lang === l} onClick={() => setLang(l)}>{n}</button>)}
+    <div role="group" aria-label={`${tx('user.language')} / Language`} className="grid grid-cols-2 gap-1 px-2 py-1">
+      {LANGS.map(([l, n]) => <button key={l} type="button" lang={l} className="btn min-h-11 px-2 text-sm aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={lang === l} onClick={() => setLang(l)}>{n}</button>)}
     </div>
   )
 }
@@ -130,7 +131,7 @@ function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: stri
   const initials = me.name.replace(/^SAMPLE\s+/i, '').split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
   return (
     <div ref={box} className="relative" onBlur={e => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) setOpen(false) }}>
-      <button ref={btn} type="button" className="inline-flex min-h-(--control-h) items-center gap-2 rounded-ui px-1.5 hover:bg-surface-2" aria-expanded={open} aria-controls="user-panel" aria-label={`Account menu for ${me.name}`} onClick={() => setOpen(!open)}>
+      <button ref={btn} type="button" className="inline-flex min-h-(--control-h) items-center gap-2 rounded-ui px-1.5 hover:bg-surface-2" aria-expanded={open} aria-controls="user-panel" aria-label={tx('user.menu', me.name)} onClick={() => setOpen(!open)}>
         <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-tint text-xs font-bold text-accent">{initials || <Icon name="user" className="size-4" />}</span>
         <span aria-hidden="true" className="hidden max-w-32 truncate text-sm font-semibold xl:inline">{me.name}</span>
         <Icon name="down" className="size-4 text-muted" />
@@ -138,11 +139,11 @@ function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: stri
       {open && (
         <div id="user-panel" className="card absolute right-0 top-full z-50 mt-1 w-64 p-2 shadow-2">
           <p className="px-2 py-1"><span className="block truncate font-semibold">{me.name}</span><span className="block text-sm text-muted">{me.role_name ?? me.role}</span></p>
-          <a className="sidelink" href="#/account"><Icon name="user" />Account</a>
-          <a className="sidelink" href="#/help"><Icon name="ask" />Help</a>
-          <button type="button" className="sidelink w-full text-left" onClick={() => { setOpen(false); startTour() }}><Icon name="check" />Take the tour</button>
+          <a className="sidelink" href="#/account"><Icon name="user" />{tx('user.account')}</a>
+          <a className="sidelink" href="#/help"><Icon name="ask" />{tx('user.help')}</a>
+          <button type="button" className="sidelink w-full text-left" onClick={() => { setOpen(false); startTour() }}><Icon name="check" />{tx('user.tour')}</button>
           <LangSwitch />
-          {signedIn && <button type="button" className="sidelink w-full text-left" onClick={async () => { setOpen(false); await logout(); toast('You have been signed out.') }}><Icon name="logout" />Sign out</button>}
+          {signedIn && <button type="button" className="sidelink w-full text-left" onClick={async () => { setOpen(false); await logout(); toast(tx('user.signedout')) }}><Icon name="logout" />{tx('user.signout')}</button>}
         </div>
       )}
     </div>
@@ -244,11 +245,11 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
               {!me && <span className="flex-1 md:hidden" />}
               <div className="order-last hidden md:order-none md:block md:max-w-[560px] md:flex-1">
                 <button type="button" className="input flex w-full items-center gap-2 text-left text-muted" aria-keyshortcuts="/ Control+K Meta+K" onClick={() => setPal(true)}>
-                  <Icon name="search" className="size-4" /><span className="flex-1 truncate">{t({ en: 'Search or jump to...', ms: 'Cari atau pergi ke...' }, lang)}</span>
+                  <Icon name="search" className="size-4" /><span className="flex-1 truncate">{t({ en: 'Search or jump to...', ms: 'Cari atau pergi ke...', zh: '搜索或跳转...', ta: 'தேடு அல்லது செல்...' }, lang)}</span>
                   <kbd aria-hidden="true" className="rounded-xs border border-hairline px-1.5 text-xs">{mac ? '⌘ K' : 'Ctrl K'}</kbd>
                 </button>
               </div>
-              <button type="button" className="btn ml-auto size-11 px-0 md:hidden" aria-label={t({ en: 'Search', ms: 'Carian' }, lang)} aria-keyshortcuts="/" onClick={() => setPal(true)}><Icon name="search" /></button>
+              <button type="button" className="btn ml-auto size-11 px-0 md:hidden" aria-label={t({ en: 'Search', ms: 'Carian', zh: '搜索', ta: 'தேடல்' }, lang)} aria-keyshortcuts="/" onClick={() => setPal(true)}><Icon name="search" /></button>
               <div className="hidden md:ml-auto md:block">{picker}</div>
               <ThemeToggle dark={dark} setDark={setDark} compact />
               <UserMenu me={me} signedIn={signedIn} loc={hash} />

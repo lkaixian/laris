@@ -41,6 +41,38 @@ def pick_tier(entry, qty):
     return tiers[0][1], tiers[0][2], tiers[0][0] if tiers[0][0] > 1 else None
 
 
+def catalog_price(base_price, tiers, qty, size=None) -> dict:
+    """Customer price of a confirmed catalog item, through the same pick_tier rule as supplier tiers.
+    base_price: listing_items.price (the price for 1 when no size is named, may be None). tiers: listing_items.price_tiers
+    [{size or None, min_qty, price}]; a size-less tier applies to every size that has none of its own. size: what the customer asked for.
+    -> {unit_price: Decimal or None, size, tier_min_qty, below_moq: Decimal or None, why: str or None}.
+    unit_price is None, with a reason, when no rule applies. Never a guess."""
+    qty = D(qty)
+    if qty <= 0:
+        raise ValueError("qty must be > 0")
+    own = {}  # lower-cased size -> its tiers
+    for t in tiers:
+        if t.get("size"):
+            own.setdefault(t["size"].lower(), []).append(t)
+    plain = [t for t in tiers if not t.get("size")]
+    if base_price is not None and not any(D(t["min_qty"]) == 1 for t in plain):
+        plain = plain + [{"min_qty": 1, "price": base_price}]
+    if size and size.lower() in own:
+        pick = own[size.lower()]
+    elif not size and not plain and len(own) == 1:  # only one size is priced: nothing to ask
+        pick = next(iter(own.values()))
+        size = pick[0]["size"]
+    elif own and not plain:
+        why = "no price for size " + size if size else "size not given"
+        return {"unit_price": None, "size": size, "tier_min_qty": None, "below_moq": None, "why": why}
+    else:
+        pick = plain
+    if not pick:
+        return {"unit_price": None, "size": size, "tier_min_qty": None, "below_moq": None, "why": "no price set"}
+    uc, mq, moq = pick_tier([(D(t["min_qty"]), D(t["price"]), D(t["min_qty"])) for t in pick], qty)
+    return {"unit_price": _q(uc), "size": size, "tier_min_qty": mq, "below_moq": None if moq is None else D(moq), "why": None}
+
+
 def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> dict:
     """items: [{item_key (recipe key), qty, attrs?}]. cost_lookup: {item_key: (unit_cost, cost_item_id) or [(min_qty, unit_cost, cost_item_id)] price tiers}.
     owner_overrides: {index: unit_price}, trusted caller (owner-authenticated) only."""

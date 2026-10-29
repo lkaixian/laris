@@ -66,7 +66,7 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 - **Chat enquiries**: text and voice notes on Telegram, extracted to structured items. Each business can connect its own Telegram bot from the Channels page (paste a BotFather token, or the one-tap managed-bot flow). WhatsApp Cloud API code is in place but untested against Meta.
 - **Rule-based pricing**: cost book, margin guard, discount guard, stale-cost alerts, supplier price tiers and minimum order quantities. No AI output sets a price.
 - **Catalog photos**: one photo of labelled products becomes reviewable catalog items (Qwen2.5-VL on RunPod, Tesseract cross-check of every price and SKU).
-- **Availability and quote requests**: customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner.
+- **Availability and quote requests**: customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner, priced by the rules engine from the item's per-size prices and quantity tiers. Replies say "in stock" only when the owner has set a stock count.
 - **Supplier work**: price lists by PDF, photo, XLSX, DOCX and CSV; "Ask suppliers" with a circled photo over WhatsApp or Telegram and a price comparison of the replies.
 - **Quotes and tracking**: quote PDF, XLSX and CSV export; tracker with stage and overdue rules, follow-up reminders, job board, "speed to quote" on Home.
 - **Customer accept link**: the customer opens a link, types a name and accepts or declines. This is a simulated e-signature, labelled so in the app, and creates the job.
@@ -186,7 +186,7 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - The vision model only reports a price when OCR also finds the same digits, so many catalog items arrive without prices and need an owner to fill them in.
 - Telegram, licence and database settings differ between the Replit workspace and the deployment, which cost time to debug.
 - Honest limits:
-  - No stock tracking (replies say "listed", not "in stock"); quotes for catalog items need the owner to confirm bulk pricing.
+  - Stock is a count the owner keys in; sales and jobs do not lower it, so it is only as fresh as the last edit. Items without a count still say "listed", not "in stock". Catalog quotes are priced by tier but still wait for the owner to confirm; quantity tiers do not convert units (a tier "from 10" means 10 of whatever unit the customer asks in).
   - WhatsApp is untested against Meta.
   - Telegram bot connection from the dashboard, one-tap bot creation, reactions and typing indicators have only been tested against fakes, not the real Telegram API.
   - ILMU speech and extraction are not validated on real Manglish audio; the accuracy tools exist (`docs/eval-manglish.md`) but have not been run live. Accuracy: [REAL DATA needed].
@@ -202,9 +202,9 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 ## Future Improvements
 
 - [ ] Connect WhatsApp through Meta and verify the webhook
-- [ ] Per-size prices and quantity tiers on catalog items
+- [x] Per-size prices and quantity tiers on catalog items (row 150)
 - [ ] Time real owners on manual versus LARIS quotes to measure minutes saved
-- [ ] Stock levels so availability replies can say "in stock"
+- [x] Stock levels so availability replies can say "in stock" (row 150)
 - [ ] Match raw-material enquiries, run the Manglish accuracy tools with a live ILMU key
 - [ ] Lawyer review of the privacy wording and DPO appointment
 

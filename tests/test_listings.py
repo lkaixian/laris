@@ -292,3 +292,35 @@ def test_chat_catalog_caption_makes_a_listing_default_photo_stays_a_document(len
     assert "2 product(s)" in e.svc.sent[-1][2]
     assert tg_in(e, "catalog", mid=4, chat=5551, photo=[{"file_id": "P"}]).status_code == 200 and e.vis.calls == 2
     assert tg_in(e, "catalogue of shoes", mid=5, chat=5551, photo=[{"file_id": "P"}]).status_code == 200 and e.vis.calls == 2
+
+
+def test_patch_size_and_quantity_tiers_owner_only_validated_and_hidden_from_staff(lenv):
+    e = lenv
+    j = up(e).json()
+    lid, a = j["listing_id"], j["items"][0]["id"]
+    p = lambda body, who=None: e.c.patch(f"/api/listings/{lid}/items/{a}", json=body, headers=who or e.O)
+    tiers = [{"size": "37", "min_qty": "10", "price": "8.5"}, {"min_qty": "50", "price": "7"}, {"size": "36", "price": "9"}]
+    assert p({"price_tiers": tiers}, e.S).status_code == 403  # a price is a cost: staff may not key it
+    assert p({"price_tiers": tiers}).status_code == 422  # 37 is not one of the sizes yet
+    r = p({"sizes": ["36", "37"], "price_tiers": tiers})
+    assert r.status_code == 200, r.text
+    assert r.json()["price_tiers"] == [{"size": None, "min_qty": "50", "price": "7"}, {"size": "36", "min_qty": "1", "price": "9"},
+                                       {"size": "37", "min_qty": "10", "price": "8.5"}]
+    assert e.c.get(f"/api/listings/{lid}", headers=e.S).json()["items"][0]["price_tiers"] == []
+    for bad in ([{"size": "36", "price": "9"}, {"size": "36", "min_qty": 1, "price": "10"}], [{"price": "0"}], [{"min_qty": "0", "price": "1"}],
+                [{"price": "1", "nope": 1}]):
+        assert p({"price_tiers": bad}).status_code == 422, bad
+    assert p({"sizes": ["36"]}).status_code == 422  # 37 still has a price
+    assert p({"price_tiers": [{"size": "37", "price": "8"}], "sizes": ["37"]}).json()["sizes"] == ["37"]
+    assert p({"price_tiers": None}).json()["price_tiers"] == []
+    assert e.sql("select count(*) n from audit_log where entity='listing_items'")[0]["n"] == 3
+
+
+def test_patch_stock_count_staff_may_set_and_clear(lenv):
+    e = lenv
+    j = up(e).json()
+    url = f"/api/listings/{j['listing_id']}/items/{j['items'][0]['id']}"
+    assert j["items"][0]["stock_qty"] is None
+    assert e.c.patch(url, json={"stock_qty": 12}, headers=e.S).json()["stock_qty"] == "12.000"
+    assert e.c.patch(url, json={"stock_qty": -1}, headers=e.S).status_code == 422
+    assert e.c.patch(url, json={"stock_qty": None}, headers=e.S).json()["stock_qty"] is None

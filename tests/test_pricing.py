@@ -54,3 +54,33 @@ def test_margin_guard_blocks_underpricing():
     assert v and v[0]["margin_pct"] < D(25)
     cheap = price_quote(FX["items"], COSTS, T, {}, owner_overrides={0: "30"})
     assert margin_guard(cheap, 25)
+
+
+# ---- catalog items: per-size prices and quantity tiers (same pick_tier rule as supplier tiers)
+from src.pricing import catalog_price  # noqa: E402
+
+TIERS = [{"size": None, "min_qty": "10", "price": "40"}, {"size": None, "min_qty": "50", "price": "36.5"},
+         {"size": "3kg", "min_qty": "1", "price": "120"}, {"size": "3kg", "min_qty": "20", "price": "110"}]
+
+
+@pytest.mark.parametrize("qty,size,want", [
+    (1, None, "45.00"), (9.999, None, "45.00"), (10, None, "40.00"), (49, None, "40.00"), (50, None, "36.50"), (5000, None, "36.50"),
+    (1, "3kg", "120.00"), (19, "3KG", "120.00"), (20, "3kg", "110.00"),
+    (10, "1kg", "40.00"),  # a size without its own tiers takes the size-less ones
+])
+def test_catalog_tier_boundaries_and_sizes(qty, size, want):
+    p = catalog_price(D("45"), TIERS, qty, size)
+    assert p["unit_price"] == D(want) and p["why"] is None and p["below_moq"] is None
+
+
+def test_catalog_size_rules_moq_and_no_guess():
+    sized = [{"size": "S", "min_qty": "1", "price": "10"}, {"size": "L", "min_qty": "5", "price": "14"}]
+    assert catalog_price(None, sized, 3)["why"] == "size not given" and catalog_price(None, sized, 3)["unit_price"] is None
+    assert catalog_price(None, sized, 3, "XL")["why"] == "no price for size XL"
+    p = catalog_price(None, sized, 2, "L")  # below the lowest tier of L: priced at that tier and flagged
+    assert (p["unit_price"], p["below_moq"], p["size"]) == (D("14.00"), D("5"), "L")
+    one = catalog_price(None, sized[1:], 6)  # only one size has prices: it is used without asking
+    assert (one["unit_price"], one["size"], one["below_moq"]) == (D("14.00"), "L", None)
+    assert catalog_price(None, [], 1)["why"] == "no price set" and catalog_price(D("8"), [], 3)["unit_price"] == D("8.00")
+    with pytest.raises(ValueError):
+        catalog_price(D("8"), [], 0)

@@ -12,7 +12,11 @@ interface Item {
   id: string; position: number; description: string; labels: string[]; sku: string | null; sizes: string[]
   price: string | number | null; currency: string | null; bbox: [number, number, number, number]
   status: Status; reasons: string[]; item_key: string | null; crop_url: string
+  price_tiers?: Tier[]; stock_qty?: string | number | null
 }
+// One customer price: for one size (or every size when size is null) from min_qty up. Priced by the rules engine, never the model.
+interface Tier { size: string | null; min_qty: string | number; price: string | number }
+interface TierRow { size: string; min_qty: string; price: string }
 interface ListingRow { id: string; party_name: string | null; note: string | null; created_at: string; items: number; to_review: number; image_url: string }
 interface Detail extends Omit<ListingRow, 'items'> { items: Item[] }
 interface Supplier { id: string; name: string; contact: string | null }
@@ -31,6 +35,9 @@ const HINT: Record<string, string> = {
 }
 const KEY_RE = /^[a-z][a-z0-9_]{0,60}$/
 const when = (s: string) => new Date(s).toLocaleString()
+const money = (cur: string | null, v: string | number) => `${cur ?? 'MYR'} ${Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`
+const qtyText = (v: string | number) => Number(v).toLocaleString('en-MY', { maximumFractionDigits: 3 })
+const tierKey = (t: { size: string | null; min_qty: string | number; price: string | number }) => `${t.size ?? ''}|${Number(t.min_qty)}|${Number(t.price)}`
 // Retry makes sense when the vision service was asleep or the connection dropped; not for a rejected file or a missing setup.
 const transient = (e: unknown) => e instanceof ApiError && (e.status === 502 || e.status === 504 || e.code === 'network' || e.code === 'vision_unavailable')
 
@@ -111,7 +118,8 @@ function UploadCard({ owner, suppliers, onDone }: { owner: boolean; suppliers: S
 // ---------- One product ----------
 function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid: string; n: number; it: Item; showPrice: boolean; suppliers: Supplier[]; supErr?: { error?: string; reload: () => void }; onChanged: () => void }) {
   const [edit, setEdit] = useState(false)
-  const [f, setF] = useState({ description: '', sku: '', sizes: '', item_key: '', price: '' })
+  const [f, setF] = useState({ description: '', sku: '', sizes: '', item_key: '', price: '', stock: '' })
+  const [tiers, setTiers] = useState<TierRow[]>([])
   const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -130,7 +138,9 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
     try { await api('PATCH', `/listings/${lid}/items/${it.id}`, body); done?.(); onChanged() } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
   const open = () => {
-    setF({ description: it.description, sku: it.sku ?? '', sizes: it.sizes.join(', '), item_key: it.item_key ?? '', price: it.price === null ? '' : String(it.price) })
+    setF({ description: it.description, sku: it.sku ?? '', sizes: it.sizes.join(', '), item_key: it.item_key ?? '', price: it.price === null ? '' : String(it.price),
+      stock: it.stock_qty === null || it.stock_qty === undefined ? '' : String(Number(it.stock_qty)) })
+    setTiers((it.price_tiers ?? []).map(t => ({ size: t.size ?? '', min_qty: String(Number(t.min_qty)), price: String(Number(t.price)) })))
     setFormErr(''); setEdit(true)
   }
   const save = () => {
@@ -139,11 +149,26 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
     if (!f.description.trim()) return setFormErr('The description cannot be empty.')
     if (f.item_key.trim() && !KEY_RE.test(f.item_key.trim())) return setFormErr('Item key: lower-case letters, digits and underscores, starting with a letter.')
     if (showPrice && f.price.trim() && !(Number(f.price) > 0)) return setFormErr('Price must be a number above zero.')
+    if (f.stock.trim() && !(Number(f.stock) >= 0)) return setFormErr('Stock count must be zero or more, or left empty when you do not count it.')
+    if (showPrice) {
+      for (const [i, t] of tiers.entries()) {
+        if (!(Number(t.price) > 0)) return setFormErr(`Price row ${i + 1}: the price must be a number above zero.`)
+        if (!(Number(t.min_qty) > 0)) return setFormErr(`Price row ${i + 1}: the minimum quantity must be above zero.`)
+        if (t.size && !sizes.some(s => s.toLowerCase() === t.size.toLowerCase())) return setFormErr(`Price row ${i + 1}: size ${t.size} is not in the sizes list.`)
+      }
+      const keys = tiers.map(t => `${t.size.toLowerCase()}|${Number(t.min_qty)}`)
+      if (new Set(keys).size !== keys.length) return setFormErr('Two price rows have the same size and minimum quantity.')
+    }
     if (f.description.trim() !== it.description) body.description = f.description.trim()
     if (f.sku.trim() !== (it.sku ?? '')) body.sku = f.sku.trim() || null
     if (sizes.join(',') !== it.sizes.join(',')) body.sizes = sizes
     if (f.item_key.trim() && f.item_key.trim() !== (it.item_key ?? '')) body.item_key = f.item_key.trim()
     if (showPrice && f.price.trim() && Number(f.price) !== Number(it.price)) body.price = Number(f.price)
+    const stock = f.stock.trim() === '' ? null : Number(f.stock)
+    const was = it.stock_qty === null || it.stock_qty === undefined ? null : Number(it.stock_qty)
+    if (stock !== was) body.stock_qty = stock
+    const next = tiers.map(t => ({ size: t.size || null, min_qty: t.min_qty.trim() || '1', price: t.price.trim() }))
+    if (showPrice && next.map(tierKey).sort().join() !== (it.price_tiers ?? []).map(tierKey).sort().join()) body.price_tiers = next
     setFormErr('')
     if (!Object.keys(body).length) return setEdit(false)
     patch(body, () => setEdit(false))
@@ -178,8 +203,17 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
             <div><dt className="text-muted">SKU</dt><dd className="break-words">{it.sku ?? 'none'}</dd></div>
             <div><dt className="text-muted">Sizes</dt><dd className="break-words">{it.sizes.length ? it.sizes.join(', ') : 'none'}</dd></div>
             {it.item_key && <div><dt className="text-muted">Item key</dt><dd className="break-words">{it.item_key}</dd></div>}
-            {it.price !== null && <div><dt className="text-muted">Price</dt><dd className="tabular-nums">{it.currency ?? 'MYR'} {Number(it.price).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</dd></div>}
+            {it.price !== null && <div><dt className="text-muted">Price</dt><dd className="tabular-nums">{money(it.currency, it.price)}</dd></div>}
+            <div><dt className="text-muted">Stock</dt><dd className="tabular-nums">{it.stock_qty === null || it.stock_qty === undefined ? 'Not counted' : qtyText(it.stock_qty)}</dd></div>
           </dl>
+          {showPrice && (it.price_tiers?.length ?? 0) > 0 && (
+            <div className="mt-2 text-sm">
+              <p className="text-muted">Prices by size and quantity</p>
+              <ul className="mt-1 grid gap-1">
+                {[...it.price_tiers!].sort((x, y) => (x.size ?? '').localeCompare(y.size ?? '') || Number(x.min_qty) - Number(y.min_qty)).map(t => <li key={tierKey(t)} className="tabular-nums">{t.size ?? 'Any size'}, from {qtyText(t.min_qty)}: {money(it.currency, t.price)} each</li>)}
+              </ul>
+            </div>
+          )}
           {it.reasons.length > 0 && (
             <ul className="mt-2 grid gap-1 text-sm text-warn">
               {it.reasons.map(r => <li key={r}><span className="font-semibold">Check:</span> {HINT[r] ?? r.replace(/_/g, ' ')}</li>)}
@@ -207,6 +241,43 @@ function ItemCard({ lid, n, it, showPrice, suppliers, supErr, onChanged }: { lid
             <label className="flex flex-col gap-1 text-sm font-semibold">Price
               <input className="input font-normal" inputMode="decimal" value={f.price} onChange={e => setF({ ...f, price: e.target.value })} />
             </label>
+          )}
+          <label className="flex flex-col gap-1 text-sm font-semibold">Stock count
+            <input className="input font-normal" inputMode="decimal" aria-describedby={`${id}-stock-help`} value={f.stock} onChange={e => setF({ ...f, stock: e.target.value })} />
+            <Hint id={`${id}-stock-help`}>Leave empty if you do not count it. Replies say "in stock" only when a count is set. Sales do not lower it.</Hint>
+          </label>
+          {showPrice && (
+            <fieldset className="min-w-0 sm:col-span-2">
+              <legend className="mb-1 text-sm font-semibold">Prices by size and quantity (optional)</legend>
+              <p id={`${id}-tier-help`} className="mb-2 text-sm text-muted">Each row is the price per unit from that quantity up. The largest minimum the order reaches is used. "Any size" applies to sizes without their own rows.</p>
+              {tiers.length > 0 && (
+                <ul className="grid gap-2">
+                  {tiers.map((t, i) => {
+                    const set = (k: keyof TierRow, v: string) => setTiers(ts => ts.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
+                    const sizes = f.sizes.split(',').map(s => s.trim()).filter(Boolean)
+                    return (
+                      <li key={i} className="grid grid-cols-2 items-end gap-2 rounded-ui border border-soft p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                        <label className="flex min-w-0 flex-col gap-1 text-sm">Size
+                          <select className="input" value={t.size} onChange={e => set('size', e.target.value)}>
+                            <option value="">Any size</option>
+                            {sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                            {t.size && !sizes.includes(t.size) && <option value={t.size}>{t.size} (not in sizes)</option>}
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 flex-col gap-1 text-sm">From quantity
+                          <input className="input" inputMode="decimal" value={t.min_qty} onChange={e => set('min_qty', e.target.value)} />
+                        </label>
+                        <label className="flex min-w-0 flex-col gap-1 text-sm">Price each
+                          <input className="input" inputMode="decimal" value={t.price} onChange={e => set('price', e.target.value)} />
+                        </label>
+                        <button type="button" className="btn" onClick={() => setTiers(ts => ts.filter((_, j) => j !== i))}>Remove<span className="sr-only"> price row {i + 1}</span></button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <button type="button" className="btn mt-2" aria-describedby={`${id}-tier-help`} onClick={() => setTiers(ts => [...ts, { size: '', min_qty: '1', price: '' }])}>Add a price row</button>
+            </fieldset>
           )}
           {formErr && <p role="alert" className="text-sm text-warn sm:col-span-2">{formErr}</p>}
           <div className="flex flex-wrap gap-2 sm:col-span-2">

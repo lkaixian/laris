@@ -27,9 +27,9 @@ def cust(e, c, name="Cust"):
 def item(e, desc, status="confirmed", tid=None, **kw):
     t = tid or e.tid
     lid = e.sql("insert into listings(tenant_id,image,image_mime) values (%s,decode('00','hex'),'image/png') returning id", (t,))[0]["id"]
-    e.sql("insert into listing_items(listing_id,tenant_id,position,description,sku,price,currency,sizes,bbox,crop,status) "
-          "values (%s,%s,0,%s,%s,%s,%s,%s::jsonb,'[0,0,1,1]','\x03',%s)",
-          (lid, t, desc, kw.get("sku"), kw.get("price"), kw.get("currency"), kw.get("sizes", "[]"), status))
+    e.sql("insert into listing_items(listing_id,tenant_id,position,description,sku,price,currency,sizes,bbox,crop,status,price_tiers,stock_qty) "
+          "values (%s,%s,0,%s,%s,%s,%s,%s::jsonb,'[0,0,1,1]','\x03',%s,%s::jsonb,%s)",
+          (lid, t, desc, kw.get("sku"), kw.get("price"), kw.get("currency"), kw.get("sizes", "[]"), status, kw.get("tiers", "[]"), kw.get("stock")))
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ def test_quote_follow_up_uses_memory_and_drafts_a_quote_for_review(e, monkeypatc
     quote_model(monkeypatch, 50)
     with db.tx("owner", e.owner) as c:
         r = availability.answer(c, e.tid, who, "Ok, nak sebut harga. Quote kalau ambil bulk 50kg")
-    assert "50 kg eSUN PLA white" in r and "Listed price RM 45.00 per unit" in r and "confirm the bulk price" in r
+    assert "50 kg eSUN PLA white" in r and "Price at this quantity RM 45.00 per unit" in r and "confirm it" in r
     l = e.sql("select l.*, d.status, d.direction, d.kind from document_lines l join documents d on d.id=l.document_id where l.review_reason like 'catalog%%'")[0]
     assert (l["qty"], l["unit_price"], l["needs_review"], l["item_key"], l["price_source"]) == (50, 45, True, None, None)
     assert (l["status"], l["direction"], l["kind"]) == ("draft", "out", "quotation")
@@ -157,3 +157,61 @@ def test_unconfirmed_item_is_never_quoted(e, monkeypatch):
         assert availability.answer(c, e.tid, who, "quote 50kg") is None
     quote_model(monkeypatch, 50, ["esun"])
     assert ask(e, "quote 50 esun") is None
+
+
+SPOOL = ('[{"size": null, "min_qty": "10", "price": "40"}, {"size": null, "min_qty": "50", "price": "36"},'
+         ' {"size": "3kg", "min_qty": "1", "price": "120"}]')
+
+
+def quote_line(e, monkeypatch, text, qty, terms=(), uom="spool"):
+    with db.tx("owner", e.owner) as c:
+        who = cust(e, c)
+    shown(e, monkeypatch, who)
+    quote_model(monkeypatch, qty, terms, uom)
+    with db.tx("owner", e.owner) as c:
+        r = availability.answer(c, e.tid, who, text)
+    return r, e.sql("select l.description, l.unit_price, l.needs_review, l.review_reason, l.price_source from document_lines l "
+                    "join documents d on d.id = l.document_id where l.review_reason like 'catalog%%' order by d.doc_no desc limit 1")[0]
+
+
+@pytest.mark.parametrize("text,qty,want", [("quote 1 spool", 1, 45), ("quote 20 spool", 20, 40), ("quote 60 spool", 60, 36),
+                                           ("quote 2 spool 3kg", 2, 120)])
+def test_quote_is_priced_by_size_and_quantity_tier_from_the_rules(e, monkeypatch, text, qty, want):
+    item(e, "eSUN PLA white", price=45, currency="RM", sizes='["1kg","3kg"]', tiers=SPOOL)
+    r, l = quote_line(e, monkeypatch, text, qty)
+    assert l["unit_price"] == want and l["needs_review"] and l["price_source"] is None  # staff still confirm before sending
+    assert f"Price at this quantity RM {want:.2f} per unit" in r and l["review_reason"].startswith("catalog price from the price list")
+    assert ("(3kg)" in l["description"]) == ("3kg" in text)
+
+
+def test_quote_without_a_size_rule_or_below_the_minimum_is_flagged_not_guessed(e, monkeypatch):
+    item(e, "Shirt", sizes='["S","L"]', tiers='[{"size": "S", "min_qty": "1", "price": "10"}, {"size": "L", "min_qty": "5", "price": "14"}]')
+    r, l = quote_line(e, monkeypatch, "quote 3 shirt", 3, ["shirt"], uom="pc")
+    assert l["unit_price"] is None and "size not given" in l["review_reason"] and "Sizes: S, L" in r and "Price" not in r
+    availability._LAST.clear()
+    r, l = quote_line(e, monkeypatch, "quote 2 shirt size L", 2, ["shirt"], uom="pc")
+    assert l["unit_price"] == 14 and "below the minimum of 5" in l["review_reason"] and l["description"] == "Shirt (L)"
+
+
+def test_in_stock_only_when_a_count_is_set(e, monkeypatch):
+    model(monkeypatch, {"intent": "availability", "search_terms": ["esun"]})
+    item(e, "eSUN none")
+    r = ask(e, "esun?")
+    assert "in stock" not in r.replace("not that it is in stock", "") and "Listed means we carry it" in r
+    e.sql("update listing_items set stock_qty = 0")
+    assert "We list: eSUN none - out of stock" in ask(e, "esun?")
+    e.sql("update listing_items set stock_qty = 12")
+    r = ask(e, "esun?")
+    assert "We list: eSUN none - in stock" in r and "Listed means" not in r and "12" not in r  # the count itself is not told
+    item(e, "eSUN uncounted")
+    r = ask(e, "esun?")
+    assert "eSUN uncounted\n" in r + "\n" and "- in stock" in r and "Listed means we carry it, not that it is in stock" in r
+
+
+def test_bulk_prices_are_mentioned_and_stock_short_is_flagged(e, monkeypatch):
+    item(e, "eSUN PLA white", price=45, currency="RM", tiers=SPOOL, sizes='["1kg","3kg"]', stock=5)
+    model(monkeypatch, {"intent": "availability", "search_terms": ["esun"]})
+    assert "RM 45.00, bulk prices available - in stock" in ask(e, "esun?")
+    availability._LAST.clear()
+    _, l = quote_line(e, monkeypatch, "quote 20 spool", 20)
+    assert "stock count 5 is below the 20 asked" in l["review_reason"]

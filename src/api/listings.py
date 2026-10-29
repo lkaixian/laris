@@ -23,7 +23,7 @@ r = APIRouter(prefix="/api")
 
 MAX_IMAGE = 8_000_000
 IMAGES = ("image/jpeg", "image/png", "image/webp")
-COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key"
+COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key, price_tiers, stock_qty"
 
 
 def describe(data: bytes, *, http=None, ocr=None) -> dict:
@@ -58,7 +58,8 @@ def store(conn, tenant_id, user_id, d: dict, *, party_id=None, note=None, channe
 def _item(ctx: Ctx, lid, x: dict) -> dict:
     """Prices are supplier costs: without view_costs the price and currency are not sent at all."""
     price = x["price"] if ctx.costs else None
-    return {**x, "price": price, "currency": x["currency"] if price is not None else None,
+    return {**x, "price": price, "currency": x["currency"] if price is not None or (ctx.costs and x["price_tiers"]) else None,
+            "price_tiers": x["price_tiers"] if ctx.costs else [],
             "crop_url": f"/api/listings/{lid}/items/{x['id']}/crop"}
 
 
@@ -147,6 +148,12 @@ def crop(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(read_ctx)):
     return Response(bytes(row["crop"]), media_type=row["crop_mime"])
 
 
+class Tier(BaseModel, extra="forbid"):
+    size: str | None = Field(None, max_length=20)
+    min_qty: Decimal = Field(Decimal(1), gt=0, lt=Decimal(10) ** 9, decimal_places=3)
+    price: Decimal = Field(gt=0, lt=Decimal(10) ** 10, decimal_places=4)
+
+
 class ItemPatch(BaseModel, extra="forbid"):
     description: str | None = Field(None, max_length=300)
     sku: str | None = Field(None, max_length=80)
@@ -154,6 +161,24 @@ class ItemPatch(BaseModel, extra="forbid"):
     price: Decimal | None = Field(None, gt=0, lt=Decimal(10) ** 10, decimal_places=4)
     status: Literal["confirmed", "discarded"] | None = None
     item_key: str | None = Field(None, pattern=r"^[a-z][a-z0-9_]{0,60}$")
+    price_tiers: list[Tier] | None = Field(None, max_length=50)    # per size and quantity; [] clears them
+    stock_qty: Decimal | None = Field(None, ge=0, lt=Decimal(10) ** 11, decimal_places=3)  # null = not counted
+
+
+def _tiers(tiers: list[Tier], sizes: list[str]) -> list[dict]:
+    """Each tier's size must be one of the item's sizes (matched without case, stored as the item spells it); one price per size and min_qty."""
+    known, out, seen = {s.lower(): s for s in sizes}, [], set()
+    for t in tiers:
+        size = (t.size or "").strip() or None
+        if size is not None:
+            if size.lower() not in known:
+                raise ApiError(422, "bad_tier", f"size {size!r} is not one of this product's sizes; add it to sizes first")
+            size = known[size.lower()]
+        if (k := ((size or "").lower(), t.min_qty)) in seen:
+            raise ApiError(422, "bad_tier", "two prices for the same size and minimum quantity")
+        seen.add(k)
+        out.append({"size": size, "min_qty": f"{t.min_qty.normalize():f}", "price": f"{t.price.normalize():f}"})
+    return sorted(out, key=lambda t: ((t["size"] or "").lower(), Decimal(t["min_qty"])))
 
 
 @r.patch("/listings/{listing_id}/items/{item_id}")
@@ -162,8 +187,10 @@ def edit_item(listing_id: UUID, item_id: UUID, body: ItemPatch, ctx: Ctx = Depen
     ch = {k: getattr(body, k) for k in body.model_fields_set}
     if not ch or ("description" in ch and ch["description"] is None) or ("status" in ch and ch["status"] is None):
         raise ApiError(422, "empty", "nothing to change (description and status cannot be null)")
-    if "price" in ch:
+    if "price" in ch or "price_tiers" in ch:
         require_perm(ctx, "view_costs")  # a price is a supplier cost
+    if "price_tiers" in ch and ch["price_tiers"] is None:
+        ch["price_tiers"] = []
     if "sizes" in ch:
         ch["sizes"] = [s.strip()[:20] for s in ch["sizes"] or [] if s.strip()]
     c = ctx.conn
@@ -171,9 +198,13 @@ def edit_item(listing_id: UUID, item_id: UUID, body: ItemPatch, ctx: Ctx = Depen
                     (item_id, listing_id, ctx.tenant_id)).fetchone()
     if not old:
         raise ApiError(404, "not_found", "product not found")
+    if "price_tiers" in ch:
+        ch["price_tiers"] = _tiers(body.price_tiers or [], ch.get("sizes", old["sizes"]) or [])
+    elif "sizes" in ch and (gone := {t["size"] for t in old["price_tiers"] if t.get("size") and t["size"].lower() not in {s.lower() for s in ch["sizes"]}}):
+        raise ApiError(422, "bad_tier", "remove the prices for " + ", ".join(sorted(gone)) + " before removing that size")
     sets = ", ".join(f"{k}=%s" for k in ch)  # keys come from the model's own field names, never from the client
     with guarded():
-        c.execute(f"update listing_items set {sets} where id=%s", [Jsonb(v) if k == "sizes" else v for k, v in ch.items()] + [item_id])
+        c.execute(f"update listing_items set {sets} where id=%s", [Jsonb(v) if k in ("sizes", "price_tiers") else v for k, v in ch.items()] + [item_id])
     audit(ctx, "listing_items", item_id, f"catalog product {ch['status']}" if "status" in ch else "catalog product edited",
           {k: old[k] for k in ch}, ch)
     return reply(ctx, _item(ctx, listing_id, c.execute(f"select {COLS} from listing_items where id=%s", (item_id,)).fetchone()))

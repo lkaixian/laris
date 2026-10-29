@@ -4,6 +4,8 @@ import os
 
 import httpx
 
+from .parse_util import Mask
+
 BASE_URL = "https://api.ilmu.ai/v1"
 ASR_PATH = "/audio/transcriptions"  # unverified; override with ILMU_ASR_PATH
 ASR_MODEL = "ilmu-asr-v4.2"
@@ -59,7 +61,8 @@ def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None) -> d
     }]
     for u, a in few_shot:
         msgs += [{"role": "user", "content": u}, {"role": "assistant", "content": json.dumps(a)}]
-    msgs.append({"role": "user", "content": text})
+    mask = Mask()  # every model call is masked here, so no caller can forget; the reply is unmasked before it is returned
+    msgs.append({"role": "user", "content": mask(text)})
     err = None
     for _ in range(2):
         j = _post(client, _base() + "/chat/completions", json={
@@ -73,7 +76,7 @@ def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None) -> d
                 content = content.strip("`").removeprefix("json").strip()
             out = json.loads(content)
             if isinstance(out, dict):
-                return out
+                return mask.unmask(out)
             err = "not a JSON object"
         except (KeyError, IndexError, ValueError) as e:
             err = repr(e)

@@ -4,7 +4,7 @@ from decimal import Decimal
 from psycopg.types.json import Jsonb
 
 from . import ilmu
-from .parse_util import _dec, redact
+from .parse_util import _dec
 
 
 # ---------------------------------------------------------------- supplier price replies (Ask suppliers)
@@ -70,7 +70,7 @@ def record_rfq_reply(conn, send, m, ilmu_client=None):
         text = (m.text or "")[:2000]
         cur = conn.execute("select currency from tenants where id=%s", (send["tenant_id"],)).fetchone()["currency"]
         try:
-            up, mq, tiers, clean = rfq_price(ilmu.extract_json(redact(text), RFQ_SCHEMA, client=ilmu_client), cur)
+            up, mq, tiers, clean = rfq_price(ilmu.extract_json(text, RFQ_SCHEMA, client=ilmu_client), cur)
         except ilmu.IlmuError:
             up, mq, tiers, clean = None, None, [], False
     vals = (text, m.external_id, up, mq, Jsonb([{"min_qty": f"{a:f}", "unit_price": f"{b:f}"} for a, b in tiers]),

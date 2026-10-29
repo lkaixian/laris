@@ -16,8 +16,9 @@ import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from .. import ilmu, pipeline, tgbots
+from .. import ilmu, tgbots
 from ..errors import ApiError
+from ..parse_util import Mask
 from .deps import Ctx, audit, read_ctx, require_owner, svc, throttle, write_ctx
 
 log = logging.getLogger("laris")
@@ -122,8 +123,9 @@ def ask_json(request: Request, row, text: str, schema: dict) -> dict:
         key = tgbots.decrypt(row["custom_key_enc"])
     except (RuntimeError, ApiError, TypeError):
         raise AiError("The saved key cannot be read. Enter it again in AI settings.") from None
+    mask = Mask()
     msgs = [{"role": "system", "content": "Reply with ONLY a JSON object matching this JSON schema:\n" + json.dumps(schema)},
-            {"role": "user", "content": text}]
+            {"role": "user", "content": mask(text)}]
     out = chat(row["custom_base_url"], row["custom_model"], key, msgs, getattr(svc(request), "ai_http", None))
     out = out.strip()
     if out.startswith("```"):
@@ -134,7 +136,7 @@ def ask_json(request: Request, row, text: str, schema: dict) -> dict:
         j = None
     if not isinstance(j, dict):
         raise AiError("The AI server did not answer in the expected form.")
-    return j
+    return mask.unmask(j)
 
 
 def view(ctx: Ctx, row) -> dict:
@@ -244,7 +246,7 @@ LONG_DIGITS = re.compile(r"\+?\d(?:[\s-]?\d){5,}")  # 6 or more digits, even wit
 
 
 def clean(q: str) -> str:
-    return LONG_DIGITS.sub("[redacted]", pipeline.redact(q))
+    return LONG_DIGITS.sub("[redacted]", q)
 
 
 @r.post("/assistant/guide")

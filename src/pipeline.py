@@ -224,7 +224,7 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     manual, ocr_conf = raw is not None, None
     if not manual:
         src, ocr_conf = _source_text(data, mime, text, ocr)
-        raw = _ilmu(ilmu.extract_json, redact(src[:20000]), SUPPLIER_SCHEMA, client=ilmu_client)
+        raw = _ilmu(ilmu.extract_json, src[:20000], SUPPLIER_SCHEMA, client=ilmu_client)
     if ocr_conf is not None:  # the LLM never scores itself: confidence comes from the OCR engine
         for l in raw.get("lines") if isinstance(raw.get("lines"), list) else []:
             if isinstance(l, dict):
@@ -301,7 +301,7 @@ def _items_schema(tpl):
 def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, external_id=None, ilmu_client=None) -> dict:
     t = conn.execute("select * from tenants where id=%s", (tenant_id,)).fetchone()
     tpl = load_template(t["trade_template"])
-    out = _ilmu(ilmu.extract_json, redact(text[:4000]), _items_schema(tpl), client=ilmu_client)
+    out = _ilmu(ilmu.extract_json, text[:4000], _items_schema(tpl), client=ilmu_client)
     items = out.get("items")
     if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
         raise ApiError(422, "no_items", "could not find any items in the enquiry")

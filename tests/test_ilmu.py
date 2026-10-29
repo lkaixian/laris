@@ -91,3 +91,18 @@ def test_runpod(monkeypatch):
         return httpx.Response(200, json={"status": "COMPLETED", "output": {"text": "hi"}})
 
     assert ilmu.transcribe_runpod(b"x", client=client(h))["output"]["text"] == "hi"
+
+
+def test_pii_is_masked_on_the_way_out_and_restored_on_the_way_back():
+    seen = []
+
+    def h(req):
+        seen.append(req.content.decode())
+        return chat(json.dumps({"email": "[EMAIL_1]", "again": "[EMAIL_1]", "tel": "[PHONE_1]", "card": "[CARD_1]", "note": "[PHONE_9]", "qty": 5}))
+
+    t = "mail ali@shop.my or 012-345 6789, card 4242 4242 4242 4242, order 1234 5678 9012 3456, 10 pcs @ RM 12.50"
+    out = ilmu.extract_json(t, {"type": "object"}, client=client(h))
+    for secret in ("ali@shop.my", "345 6789", "4242 4242"):
+        assert secret not in seen[0]
+    assert "1234 5678 9012 3456" in seen[0] and "10 pcs @ RM 12.50" in seen[0]  # not Luhn-valid, not PII: untouched
+    assert out == {"email": "ali@shop.my", "again": "ali@shop.my", "tel": "012-345 6789", "card": "4242 4242 4242 4242", "note": "[PHONE_9]", "qty": 5}

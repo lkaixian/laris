@@ -208,6 +208,8 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - [ ] Match raw-material enquiries, run the Manglish accuracy tools with a live ILMU key
 - [ ] Lawyer review of the privacy wording and DPO appointment
 
+Owners, prerequisites and done-when for each item are in `docs/teammate-handoff.md`, Section 7.
+
 ## Team
 
 | Name | Role | GitHub |

@@ -1,6 +1,6 @@
 # LARIS finals: handoff for teammates
 
-Refreshed 2026-10-29 from `docs/BUILD_LOG.md` (last row 146), `next_step.txt`, `docs/deploy.md`, git log (head `c769c14`), `src/` and `web/src/`. Read `docs/finals-plan.md` for the timeline. Anything not measured is marked [REAL DATA needed].
+Refreshed 2026-10-29 from `docs/BUILD_LOG.md` (last row 147), `next_step.txt`, `docs/deploy.md`, git log (head `31f660e`), `src/` and `web/src/`. Read `docs/finals-plan.md` for the timeline. Anything not measured is marked [REAL DATA needed].
 
 ## 0. Rules that apply to everyone
 
@@ -13,7 +13,7 @@ Refreshed 2026-10-29 from `docs/BUILD_LOG.md` (last row 146), `next_step.txt`, `
 
 ## 0a. What is built, and how to run it
 
-### What is built (BUILD_LOG rows 1 to 146)
+### What is built (BUILD_LOG rows 1 to 147)
 
 - Backend, FastAPI plus Postgres (`src/`, `db/*.sql`): enquiry pipeline (voice and text extraction through ILMU, pricing rules and margin guard, quote document and PDF, jobs), sign-in and roles with a licence gate, Telegram and WhatsApp channels (`src/channels/`), per-business Telegram bots with one-tap creation and bot settings (`src/api/telegram_bots.py`), staff linking and `/catalog` photo import through the helper bot, catalog photos via a RunPod vision model, Mailtrap emails, scheduler, usage and API keys with `/api/v1` price endpoints (`src/api/public_api.py`), PDPA parts 1 and 2 (DPO contact, breach register, export, erase, consent notice, `/privacy` `/mydata` `/forget`; `src/api/privacy.py`), customer accept link with simulated e-signature (`src/api/accept.py`), optional AI guide (`src/api/ai_guide.py`, default off).
 - Frontend, React (`web/src/`): app shell, Home, Tracker, quote pages, Catalog (`Listings.tsx`), Jobs board, Contacts, Team and Roles, Channels, BotSettings, Licence and Issuer pages, Privacy and requests screens, ApiAccess, public accept page (`Accept.tsx`, route `#/q/<token>`), guided Tour, Help Center, Ctrl+K Palette, AI guide (`AiSettings.tsx`, `GuideChat.tsx`). Mock mode (`mock.ts`, `mockAccept.ts`, `mockAi.ts`) runs the UI without a backend.
@@ -121,7 +121,7 @@ Product gaps
 - Breadcrumbs and most of the app are English only; only the palette, tour and help are meant to be bilingual.
 
 Optional hardening (none is required for the submission)
-- UI polish stages 2 to 4 (`docs/ui-polish-spec.md`): shell and shared components, page layouts, quote and catalog pages. Heavy, edits many files.
+- UI polish stages 2 to 4 were built in row 147 but never opened in a browser. Open every screen at 360px and desktop, in both themes, and tab through it. Skipped from the spec: row density toggle, sort UI, quote header primary action, confirm dialogs for reject, expire, delete contact and remove member.
 - Rate limits on the public accept endpoints and API keys are per process (rows 139, 140); public endpoints sit outside the licence gate.
 - One cost lookup query is duplicated between the API pricing and the pipeline (row 140).
 - Help Center Malay text not reviewed by a native speaker; margin guard wording (flagged versus blocked) not yet checked against the code (row 136).
@@ -157,6 +157,21 @@ Decisions for the team leader
 - Every new frontend page needs: loading, empty and error states, keyboard access, both themes at AA contrast, no horizontal scroll at 360px, no em dash characters in text, and must follow `DESIGN.md` (green and white, no gradients, glass or glow).
 - Mock mode (`web/src/mock.ts`) lets the UI run without the backend; add mock switches for every new state.
 
-## 7. Status refresh
+## 7. Plan for the future improvements listed in the README
 
-This file is a snapshot of 2026-10-29 (BUILD_LOG row 146). Re-check it against `docs/BUILD_LOG.md` and `next_step.txt` after any new row. Still to do on the code side: read the CI run for row 146, UI polish stages 2 to 4, refresh `docs/PRD.md` and `README.md`.
+Order is by what unblocks the others. None of these may invent a number: results go in as measured or stay `[REAL DATA needed]`. Add a BUILD_LOG row for each step that ships, and run pytest in the four file groups first.
+
+| # | Item | Owner (suggested) | Needs first | Steps | Done when |
+|---|---|---|---|---|---|
+| 1 | Time real owners, manual versus LARIS | Researcher / Tester | Nothing; start now | Follow Section 5 task 1. Save raw times and one quote each in `knowledge/08-validation/interview-and-timing.md`. Add the baseline next to speed-to-quote on the Home screen only when real. Then fill the PRD benefit rows. | The file exists with real stopwatch times and the PRD rows are filled or still marked `[REAL DATA needed]` |
+| 2 | Run Manglish accuracy tools with a live ILMU key, and match raw-material enquiries | Backend | An ILMU key in a shell variable (never in the repo), the 20 recorded voice notes with `refs.csv` | Run `eval_enquiries.py --live` with and without `--catalog`, then `eval_wer.py --live` (see `docs/eval-manglish.md`). Record both extraction numbers. If the raw-material gap matters, extend the live extraction schema to accept catalog keys, add tests, rerun. | Results saved under `knowledge/08-validation/` and quoted in the README limits; schema change, if made, has tests |
+| 3 | Connect WhatsApp through Meta and verify the webhook | Backend / Replit | Meta app, verified business, permanent token and app secret in Replit Secrets (Section 1) | Set the webhook URL, subscribe to messages, send a real message from a phone, check the signature check, tenant mapping by phone number id and the outside-window template fallback. Fix what the real API rejects. | A real enquiry becomes a draft quote, and the reply leaves from the right number |
+| 4 | Per-size prices and quantity tiers on catalog items | Backend then frontend | Decide with the team leader whether the supplier tier model (row 73, `min_qty` on cost items) is reused for customer-facing catalog prices | Reuse the existing tier pricing path in the rules engine instead of a second one. Add the columns in a new SQL file applied on start, route changes in `tests/test_permissions.py`, mock switches in `web/src/mock.ts`, catalog form fields, tests for tier boundaries. | Price for 1, a mid tier and a large size comes from the rules engine, never from the model, with tests |
+| 5 | Stock levels so availability replies can say "in stock" | Backend then frontend | Item 4 decided (same catalog table) | Add an optional stock count per confirmed catalog item, show it in the catalog, and let `src/availability.py` say "in stock" only when a count exists; otherwise keep today's wording. | A reply never claims stock when no count is set; test covers both |
+| 6 | Lawyer review of the privacy wording and DPO appointment | Team leader | A named person to act as DPO and a reviewer | Confirm the 72 hour and 7 day deadlines at pdp.gov.my, review the notice text in `web/src/Privacy.tsx` and the bot notice, name the DPO in Settings. Update `docs/privacy-and-breach-runbook.md`. | Reviewer sign-off recorded and the DPO contact is set |
+
+Then, in this order, update `README.md` (tick the item and remove it from the limits) and `docs/PRD.md`.
+
+## 8. Status refresh
+
+This file is a snapshot of 2026-10-29 (BUILD_LOG row 147). CI was green on the row 146 and row 147 commits. Re-check against `docs/BUILD_LOG.md` and `next_step.txt` after any new row. Still to do on the code side: open the polished screens in a real browser and fix what is off, then the Section 7 plan.

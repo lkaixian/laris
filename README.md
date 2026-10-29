@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/lkaixian/laris/actions/workflows/ci.yml/badge.svg)](https://github.com/lkaixian/laris/actions/workflows/ci.yml)
 
-LARIS lets a small made-to-order business quote from the chat apps it already uses: customers ask on Telegram (WhatsApp is built, not yet connected), AI reads the request, rules set the price, and the owner approves.
+LARIS lets a small made-to-order business quote from the chat apps it already uses: customers ask on Telegram (WhatsApp is built but not connected to Meta), AI reads the request, rules set the price, and the owner approves.
 
 ## Team Information
 
@@ -10,7 +10,7 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 |---|---|
 | Team Name | SPARK SURGE |
 | Team Domain | Domain 2 |
-| SDG Track (1–17) | SDG 8 — Decent Work and Economic Growth (Target 8.3) |
+| SDG Track (1–17) | SDG 8: Decent Work and Economic Growth (Target 8.3) |
 | Team Leader | Harrish Govind a/l Sethulingam |
 | University | Universiti Tun Hussein Onn Malaysia (UTHM) |
 | Number of Members | 4 |
@@ -63,23 +63,29 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 
 ### Key Features
 
-- **Chat enquiries** — text and voice notes on Telegram, extracted to structured items. WhatsApp Cloud API code is in place but untested against Meta.
-- **Rule-based pricing** — cost book, margin guard, discount guard, stale-cost alerts. No AI output sets a price.
-- **Catalog photos** — one photo of labelled products becomes reviewable catalog items (Qwen2.5-VL on RunPod, Tesseract cross-check of every price and SKU).
-- **Availability and quote requests** — customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner.
-- **Supplier price lists** — PDF, photo, XLSX, DOCX and CSV imports; quote export to PDF, XLSX and CSV.
-- **Owner control** — approval step, custom roles, audit log, signed licence, multi-business isolation with row-level security.
-- **Tracker** — sent quotes, timeline, follow-up reminders, customer tracking link.
+- **Chat enquiries**: text and voice notes on Telegram, extracted to structured items. Each business can connect its own Telegram bot from the Channels page (paste a BotFather token, or the one-tap managed-bot flow). WhatsApp Cloud API code is in place but untested against Meta.
+- **Rule-based pricing**: cost book, margin guard, discount guard, stale-cost alerts, supplier price tiers and minimum order quantities. No AI output sets a price.
+- **Catalog photos**: one photo of labelled products becomes reviewable catalog items (Qwen2.5-VL on RunPod, Tesseract cross-check of every price and SKU).
+- **Availability and quote requests**: customers ask "is there eSUN filament?" and get an answer from confirmed catalog items only; "quote 50 kg" creates a draft for the owner.
+- **Supplier work**: price lists by PDF, photo, XLSX, DOCX and CSV; "Ask suppliers" with a circled photo over WhatsApp or Telegram and a price comparison of the replies.
+- **Quotes and tracking**: quote PDF, XLSX and CSV export; tracker with stage and overdue rules, follow-up reminders, job board, "speed to quote" on Home.
+- **Customer accept link**: the customer opens a link, types a name and accepts or declines. This is a simulated e-signature, labelled so in the app, and creates the job.
+- **Owner control**: approval step, custom roles and permissions, audit log, multi-business isolation with row-level security, sign-in with sessions and email invites, signed software licence.
+- **Privacy tools (PDPA)**: consent notice on first chat contact, bot commands `/privacy`, `/mydata` and `/forget`, per-person export and erase, breach register with deadline clocks, DPO contact, retention purge. Not reviewed by a lawyer.
+- **Help**: guided tour, Ctrl+K command palette, 17 help articles. An optional in-app AI guide is off by default and the owner opts in; it sees only a redacted question.
+- **API access**: API keys (hash stored) for a read-only recipe list and a price check priced by the same rules engine, without costs or margins.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS (English and Bahasa Melayu help, tour and command palette) |
 | Backend | Python, FastAPI, uvicorn, APScheduler |
 | Database | PostgreSQL (row-level security); PGlite for tests |
-| AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR |
-| Channels | Telegram Bot API (live), WhatsApp Business Cloud API (built) |
+| AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR (PaddleOCR optional) |
+| Channels | Telegram Bot API (demo bot live), WhatsApp Business Cloud API (built, not connected) |
+| Email | Mailtrap API (verification, reset, invites, quotes, licences; sandbox inbox while testing) |
+| Licence | Ed25519-signed keys, verified in the app; signing in the browser (WebCrypto) |
 | Hosting / Dev | Replit |
 
 The full model and library list with licences is in `submission/SDC2026_SparkSurge_TechDeclaration.pdf` and `docs/tech-and-tools-declaration.md`.
@@ -94,7 +100,7 @@ The full model and library list with licences is in `submission/SDC2026_SparkSur
 ├── config/templates/     # Trade templates (YAML)
 ├── scripts/              # Channel setup, licence tools, checks
 ├── tests/                # pytest suite and PGlite schema/role checks
-├── docs/                 # Deployment, API, roles, licensing, build log
+├── docs/                 # PRD, deployment, API contract, roles, licensing, privacy runbook, build log
 ├── knowledge/            # Research notes, sources, decisions
 ├── submission/           # Final submission PDFs (Preliminary, TechDeclaration, Replit and RunPod proof of use)
 ├── .replit, replit.nix, run.sh   # Replit run and deploy configuration
@@ -120,17 +126,19 @@ Owner approves in the web app ──► quote sent to chat, tracked, exported
 
 Core rule: AI output never sets a price. `src/pricing.py` rejects price-like keys from extraction.
 
+Every tenant table has row-level security. It holds only when the app connects as the `laris_app` role; the app refuses to start on a Replit deployment otherwise unless `ALLOW_RLS_BYPASS=1`.
+
 ## How to Run
 
-### Option 1 — Run on Replit (recommended)
+### Option 1: Run on Replit (recommended)
 
 1. Import this repository into Replit.
-2. Open **Secrets** and add the variables from `.env.example`. The minimum is `DATABASE_URL`, `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD`. For Telegram add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_TENANT_ID`. For catalog photos add `RUNPOD_API_KEY` and `RUNPOD_VISION_URL`.
+2. Open **Secrets** and add the variables from `.env.example`. The minimum is `DATABASE_URL`, `BOOTSTRAP_OWNER_USERNAME` and `BOOTSTRAP_OWNER_PASSWORD`. For Telegram add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_TENANT_ID`, or set `SECRET_KEY`, `APP_PUBLIC_URL` and the helper bot variables to connect bots from the Channels page. For email add the `MAILTRAP_*` variables. For catalog photos add `RUNPOD_API_KEY` and `RUNPOD_VISION_URL`.
 3. Click **Run**. `.replit` starts `run.sh`, which installs dependencies, builds the web app, prepares the database and starts the server on port 5000.
 
 Full Replit, webhook and licence setup: `docs/deploy.md`.
 
-### Option 2 — Run locally
+### Option 2: Run locally
 
 ```bash
 git clone https://github.com/lkaixian/laris.git && cd laris
@@ -150,7 +158,7 @@ python -m pytest -q
 npm ci && node tests/schema_check.mjs && node tests/db_check.mjs && node tests/roles_check.mjs
 ```
 
-About 500 tests run on every push in GitHub Actions.
+The suite has 686 tests. GitHub Actions runs them on every push in four file groups, each in its own process, after one single-process run was killed for memory. The result of that CI change has not been read yet.
 
 ## How We Use Replit (Required)
 
@@ -177,7 +185,19 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - A vLLM template sized for a 48 GB GPU ran out of memory on a 24 GB card; lowering the context length or moving to a larger GPU fixed it.
 - The vision model only reports a price when OCR also finds the same digits, so many catalog items arrive without prices and need an owner to fill them in.
 - Telegram, licence and database settings differ between the Replit workspace and the deployment, which cost time to debug.
-- Honest limits: no stock tracking (replies say "listed", not "in stock"); quotes for catalog items need the owner to confirm bulk pricing; WhatsApp is untested against Meta; ILMU speech and extraction prompts are not yet validated on real Manglish audio; OCR accuracy on real receipts is unmeasured; all data is synthetic; single-process deployment with no failover; the PDPA obligations in `docs/privacy-and-breach-runbook.md` are not yet in place for real customers.
+- Honest limits:
+  - No stock tracking (replies say "listed", not "in stock"); quotes for catalog items need the owner to confirm bulk pricing.
+  - WhatsApp is untested against Meta.
+  - Telegram bot connection from the dashboard, one-tap bot creation, reactions and typing indicators have only been tested against fakes, not the real Telegram API.
+  - ILMU speech and extraction are not validated on real Manglish audio; the accuracy tools exist (`docs/eval-manglish.md`) but have not been run live. Accuracy: [REAL DATA needed].
+  - Enquiries for raw materials (for example "skru m4") cannot be matched by the live extraction schema, only recipe items and confirmed catalog items.
+  - OCR accuracy on real receipts is unmeasured. Minutes saved per quote and margin protected: [REAL DATA needed], nobody has timed a manual quote yet.
+  - All data is synthetic. Single-process deployment with no failover; some rate limits and the 15-minute catalog memory are per process.
+  - Row-level security and the database roles have not been tried on Replit's own Postgres, only on PGlite.
+  - Emails, the command palette, the guided tour and the customer accept page have not been checked in real mail clients, browsers or phones. Malay text is not reviewed by a native speaker.
+  - The AI guide has not been checked against a live model.
+  - PDPA: the tools above exist, but the legal wording is not reviewed by a lawyer, the 72 hour and 7 day deadlines come from law-firm summaries and are not verified at pdp.gov.my, and no data protection officer is named. Do not use real customer data until `docs/privacy-and-breach-runbook.md` is completed.
+  - The e-signature is simulated, not a legally binding signature. The licence is a deterrent, not copy protection.
 
 ## Future Improvements
 
@@ -185,6 +205,8 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - [ ] Per-size prices and quantity tiers on catalog items
 - [ ] Time real owners on manual versus LARIS quotes to measure minutes saved
 - [ ] Stock levels so availability replies can say "in stock"
+- [ ] Match raw-material enquiries, run the Manglish accuracy tools with a live ILMU key
+- [ ] Lawyer review of the privacy wording and DPO appointment
 
 ## Team
 

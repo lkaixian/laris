@@ -21,7 +21,7 @@ def test_purge_stale_ages(env):
         e.sql("insert into rfq_replies(send_id, tenant_id, message_text, created_at) values (%s,%s,'RM5', now() - %s * interval '1 day')", (send, tid, age))
     for age in (10, 100):
         lid = e.sql("insert into listings(tenant_id, image, image_mime, created_at) values (%s,decode('0102','hex'),'image/png', now() - %s * interval '1 day') returning id", (tid, age))[0]["id"]
-        e.sql("insert into listing_items(listing_id, tenant_id, position, bbox, crop) values (%s,%s,0,'[0,0,1,1]','\x03')", (lid, tid))
+        e.sql("insert into listing_items(listing_id, tenant_id, position, bbox, crop, cutout) values (%s,%s,0,'[0,0,1,1]','\x03','\x04')", (lid, tid))
     e.sql("insert into email_codes(purpose, user_id, tenant_id, code_hash, expires_at) select 'reset', id, tenant_id, 'x', now() - interval '2 days' from users limit 1")
     e.sql("insert into email_codes(purpose, user_id, tenant_id, code_hash, expires_at) select 'reset', id, tenant_id, 'y', now() + interval '5 minutes' from users limit 1")
     role = e.sql("select id from roles where tenant_id=%s limit 1", (tid,))[0]["id"]
@@ -39,6 +39,7 @@ def test_purge_stale_ages(env):
     assert e.sql("select message_text is null gone from rfq_replies order by created_at desc") == [{"gone": False}, {"gone": True}]
     assert e.sql("select length(image) l from listings order by created_at desc") == [{"l": 2}, {"l": 0}]
     assert e.sql("select length(crop) l from listing_items i join listings l on l.id=i.listing_id order by l.created_at desc") == [{"l": 1}, {"l": 0}]
+    assert e.sql("select cutout is null gone from listing_items i join listings l on l.id=i.listing_id order by l.created_at desc") == [{"gone": False}, {"gone": True}]
 
 
 def test_wrong_guesses_survive_a_new_code(env):

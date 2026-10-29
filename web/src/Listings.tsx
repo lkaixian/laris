@@ -3,6 +3,7 @@ import { api, imageUrl, ApiError } from './api'
 import type { Me } from './api'
 import { useFetch, msg, Async, Hint, PageHeader, Status as Chip } from './ui'
 import { ConfirmDialog, MoreMenu } from './kit'
+import { MaskEditor } from './MaskEditor'
 
 // "Catalog photos": one photo with many labelled products -> one card per product to check, edit, confirm or ask suppliers about.
 // Contract: docs/api-contract.md (listings), setup: docs/deploy.md 10b.
@@ -11,7 +12,7 @@ interface Item {
   id: string; position: number; description: string; labels: string[]; sku: string | null; sizes: string[]
   price: string | number | null; currency: string | null; bbox: [number, number, number, number]
   status: Status; reasons: string[]; item_key: string | null; crop_url: string
-  price_tiers?: Tier[]; stock_qty?: string | number | null; category?: string | null; category_suggestion?: string | null
+  price_tiers?: Tier[]; stock_qty?: string | number | null; category?: string | null; category_suggestion?: string | null; cutout_url?: string | null
 }
 // One customer price: for one size (or every size when size is null) from min_qty up. Priced by the rules engine, never the model.
 interface Tier { size: string | null; min_qty: string | number; price: string | number }
@@ -146,6 +147,8 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
   const [res, setRes] = useState<SendResult>()
   const [note, setNote] = useState('')
   const [confirmOff, setConfirmOff] = useState(false)
+  const [masking, setMasking] = useState(false)
+  const [ver, setVer] = useState(0)  // a saved cut-out keeps its URL, so the picture is asked for again
   const ref = useRef<HTMLLIElement>(null)
   const id = `it-${it.id}`
 
@@ -154,6 +157,13 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
     setBusy(true); setErr('')
     try { await api('PATCH', `/listings/${lid}/items/${it.id}`, body); done?.(); onChanged() } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
+  const saveCut = async (png: Blob) => {
+    const fd = new FormData()
+    fd.append('file', png, 'cutout.png')
+    await api('POST', `/listings/${lid}/items/${it.id}/cutout`, fd)
+    setVer(v => v + 1); setMasking(false); onChanged()
+  }
+  const dropCut = async () => { await api('DELETE', `/listings/${lid}/items/${it.id}/cutout`); setVer(v => v + 1); setMasking(false); onChanged() }
   const open = () => {
     setF({ description: it.description, category: it.category ?? '', sku: it.sku ?? '', sizes: it.sizes.join(', '), item_key: it.item_key ?? '', price: it.price === null ? '' : String(it.price),
       stock: it.stock_qty === null || it.stock_qty === undefined ? '' : String(Number(it.stock_qty)) })
@@ -207,7 +217,10 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
   return (
     <li ref={ref} id={id} tabIndex={-1} className={`card scroll-mt-4 ${off ? 'opacity-80' : ''}`} aria-labelledby={`${id}-h`}>
       <div className="flex flex-wrap items-start gap-4">
-        <Pic url={it.crop_url} alt={`Cropped photo of product ${n}`} className="max-h-40 w-[120px] max-w-full rounded-ui border border-hairline object-contain" />
+        <div className="w-[120px] max-w-full shrink-0 rounded-ui border border-hairline" style={it.cutout_url ? { background: 'repeating-conic-gradient(#c9c9c9 0 25%, #ececec 0 50%) 0 0 / 14px 14px' } : undefined}>
+          <Pic key={ver} url={it.cutout_url ? `${it.cutout_url}${it.cutout_url.startsWith('/api/') ? `?v=${ver}` : ''}` : it.crop_url}
+            alt={it.cutout_url ? `Cut-out of product ${n}` : `Cropped photo of product ${n}`} className="max-h-40 w-full object-contain" />
+        </div>
         <div className="min-w-0 flex-1 basis-60">
           <h3 id={`${id}-h`} className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{n}. <span className={off ? 'line-through' : undefined}>{it.description}</span></span>
@@ -244,6 +257,8 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
           )}
         </div>
       </div>
+
+      {masking && <MaskEditor cropUrl={it.crop_url} cutoutUrl={it.cutout_url ?? null} bbox={it.bbox} onSave={saveCut} onRemove={dropCut} onClose={() => setMasking(false)} />}
 
       {edit ? (
         <form className="mt-3 grid gap-3 border-t border-hairline pt-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); save() }}>
@@ -316,6 +331,7 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-3">
           <MoreMenu label={`More for product ${n}`}>
             <button type="button" data-close className="sidelink w-full text-left" onClick={open}>Edit product {n}</button>
+            <button type="button" data-close className="sidelink w-full text-left" onClick={() => setMasking(true)}>{it.cutout_url ? `Edit cut-out of product ${n}` : `Cut out product ${n}`}</button>
             <button type="button" data-close className="sidelink w-full text-left" aria-expanded={asking} aria-controls={`${id}-ask`} onClick={() => setAsking(!asking)}>Ask suppliers about product {n}</button>
             {!off && <button type="button" data-close className="sidelink w-full text-left text-warn" aria-disabled={busy || undefined} onClick={() => setConfirmOff(true)}>Discard product {n}</button>}
           </MoreMenu>

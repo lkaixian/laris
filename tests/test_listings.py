@@ -257,6 +257,29 @@ def test_other_tenant_gets_404_everywhere(lenv):
     assert e.sql("select status from listing_items where id=%s", (iid,))[0]["status"] == "needs_review"
 
 
+def test_cutout_save_fetch_replace_delete_and_checks(lenv):
+    e = lenv
+    j = up(e).json()
+    lid, iid = j["listing_id"], j["items"][0]["id"]
+    url = f"/api/listings/{lid}/items/{iid}/cutout"
+    png = lambda mode="RGBA", size=(60, 40): (lambda b: (Image.new(mode, size, (0, 0, 0, 0) if mode == "RGBA" else (9, 9, 9)).save(b, "PNG"), b.getvalue())[1])(io.BytesIO())
+    post = lambda data, who=None, name="c.png": e.c.post(url, headers=who or e.S, files={"file": (name, data, "image/png")})
+    assert j["items"][0]["cutout_url"] is None and e.c.get(url, headers=e.S).status_code == 404
+    assert post(png()).status_code == 200
+    got = e.c.get(url, headers=e.S)
+    assert got.status_code == 200 and got.headers["content-type"] == "image/png" and Image.open(io.BytesIO(got.content)).mode == "RGBA"
+    assert e.c.get(f"/api/listings/{lid}", headers=e.S).json()["items"][0]["cutout_url"] == url
+    assert post(png(size=(80, 80))).status_code == 200 and Image.open(io.BytesIO(e.c.get(url, headers=e.S).content)).size == (80, 80)  # replaces
+    assert post(png("RGB")).status_code == 415  # no alpha channel: nothing would be transparent
+    assert post(png(size=(1300, 10))).status_code == 415
+    assert post(photo(), name="c.png").status_code == 415  # a JPEG renamed
+    assert post(b"not an image").status_code == 415
+    x = other_tenant(e)
+    assert e.c.get(url, headers=x).status_code == 404 and post(png(), who=x).status_code == 404 and e.c.delete(url, headers=x).status_code == 404
+    assert e.c.delete(url, headers=e.S).status_code == 200 and e.c.get(url, headers=e.S).status_code == 404
+    assert e.sql("select count(*) n from audit_log where event like 'catalog product cut-out%%'")[0]["n"] == 3  # saved twice, removed once
+
+
 def test_ask_suppliers_about_one_crop_reuses_rfq(lenv, monkeypatch):
     e = lenv
     sup = setup(e, monkeypatch)

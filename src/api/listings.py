@@ -23,7 +23,7 @@ r = APIRouter(prefix="/api")
 
 MAX_IMAGE = 8_000_000
 IMAGES = ("image/jpeg", "image/png", "image/webp")
-COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key, price_tiers, stock_qty, category, category_suggestion"
+COLS = "id, position, description, labels, sku, sizes, price, currency, bbox, status, reasons, item_key, price_tiers, stock_qty, category, category_suggestion, cutout is not null as has_cutout"
 CATEGORIZE = Literal["auto", "suggest", "manual"]  # auto keeps the reader's category, suggest only proposes it, manual ignores it
 
 
@@ -62,7 +62,8 @@ def _item(ctx: Ctx, lid, x: dict) -> dict:
     price = x["price"] if ctx.costs else None
     return {**x, "price": price, "currency": x["currency"] if price is not None or (ctx.costs and x["price_tiers"]) else None,
             "price_tiers": x["price_tiers"] if ctx.costs else [],
-            "crop_url": f"/api/listings/{lid}/items/{x['id']}/crop"}
+            "crop_url": f"/api/listings/{lid}/items/{x['id']}/crop",
+            "cutout_url": f"/api/listings/{lid}/items/{x['id']}/cutout" if x["has_cutout"] else None}
 
 
 def _items(ctx: Ctx, lid) -> list[dict]:
@@ -171,6 +172,48 @@ def crop(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(read_ctx)):
     if not row["crop"]:
         raise ApiError(404, "expired", "photo removed after the retention period")
     return Response(bytes(row["crop"]), media_type=row["crop_mime"])
+
+
+MAX_CUTOUT = 2_000_000
+CUTOUT_SIDE = 1200  # the crop is at most 600 px; the browser draws at the crop's own size
+
+
+@r.get("/listings/{listing_id}/items/{item_id}/cutout")
+def cutout(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    row = ctx.conn.execute("select cutout from listing_items where id=%s and listing_id=%s and tenant_id=%s", (item_id, listing_id, ctx.tenant_id)).fetchone()
+    if not row or not row["cutout"]:
+        raise ApiError(404, "not_found", "this product has no cut-out")
+    return Response(bytes(row["cutout"]), media_type="image/png")
+
+
+@r.post("/listings/{listing_id}/items/{item_id}/cutout")
+def save_cutout(listing_id: UUID, item_id: UUID, file: UploadFile = File(...), ctx: Ctx = Depends(write_ctx)):
+    """The product picture with a transparent background, drawn in the browser. Checked as a real PNG with an alpha channel; nothing else is stored."""
+    from PIL import Image
+    require_perm(ctx, "upload_documents")
+    data = read_capped(file, MAX_CUTOUT, "cut-out over 2 MB")
+    try:
+        im = Image.open(io.BytesIO(data))
+        ok = im.format == "PNG" and "A" in im.getbands() and max(im.size) <= CUTOUT_SIDE
+    except (OSError, Image.DecompressionBombError):
+        ok = False
+    if not ok:
+        raise ApiError(415, "unsupported_media", f"send a PNG with a transparent background, at most {CUTOUT_SIDE} px on a side")
+    if not ctx.conn.execute("update listing_items set cutout=%s where id=%s and listing_id=%s and tenant_id=%s returning 1",
+                            (data, item_id, listing_id, ctx.tenant_id)).fetchone():
+        raise ApiError(404, "not_found", "product not found")
+    audit(ctx, "listing_items", item_id, "catalog product cut-out saved", None, None)
+    return reply(ctx, {"cutout_url": f"/api/listings/{listing_id}/items/{item_id}/cutout"})
+
+
+@r.delete("/listings/{listing_id}/items/{item_id}/cutout")
+def delete_cutout(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(write_ctx)):
+    require_perm(ctx, "upload_documents")
+    if not ctx.conn.execute("update listing_items set cutout=null where id=%s and listing_id=%s and tenant_id=%s returning 1",
+                            (item_id, listing_id, ctx.tenant_id)).fetchone():
+        raise ApiError(404, "not_found", "product not found")
+    audit(ctx, "listing_items", item_id, "catalog product cut-out removed", None, None)
+    return reply(ctx, {"cutout_url": None})
 
 
 class Tier(BaseModel, extra="forbid"):

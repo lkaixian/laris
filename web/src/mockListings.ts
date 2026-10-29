@@ -36,6 +36,12 @@ export function mockListings(method: string, p: string, owner: boolean, body: an
     return { listing_id: l.id, item_count: l.items.length, items: view(l).items }
   }
   if (p === '/listings' && method === 'GET') return listings.map(l => ({ id: l.id, party_id: l.party_id, party_name: l.party_name, note: l.note, source_channel: l.source_channel, created_at: l.created_at, image_url: l.image_url, thumb_url: l.image_url, items: l.items.length, to_review: l.items.filter(i => i.status === 'needs_review').length }))
+  if ((m = p.match(/^\/listings\/([^/]+)\/items\/([^/]+)\/cutout$/)) && (method === 'POST' || method === 'DELETE')) {
+    const it: any = find(m[1]).items.find(x => x.id === m![2])
+    if (!it) throw new ApiError(404, 'not_found', 'Item not found.')
+    it.cutout_url = method === 'POST' ? URL.createObjectURL(body.get('file')) : null  // a blob URL: mock images are shown as they are
+    return { cutout_url: it.cutout_url }
+  }
   if (p === '/listings/categories' && method === 'GET') return [...new Set(listings.flatMap(l => l.items.map((i: any) => i.category).filter(Boolean)))].sort()
   if ((m = p.match(/^\/listings\/([^/]+)$/)) && method === 'GET') return view(find(m[1]))
   if ((m = p.match(/^\/listings\/([^/]+)\/items\/([^/]+)$/)) && method === 'PATCH') {

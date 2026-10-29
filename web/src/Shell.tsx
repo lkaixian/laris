@@ -77,7 +77,7 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
                 <li key={i.key} className="group relative">
-                  <a className={`sidelink ${!collapsed && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : hasGuide(i.key) || articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>

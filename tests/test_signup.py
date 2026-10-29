@@ -586,4 +586,4 @@ def test_migrations_apply_once(env, pg_url, tmp_path, monkeypatch):
     db.apply_schema()  # the second start must not run it again (create table would fail)
     with psycopg.connect(pg_url, autocommit=True) as c:  # the probe table is made after roles.sql, so laris_app has no grant on it
         assert c.execute("select count(*) from migration_probe").fetchone()[0] == 1
-        assert c.execute("select file from schema_migrations").fetchone()[0] == "0001_probe.sql"
+        assert c.execute("select file from schema_migrations where file='0001_probe.sql'").fetchone()[0] == "0001_probe.sql"

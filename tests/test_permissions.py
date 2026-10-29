@@ -52,6 +52,8 @@ REQ = {
     ("DELETE", "/api/invites/{iid}"): {},
     ("POST", "/api/listings"): {"files": {"image": ("i.jpg", JPEG, "image/jpeg")}},
     ("PATCH", "/api/listings/{listing_id}/items/{item_id}"): {"json": {"description": "x"}},
+    ("POST", "/api/listings/{listing_id}/items/{item_id}/cutout"): {"files": {"file": ("c.png", b"x", "image/png")}},
+    ("DELETE", "/api/listings/{listing_id}/items/{item_id}/cutout"): {},
     ("POST", "/api/listings/{listing_id}/items/{item_id}/ask"): {"json": {"supplier_ids": [ID]}},
     ("POST", "/api/rfq"): {"files": {"image": ("i.jpg", JPEG, "image/jpeg")}, "data": {"description": "d", "supplier_ids": ID}},
     ("POST", "/api/rfq/{rfq_id}/replies/{reply_id}/accept"): {"json": {"item_key": "x"}},

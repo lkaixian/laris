@@ -7,7 +7,7 @@ from support.fixtures import env, pg_url  # noqa: F401
 
 
 def model(monkeypatch, out):
-    def fake(text, schema, few_shot=(), *, client=None):
+    def fake(text, schema, few_shot=(), *, client=None, names=()):
         if isinstance(out, Exception):
             raise out
         return out

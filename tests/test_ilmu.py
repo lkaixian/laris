@@ -106,3 +106,16 @@ def test_pii_is_masked_on_the_way_out_and_restored_on_the_way_back():
         assert secret not in seen[0]
     assert "1234 5678 9012 3456" in seen[0] and "10 pcs @ RM 12.50" in seen[0]  # not Luhn-valid, not PII: untouched
     assert out == {"email": "ali@shop.my", "again": "ali@shop.my", "tel": "012-345 6789", "card": "4242 4242 4242 4242", "note": "[PHONE_9]", "qty": 5}
+
+
+def test_contact_names_are_masked_whole_and_restored():
+    seen = []
+
+    def h(req):
+        seen.append(req.content.decode())
+        return chat(json.dumps({"who": "[NAME_1]", "other": "[NAME_2]"}))
+
+    t = "Quote for ALI trading sdn bhd, attn Siti Aminah. Alibaba is a different word, 10 pcs"
+    out = ilmu.extract_json(t, {"type": "object"}, client=client(h), names=["Ali Trading Sdn Bhd", "Siti Aminah", "ab", None, "Ali"])
+    assert "ALI trading" not in seen[0] and "Siti" not in seen[0] and "Alibaba" in seen[0] and "[NAME_1]" in seen[0]
+    assert out == {"who": "ALI trading sdn bhd", "other": "Siti Aminah"}

@@ -52,7 +52,7 @@ def transcribe(audio_bytes: bytes, mime: str = "audio/ogg", *, client=None, lang
     return j["text"]
 
 
-def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None) -> dict:
+def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None, names=()) -> dict:
     """Chat completion asking for JSON matching schema; one retry on invalid JSON."""
     msgs = [{
         "role": "system",
@@ -61,7 +61,7 @@ def extract_json(text: str, json_schema: dict, few_shot=(), *, client=None) -> d
     }]
     for u, a in few_shot:
         msgs += [{"role": "user", "content": u}, {"role": "assistant", "content": json.dumps(a)}]
-    mask = Mask()  # every model call is masked here, so no caller can forget; the reply is unmasked before it is returned
+    mask = Mask(names)  # every model call is masked here, so no caller can forget; the reply is unmasked before it is returned
     msgs.append({"role": "user", "content": mask(text)})
     err = None
     for _ in range(2):

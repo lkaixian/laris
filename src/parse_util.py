@@ -17,7 +17,7 @@ def redact(text: str) -> str:
     return PII.sub("[redacted]", text)
 
 CARD = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")  # 13 to 19 digits, kept only when the Luhn check passes
-TOKEN = re.compile(r"\[(EMAIL|PHONE|ID|CARD)_(\d+)\]")
+TOKEN = re.compile(r"\[(EMAIL|PHONE|ID|CARD|NAME)_(\d+)\]")
 
 
 def _luhn(s: str) -> bool:
@@ -28,10 +28,13 @@ def _luhn(s: str) -> bool:
 class Mask:
     """Reversible masking for one model call: PII becomes [EMAIL_1], [PHONE_1], [ID_1], [CARD_1] (the same value always gets the same
     token) and unmask() puts the real values back into the reply. The map lives only in this object, never stored or logged.
-    ponytail: regex only, names and addresses pass through until the contacts dictionary is wired in."""
+    `names` is the tenant's own contact names (see contact_names): each one found in the text becomes [NAME_n], matched whole and
+    ignoring case. ponytail: regex plus that dictionary, so a name that is not a contact, and any address, still pass through."""
 
-    def __init__(self):
+    def __init__(self, names=()):
         self.seen = {}  # token -> original
+        names = sorted({n.strip() for n in names if n and len(n.strip()) >= 3}, key=len, reverse=True)
+        self.names = re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, names)) + r")(?!\w)", re.I) if names else None
 
     def _tok(self, kind: str, v: str) -> str:
         for t, o in self.seen.items():
@@ -42,6 +45,8 @@ class Mask:
         return t
 
     def __call__(self, text: str) -> str:
+        if self.names:
+            text = self.names.sub(lambda m: self._tok("NAME", m[0]), text)
         text = CARD.sub(lambda m: self._tok("CARD", m[0]) if _luhn(m[0]) else m[0], text)
         return PII.sub(lambda m: self._tok("EMAIL" if "@" in m[0] else "ID" if re.fullmatch(r"\d{6}-?\d{2}-?\d{4}", m[0]) else "PHONE", m[0]), text)
 
@@ -53,6 +58,12 @@ class Mask:
         if isinstance(x, dict):
             return {k: self.unmask(v) for k, v in x.items()}
         return x
+
+
+def contact_names(conn, tenant_id) -> list[str]:
+    """The business's own contact names and attention people, to mask before text leaves for the model."""
+    rows = conn.execute("select name, attention from parties where tenant_id=%s limit 2000", (tenant_id,)).fetchall()
+    return [v for r in rows for v in (r["name"], r["attention"]) if v]
 
 
 def _dec(x, lo=Decimal(0)):

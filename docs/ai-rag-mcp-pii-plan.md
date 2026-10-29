@@ -2,6 +2,10 @@
 
 Status tracker for the work in stages. Each stage ends with tests, a `docs/BUILD_LOG.md` row, a commit and a read of the CI run.
 
+## Working method
+
+The full suite takes about 8 minutes locally, so it is not run per change. Run the touched test files locally, push, and read the CI run through the public API (see the saved CI feedback). Only a CI failure sends us back to the suite.
+
 ## Decisions (owner, 2026-10-30)
 
 - Masking is **reversible**: the model sees `[EMAIL_1]`, the person sees the real value.
@@ -21,7 +25,7 @@ Status tracker for the work in stages. Each stage ends with tests, a `docs/BUILD
 | Step | Work | Done when |
 |---|---|---|
 | 1a | `parse_util.Mask`: reversible tokens for email, phone, NRIC and Luhn-valid card numbers. Applied inside `ilmu.extract_json` and the custom-server path of `ask_json`, so no caller can skip it. Call-site `redact()` removed | DONE 2026-10-30. Test: payload holds no seeded PII, reply is unmasked, prices and quote numbers pass |
-| 1b | Names and addresses: a per-request dictionary from the tenant's own `contacts` rows (name, company, address words), replaced with `[NAME_n]`. No NER library. Needs `conn` passed to the model calls | Seeded customer name never appears in an outbound payload at any call site |
+| 1b | Names: a per-request dictionary from the tenant's own `parties` rows (name and attention), whole-word and case-insensitive, replaced with `[NAME_n]`. No NER library. Addresses are not masked yet | DONE 2026-10-30, CI result pending. Unit test on ilmu; the call sites pass `contact_names(conn, tenant_id)` |
 | 1c | One leak test that drives every call site (enquiry, supplier document, RFQ reply, availability, assistant, guide) with a mocked transport and fails if any outbound body holds a seeded value. Add bank account numbers in context ("acct", "a/c") | Test fails if a new call site skips the mask |
 
 Limits kept on purpose: the model can drop or change a token in its reply, so an altered token stays as text; masking is regex plus the contacts dictionary, so a name that is not in contacts passes through.

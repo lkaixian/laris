@@ -7,6 +7,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from . import ilmu, pipeline, pricing
+from .parse_util import contact_names
 
 log = logging.getLogger("laris")
 
@@ -56,10 +57,10 @@ def _recall(conn, tid, key):
                         (tid, [r["id"] for r in hit[1]])).fetchall()
 
 
-def _parse(text, ilmu_client):
+def _parse(text, ilmu_client, names=()):
     """-> (intent, search terms, qty, uom)"""
     try:
-        j = ilmu.extract_json(text, SCHEMA, FEW_SHOT, client=ilmu_client)
+        j = ilmu.extract_json(text, SCHEMA, FEW_SHOT, client=ilmu_client, names=names)
         if j.get("intent") not in ("availability", "quote_request"):
             return "other", [], None, None
         raw = j.get("search_terms")
@@ -195,7 +196,7 @@ def _quote(conn, tid, party_id, key, text, terms, qty, uom, channel, external_id
 
 
 def answer(conn, tid, party_id, text, ilmu_client=None, *, channel="web", external_id=None):
-    intent, terms, qty, uom = _parse(text, ilmu_client)
+    intent, terms, qty, uom = _parse(text, ilmu_client, contact_names(conn, tid))
     key = (str(tid), str(party_id))
     if intent == "quote_request":
         return _quote(conn, tid, party_id, key, text, terms, qty, uom, channel, external_id)

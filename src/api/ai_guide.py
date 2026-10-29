@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .. import ilmu, tgbots
 from ..errors import ApiError
-from ..parse_util import Mask
+from ..parse_util import Mask, contact_names
 from .deps import Ctx, audit, read_ctx, require_owner, svc, throttle, write_ctx
 
 log = logging.getLogger("laris")
@@ -115,15 +115,15 @@ def ai_row(ctx: Ctx):
     return ctx.conn.execute("select * from tenant_ai where tenant_id=%s", (ctx.tenant_id,)).fetchone()
 
 
-def ask_json(request: Request, row, text: str, schema: dict) -> dict:
+def ask_json(request: Request, row, text: str, schema: dict, names=()) -> dict:
     """The one model call used by the Assistant and the guide: the owner's own server when chosen, else hosted ILMU."""
     if not (row and row["provider"] == "custom"):
-        return ilmu.extract_json(text, schema, client=svc(request).ilmu)
+        return ilmu.extract_json(text, schema, client=svc(request).ilmu, names=names)
     try:
         key = tgbots.decrypt(row["custom_key_enc"])
     except (RuntimeError, ApiError, TypeError):
         raise AiError("The saved key cannot be read. Enter it again in AI settings.") from None
-    mask = Mask()
+    mask = Mask(names)
     msgs = [{"role": "system", "content": "Reply with ONLY a JSON object matching this JSON schema:\n" + json.dumps(schema)},
             {"role": "user", "content": mask(text)}]
     out = chat(row["custom_base_url"], row["custom_model"], key, msgs, getattr(svc(request), "ai_http", None))
@@ -261,7 +261,7 @@ def guide(body: GuideIn, request: Request, ctx: Ctx = Depends(write_ctx)):
             "Use only the candidates; never invent a screen. Reply as JSON {\"answer\": string, \"ids\": [candidate ids]}.\n"
             + json.dumps({"question": clean(body.question), "candidates": [{"id": c.id, "label": c.label, "path": c.path} for c in body.candidates]}))
     try:
-        out = ask_json(request, row, text, GUIDE_SCHEMA)
+        out = ask_json(request, row, text, GUIDE_SCHEMA, contact_names(ctx.conn, ctx.tenant_id))
     except ilmu.IlmuError as e:
         log.warning("ai guide: provider failed: %s", type(e).__name__)  # the type only: its text could carry the question or a URL
         raise ApiError(503, "ai_unavailable", "The AI guide is not available right now. Use the menu or the search box.") from None

@@ -43,6 +43,10 @@ Known limit: when a model call fails and the route then raises (supplier documen
 
 ## Stage 3: RAG over the tenant's own data
 
+3a DONE 2026-10-30: `src/rag.py` (retrieval engine and source registry) and `GET /api/ai/passages?q=` (what the AI may read for this caller). Sources: quotes, contacts, catalog (open to every role), costs and supplier_docs (need `view_costs`). Tests in `tests/test_rag.py`. No model reads the passages yet.
+
+3b is next and needs a decision: sending records to a model changes what the owner consented to (today's text says the Assistant never sends records). It needs a new AI mode, a new disclosure version and a consent step in AI settings before any passage is sent. The `ask` intent, citations and the prompt-injection test come with 3b.
+
 - A **source registry**: each source (catalog items, quotes, contacts, jobs, supplier notes) declares the permission it needs and a function that builds its text from the same scrubbed view the API returns. A source the caller lacks the permission for is never searched, and the denial is recorded in `ai_calls`.
 - Index: Postgres full-text (`tsvector`) first. pgvector only if measured recall is poor and the model host offers embeddings. Retrieval runs on the caller's RLS connection.
 - Assistant gets an `ask` intent: retrieve top-k, mask, answer, cite ids. The answer links to records; the model never writes a price or changes data.

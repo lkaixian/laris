@@ -2,6 +2,7 @@
 the question, the answer and the hidden values are never stored (src/ai_log.py)."""
 from fastapi import APIRouter, Depends, Query
 
+from .. import rag
 from .deps import Ctx, read_ctx, reply
 
 r = APIRouter(prefix="/api")
@@ -22,3 +23,9 @@ def activity(days: int = Query(30, ge=1, le=90), ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, {"scope": "own" if own else "all", "days": days,
                        "totals": {"calls": tot["n"], "failed": tot["failed"], "median_ms": tot["median_ms"], "masked": masked},
                        "by_kind": by_kind, "recent": [dict(x) for x in recent]})
+
+
+@r.get("/ai/passages")
+def passages(q: str = Query(min_length=1, max_length=200), ctx: Ctx = Depends(read_ctx)):
+    """What the AI may read for this question, for THIS caller: their business only, and only the sources their role may see."""
+    return reply(ctx, rag.retrieve(ctx, q))

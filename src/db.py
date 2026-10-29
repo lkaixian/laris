@@ -9,6 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 DB_DIR = Path(__file__).resolve().parent.parent / "db"
+MIGRATIONS_DIR = DB_DIR / "migrations"  # NNNN_name.sql, each applied once and recorded in schema_migrations; for changes the idempotent files cannot make
 
 
 def url() -> str:
@@ -52,6 +53,17 @@ def apply_schema(seed: bool | None = None) -> None:
                 run("schema.sql", "transitions.sql", "functions.sql")
         run("tiers.sql", "views.sql", "auth.sql", "rls.sql", "rfq.sql", "listings.sql", "catalog_tiers.sql", "rbac.sql", "license.sql", "signup.sql", "multi.sql",
             "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "jobs_manual.sql", "track.sql", "privacy.sql", "onboarding.sql", "accept.sql", "apiaccess.sql", "aiguide.sql", "consent.sql")
+        c.execute("create table if not exists schema_migrations (file text primary key, applied_at timestamptz not null default now())")
+        done = {r[0] for r in c.execute("select file from schema_migrations").fetchall()}
+        for f in sorted(MIGRATIONS_DIR.glob("*.sql")) if MIGRATIONS_DIR.is_dir() else []:
+            if f.name in done:
+                continue
+            try:
+                with c.transaction():  # a failed migration leaves nothing half applied and stops the start
+                    c.execute(f.read_text(encoding="utf-8"))
+                    c.execute("insert into schema_migrations(file) values (%s)", (f.name,))
+            except psycopg.Error as e:
+                raise RuntimeError(f"migration {f.name} failed: {e.diag.message_primary or e}") from e
         if (os.environ.get("SEED") == "1" if seed is None else seed) and                 not c.execute("select 1 from tenants limit 1").fetchone():
             run("seed_made_to_order.sql")
         if owner:  # new tables and views need their grants for laris_app

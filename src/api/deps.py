@@ -219,7 +219,7 @@ class Services:
         self.ilmu = None  # httpx.Client for ILMU (None = real)
         self.http = None  # httpx.Client for WhatsApp / Telegram (None = real)
         self.ocr = ocr
-        self.mail = mailer.send  # (to, subject, text, html=None, category=None, attachments=None) -> bool, never raises
+        self.mail = mailer.send_retry  # (to, subject, text, html=None, category=None, attachments=None) -> bool, never raises
 
     def send(self, channel: str, to: str, text: str, phone_id: str | None = None) -> str:
         """phone_id: the tenant's own WhatsApp business number; None falls back to WHATSAPP_PHONE_NUMBER_ID.

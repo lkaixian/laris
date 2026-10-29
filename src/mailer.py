@@ -3,6 +3,7 @@ MAILTRAP_API_TOKEN (unset = email is off), MAILTRAP_INBOX_ID (set = sandbox inbo
 import base64
 import logging
 import os
+import time
 
 import httpx
 
@@ -50,6 +51,19 @@ def send(to: str, subject: str, text: str, html: str | None = None, category: st
         log.warning("mailtrap refused an email: HTTP %s", r.status_code)
     except Exception as e:  # never raises; the exception type only, its text can carry the request URL
         log.warning("mailtrap request failed: %s", type(e).__name__)
+    return False
+
+
+def send_retry(*a, **kw) -> bool:
+    """send(), tried up to 3 times (2 s, then 8 s apart) for a provider blip. Not when email is off. Blocks, so only for background tasks.
+    ponytail: a restart between tries still loses the mail; the user's "send a new code" button is the recovery, no outbox table
+    because a stored mail would hold the plain verification code."""
+    for wait in (2, 8, None):
+        if send(*a, **kw):
+            return True
+        if wait is None or not enabled():
+            return False
+        time.sleep(wait)
     return False
 
 

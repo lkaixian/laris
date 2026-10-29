@@ -563,3 +563,17 @@ def test_unknown_email_does_not_use_up_the_code_quota(env):
         env.c.post("/api/password/forgot", json={"email": "nobody@example.com"})
         deps.HITS.pop("forgot:nobody@example.com", None)  # the per-email limit is not what this is about
     assert "codes:nobody@example.com" not in deps.HITS
+
+
+def test_send_retry_tries_again_then_gives_up(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: calls.append(1) or len(calls) == 3)
+    monkeypatch.setattr(mailer, "enabled", lambda: True)
+    monkeypatch.setattr(mailer.time, "sleep", lambda s: None)
+    assert mailer.send_retry("a@b.co", "s", "t") is True and len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: calls.append(1) or False)
+    assert mailer.send_retry("a@b.co", "s", "t") is False and len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr(mailer, "enabled", lambda: False)
+    assert mailer.send_retry("a@b.co", "s", "t") is False and len(calls) == 1  # email off: no point retrying

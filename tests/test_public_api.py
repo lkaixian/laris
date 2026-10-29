@@ -79,7 +79,7 @@ def test_price_equals_the_dashboard_and_bearer_works(env):
     j = r.json()
     assert j["lines"][0]["unit_price"] == f"{line['unit_price']:.2f}" and j["total"] == f"{total:.2f}"
     assert j["ai_used"] is False and j["currency"] == "RM" and j["needs_review"] == []
-    with public_api.db.tx() as c:  # the internal function, same cost book
+    with public_api.db.tx(tenant=db.ALL_TENANTS) as c:  # the internal function, same cost book
         tid = c.execute("select tenant_id from users where id=%s", (e.owner,)).fetchone()["tenant_id"]
         inner = public_api.price_items(c, tid, [("print_part_small", 10)])
     assert inner["total"] == total and inner["lines"][0]["unit_price"] == line["unit_price"]

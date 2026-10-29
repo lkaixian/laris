@@ -123,7 +123,7 @@ def test_off_means_everything_as_before(env):
 
 # ---------------------------------------------------------------- clock
 def tclock(e):
-    with db.tx() as c:
+    with db.tx(tenant=db.ALL_TENANTS) as c:
         return clock.trusted_now(c)
 
 
@@ -198,7 +198,7 @@ def test_clock_read_takes_no_lock_and_writes_through_its_own_connection(env, mon
     n.ntp = time.time()
     stored = []
     monkeypatch.setattr(clock, "_store", lambda conn, *a: stored.append(a))  # swallow the write: the request connection must not be what writes
-    with db.tx() as c:
+    with db.tx(tenant=db.ALL_TENANTS) as c:
         rec = Rec(c)
         clock.trusted_now(rec)
     assert len(stored) == 1 and rec.sql and all(q.lstrip().startswith("select") and "for update" not in q and "for share" not in q for q in rec.sql)

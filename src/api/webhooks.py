@@ -26,7 +26,7 @@ from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
 from . import listings, privacy
-from .deps import HITS, JR, Ctx, throttle
+from .deps import HITS, JR, Ctx, hit, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/webhooks")
@@ -180,13 +180,7 @@ def _clarify(conn, tid, lang="en") -> str:
 
 
 def _limited(key, limit=LIMIT) -> bool:
-    now, q = time.monotonic(), _HITS[key]
-    while q and now - q[0] > WINDOW:
-        q.popleft()
-    if len(q) >= limit:
-        return True
-    q.append(now)
-    return False
+    return not hit(key, limit, WINDOW, _HITS)
 
 
 # a handle is a phone number for WhatsApp and `tg:<chat id>` for Telegram: neither channel's id can match the other's
@@ -363,7 +357,7 @@ def _catalog(s, j: Catalog) -> str | None:
     """Phase two of a '/catalog' photo: the model call holds no transaction or lock, the store is a short one of its own."""
     try:
         d = listings.describe(j.data, http=getattr(s, "vision", None), ocr=s.ocr)
-        with db.tx("staff", "system:webhook") as conn:
+        with db.tx("staff", "system:webhook", tenant=db.ALL_TENANTS) as conn:
             res = listings.store(conn, j.tid, j.actor, d, party_id=j.party_id, note=j.m.text.strip()[:300], channel=j.m.channel)
         return f"Received your catalog photo: {res['item_count']} product(s) are queued for review."
     except Exception as e:
@@ -372,7 +366,7 @@ def _catalog(s, j: Catalog) -> str | None:
             log.warning("inbound %s catalog photo rejected: %s", _h(j.m.external_id), what)
         else:
             log.exception("inbound %s failed", _h(j.m.external_id))
-        with db.tx("staff", "system:webhook") as conn:
+        with db.tx("staff", "system:webhook", tenant=db.ALL_TENANTS) as conn:
             _trace(conn, j.m, what)
         return SORRY
 
@@ -389,7 +383,7 @@ def _sorry(conn, m) -> str:
 
 def _process(s, msgs, statuses=()):
     replies, later, outcomes = [], [], []  # outcomes: (message, ok) for the Telegram reaction; WhatsApp ignores it
-    with db.tx("staff", "system:webhook") as conn:
+    with db.tx("staff", "system:webhook", tenant=db.ALL_TENANTS) as conn:
         for wamid, st, at in statuses:
             if st == "read":  # sent -> read is the only status move; read_at is set either way
                 conn.execute("""update documents d set read_at = coalesce(d.read_at, %s),
@@ -497,7 +491,7 @@ def _reactions(m) -> bool:
     if not TG_ACK:
         return True
     try:
-        with db.tx("staff", "system:webhook") as conn:
+        with db.tx("staff", "system:webhook", tenant=db.ALL_TENANTS) as conn:
             tid = m.tenant_id or resolve_tenant(conn, m, "".join(c for c in m.sender if c.isdigit()))[0]
             return not tid or bot_settings(conn, tid)["reactions"]
     except Exception:
@@ -541,7 +535,7 @@ async def tg_inbound(request: Request):
 
 
 def _bot(key):
-    with db.tx("staff", "system:webhook") as conn:
+    with db.tx("staff", "system:webhook", tenant=db.ALL_TENANTS) as conn:
         return conn.execute("select tenant_id, bot_id, token_enc, secret_enc from tenant_telegram_bots where bot_key=%s", (key,)).fetchone()
 
 
@@ -596,7 +590,7 @@ def _helper(s, m, token):
     m.to, m.external_id = token, f"h:{m.external_id}"
     chat, cmd = m.sender, (m.text or "") if not m.media_kind else ""
     reply, ok = None, True
-    with db.tx("staff", "system:helper") as conn:
+    with db.tx("staff", "system:helper", tenant=db.ALL_TENANTS) as conn:
         who = conn.execute(STAFF_Q, {"ch": "telegram", "d": "".join(c for c in chat if c.isdigit()), "s": chat, "scope": None}).fetchall()
         if lk := LINK_CMD.match(cmd):
             reply, ok = _helper_link(conn, chat, lk.group(1))
@@ -637,7 +631,7 @@ def _managed_bot(s, mb, token):
     if not uid.isdigit() or not isinstance(bot, int):
         return
     try:
-        with db.tx("staff", "system:helper") as conn:
+        with db.tx("staff", "system:helper", tenant=db.ALL_TENANTS) as conn:
             owners = conn.execute(f"select id, tenant_id from users where active and role = 'owner' and {HANDLE_Q}", {"s": uid}).fetchall()
             if len(owners) != 1:
                 msg = NOT_OWNER

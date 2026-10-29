@@ -8,6 +8,7 @@ import pytest
 
 from src import auth, db, mailer
 from src.api import deps
+from src.api import signup as signup_api
 from support.fixtures import env, pg_url, same  # noqa: F401
 
 PW = "correct horse 1"
@@ -19,6 +20,7 @@ NEW = "brand new pass 9"
 def fresh(monkeypatch):
     auth._ACCT.clear()
     auth._IPS.clear()
+    monkeypatch.setattr(signup_api, "PENDING_HOLD_MIN", 0)  # tests retry at once; test_pending_signup_is_held turns the hold on
     monkeypatch.delenv("SIGNUP_DEV_ECHO", raising=False)
     monkeypatch.delenv("MAILTRAP_API_TOKEN", raising=False)
 
@@ -419,7 +421,7 @@ def test_verify_cannot_cross_businesses(env):
     signup(e)
     code1 = last_code(e)
     u1 = e.sql("select id from users where email='ann@example.com'")[0]["id"]
-    with db.tx("owner", "signup") as c:  # a second pending signup that coexists (signup itself would have replaced the first)
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:  # a second pending signup that coexists (signup itself would have replaced the first)
         t2 = db.create_tenant(c, "Second Co", "made_to_order")
         u2 = c.execute("insert into users(tenant_id, name, email, role, active) values (%s,'Ann','ann@example.com','owner',false) returning id", (t2,)).fetchone()["id"]
         code2 = _issue(c, u2, t2, "verify", "123456" if code1 != "123456" else "654321")
@@ -532,10 +534,32 @@ def test_mail_templates_escape_html():
 
 
 def test_check_availability(env):
-    def free(kind, value):
-        return env.c.post("/api/signup/check", json={"kind": kind, "value": value}).json()["available"]
-    assert free("business", "Acme Print") and free("email", "ann@example.com")
+    def free(name):
+        return env.c.post("/api/signup/check", json={"name": name}).json()["available"]
+    assert free("Acme Print")
     signup(env)  # unverified: does not block
-    assert free("business", "Acme Print") and free("email", "ann@example.com")
+    assert free("Acme Print")
     assert verify(env, last_code(env)).status_code == 200
-    assert not free("business", "acme PRINT") and not free("email", "ANN@example.com")
+    assert not free("acme PRINT")
+    assert env.c.post("/api/signup/check", json={"name": "Acme Print", "kind": "email"}).status_code == 422  # emails are never checked
+
+
+def test_second_business_on_same_email_is_allowed(env):
+    signup(env)
+    assert verify(env, last_code(env)).status_code == 200
+    assert signup(env, business_name="Second Co").status_code == 202
+
+
+def test_pending_signup_is_held(env, monkeypatch):
+    monkeypatch.setattr(signup_api, "PENDING_HOLD_MIN", 10)
+    assert signup(env).status_code == 202
+    r = signup(env, business_name="Other Co")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "signup_pending"
+    assert env.sql("select count(*) n from tenants where display_name='Acme Print'")[0]["n"] == 1  # the first attempt is untouched
+
+
+def test_unknown_email_does_not_use_up_the_code_quota(env):
+    for _ in range(signup_api.MAX_DAILY + 2):
+        env.c.post("/api/password/forgot", json={"email": "nobody@example.com"})
+        deps.HITS.pop("forgot:nobody@example.com", None)  # the per-email limit is not what this is about
+    assert "codes:nobody@example.com" not in deps.HITS

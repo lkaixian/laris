@@ -6,7 +6,7 @@ from support.fixtures import env, pg_url  # noqa: F401
 
 
 def run(e):
-    with db.tx("owner", "bootstrap") as c:
+    with db.tx("owner", "bootstrap", tenant=db.ALL_TENANTS) as c:
         return db.bootstrap_owner(c)
 
 

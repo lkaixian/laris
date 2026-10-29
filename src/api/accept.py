@@ -76,7 +76,7 @@ def view(token: str, request: Request):
         return bad
     if not TOKEN.fullmatch(token):
         return _gone()
-    with db.tx("staff", "customer:link") as c:
+    with db.tx("staff", "customer:link", tenant=db.ALL_TENANTS) as c:
         link, bad = _open(c, token)
         if bad:
             return bad
@@ -112,7 +112,7 @@ def _decide(request: Request, token: str, decision: str, name: str | None, reaso
         return _gone()
     if bad := _slow(f"pq-do:tok:{h}", 10, 3600):
         return bad
-    with db.tx("staff", "customer:link") as c:
+    with db.tx("staff", "customer:link", tenant=db.ALL_TENANTS) as c:
         res = c.execute("select accept_link_decide(%s, %s, %s, %s, %s, to_timestamp(%s)) as r",
                         (h, decision, name, auth.token_hash(f"{ip}|{h}")[:16], reason, clock.trusted_now(c)["now"])).fetchone()["r"]
     if res["result"] == "not_found":

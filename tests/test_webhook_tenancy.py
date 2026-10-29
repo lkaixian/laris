@@ -110,7 +110,7 @@ def test_resolve_tenant_unit(two, monkeypatch):
     from src.channels.base import InboundMessage
     e = two
     b = e.sql("select id from tenants where wa_phone_number_id='PN_B'")[0]["id"]
-    with db.tx("staff", "t") as c:
+    with db.tx("staff", "t", tenant=db.ALL_TENANTS) as c:
         m = InboundMessage("whatsapp", "x", VICTIM, to="PN_B")
         assert webhooks.resolve_tenant(c, m, VICTIM) == (b, None)
         assert webhooks.resolve_tenant(c, InboundMessage("whatsapp", "x", VICTIM, to="PN_X"), VICTIM) == (None, "unmapped_number")

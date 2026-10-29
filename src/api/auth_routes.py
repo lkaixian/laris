@@ -34,7 +34,7 @@ def _bearer_hash(request: Request) -> str:
 
 @r.get("/auth/config")
 def config():
-    with db.tx("staff", "") as c:
+    with db.tx("staff", "", tenant=db.ALL_TENANTS) as c:
         return {"login_required": not auth.header_mode_allowed(c)}
 
 
@@ -50,7 +50,7 @@ def login(body: Login, request: Request):
     key, ip = who.lower(), auth.client_ip(request)
     if auth.throttled(key, ip):
         raise ApiError(429, "too_many_attempts", "Too many failed sign-ins. Wait a few minutes and try again.")
-    with db.tx("staff", "") as c:
+    with db.tx("staff", "", tenant=db.ALL_TENANTS) as c:
         cands = c.execute("""select u.id, u.name, u.role, u.password_hash, t.id as tenant_id, coalesce(t.display_name, t.name) as business
                              from users u join tenants t on t.id = u.tenant_id
                              where u.active and (lower(u.username) = lower(%s) or (lower(u.email) = lower(%s) and u.email_verified_at is not null))
@@ -77,7 +77,7 @@ def login(body: Login, request: Request):
 def logout(request: Request):
     got = request.headers.get("authorization", "")
     if got.startswith("Bearer "):
-        with db.tx("staff", "") as c:
+        with db.tx("staff", "", tenant=db.ALL_TENANTS) as c:
             c.execute("delete from sessions where token_sha256 = %s", (auth.token_hash(got[7:]),))
     return {"ok": True}
 

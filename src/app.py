@@ -34,9 +34,9 @@ RID = re.compile(r"[A-Za-z0-9._-]{8,64}")
 async def lifespan(app):
     if os.environ.get("DATABASE_URL"):
         db.apply_schema()  # idempotent; SEED=1 loads the synthetic made-to-order demo
-        with db.tx() as c:
+        with db.tx(tenant=db.ALL_TENANTS) as c:
             db.check_rls(c)
-        with db.tx("owner", "bootstrap") as c:
+        with db.tx("owner", "bootstrap", tenant=db.ALL_TENANTS) as c:
             if (note := db.bootstrap_owner(c)) != "off":
                 log.warning("bootstrap owner: %s", note)  # never logs the password
     else:
@@ -208,7 +208,7 @@ def ready():
     reason = "db_url_missing" if not os.environ.get("DATABASE_URL") else None
     if not reason:
         try:
-            with db.tx("staff", "", timeout=3) as c:
+            with db.tx("staff", "", timeout=3, tenant=db.ALL_TENANTS) as c:
                 c.execute("set local statement_timeout = '3s'")
                 if c.execute("select to_regclass('public.tenants') t").fetchone()["t"] is None:
                     reason = "schema_missing"

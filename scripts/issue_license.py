@@ -80,7 +80,7 @@ def issue(a) -> str:
     email, plan, seats, org, req = a.email, a.plan, a.seats, a.org or "", None
     if a.request:
         from src import db
-        with db.tx() as c:
+        with db.tx(tenant=db.ALL_TENANTS) as c:
             req = c.execute("""select q.id, q.email, q.plan, q.seats, coalesce(t.display_name, t.name) org from license_requests q
                                join tenants t on t.id = q.tenant_id where q.id::text = %s and q.status = 'new'""", (a.request,)).fetchone()
             if not req:
@@ -133,7 +133,7 @@ def main(argv=None):
         log(show(p) + ("\n  EXPIRED" if p["expires_at"] <= datetime.now(timezone.utc).timestamp() else ""))
     else:
         from src import db
-        with db.tx() as c:
+        with db.tx(tenant=db.ALL_TENANTS) as c:
             rows = pending(c)
         for q in rows:
             log(f"{q['id']}  {q['org']}  {q['email']}  {q['plan']} x{q['seats']}  {q['note'] or ''}")

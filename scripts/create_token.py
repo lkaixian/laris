@@ -40,7 +40,7 @@ def main(a):
         if days < 1:
             sys.exit("--days must be at least 1")
         del a[i:i + 2]
-    with db.tx("owner", "script:create_token") as c:
+    with db.tx("owner", "script:create_token", tenant=db.ALL_TENANTS) as c:
         if a[:1] == ["list"]:
             for u in c.execute("select id, name, role, token_sha256 is not null as has_token, token_expires_at from users order by name"):
                 print(u["id"], u["role"], u["name"], f"token until {u['token_expires_at']}" if u["has_token"] else "-")

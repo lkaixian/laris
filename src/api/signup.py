@@ -20,6 +20,7 @@ r = APIRouter(prefix="/api")
 OK = {"ok": True, "message": "If this email can be used, we sent a 6-digit code"}
 BAD_CODE = ("invalid_code", "invalid or expired code")
 MAX_TRIES, MINUTES, MAX_DAILY = 5, 10, 10
+PENDING_HOLD_MIN = 10  # a signup that just got its code cannot be replaced by another request for the same email
 
 
 def _clean(v):
@@ -105,7 +106,12 @@ def _echo(code: str) -> dict:
 def _guard(request: Request, what: str, email: str, n_ip: int, n_email: int, window: int):
     throttle(f"{what}:ip:{auth.client_ip(request)}", n_ip, window, "Too many requests. Try again later.")
     throttle(f"{what}:{email}", n_email, window, "Too many requests for this email. Try again later.")
-    throttle(f"codes:{email}", MAX_DAILY, 86400, "Too many codes requested for this email today. Try again tomorrow.")  # signup, resend and reset together
+
+
+def _quota(email: str) -> bool:
+    """One more emailed code today for this email? Counted only when a code is really issued (signup, resend and reset together), so
+    requests for an address with no account cannot use up the quota of its real owner."""
+    return hit(f"codes:{email}", MAX_DAILY, 86400)
 
 
 def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
@@ -118,21 +124,19 @@ def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
 
 
 class Check(BaseModel, extra="forbid"):
-    kind: str = Field(pattern="^(business|email)$")
-    value: str = Field(min_length=1, max_length=254)
+    name: Name
 
 
 @r.post("/signup/check")
 def check(body: Check, request: Request):
-    """Is this business name / email free? Taken = an active (verified) account has it; an unverified attempt does not block."""
-    throttle(f"check:ip:{auth.client_ip(request)}", 60, 300, "Too many checks. Try again in a few minutes.")
-    with db.tx("owner", "signup") as c:
-        if body.kind == "business":
-            q = "select 1 from tenants t where (lower(display_name)=lower(%s) or lower(name)=lower(%s)) and exists (select 1 from users u where u.tenant_id=t.id and u.active)"
-            args = (_clean(body.value),) * 2
-        else:
-            q, args = "select 1 from users where lower(email)=%s and active", (_email(body.value),)
-        return {"available": not c.execute(q, args).fetchone()}
+    """Is this business name free? Taken = a business with an active account has it; an unverified attempt does not block.
+    Only names are checked: one email may own several businesses, so an email is never "taken" (and this must not tell who has an account)."""
+    throttle(f"check:ip:{auth.client_ip(request)}", 10, 300, "Too many checks. Try again in a few minutes.")
+    throttle("check:all", 2000, 86400, "Too many checks today. Try again tomorrow.")
+    with db.tx("staff", "signup", tenant=db.ALL_TENANTS) as c:
+        return {"available": not c.execute(
+            "select 1 from tenants t where (lower(display_name)=lower(%s) or lower(name)=lower(%s)) and exists (select 1 from users u where u.tenant_id=t.id and u.active)",
+            (body.name, body.name)).fetchone()}
 
 
 @r.post("/signup", status_code=202)
@@ -140,11 +144,15 @@ def signup(body: Signup, request: Request, bg: BackgroundTasks):
     _guard(request, "signup", body.email, 5, 3, 3600)
     if why := auth.weak_password(body.password, body.email.split("@")[0]):
         raise ApiError(422, "weak_password", why)
+    if not _quota(body.email):
+        raise ApiError(429, "slow_down", "Too many codes requested for this email today. Try again tomorrow.")
     pw = auth.hash_password(body.password)
-    with db.tx("owner", "signup") as c:
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         # the same email may own other businesses; only an earlier unverified attempt (alone in its own tenant) is replaced
         for u in c.execute("""select id, tenant_id from users u where lower(email)=%s and not active and email_verified_at is null
                               and not exists (select 1 from users o where o.tenant_id=u.tenant_id and o.id<>u.id) for update""", (body.email,)).fetchall():
+            if c.execute("select 1 from email_codes where user_id=%s and purpose='verify' and created_at > now() - %s * interval '1 minute'", (u["id"], PENDING_HOLD_MIN)).fetchone():
+                raise ApiError(409, "signup_pending", f"A code was just sent to this email. Enter it, or try again in {PENDING_HOLD_MIN} minutes.")
             _drop_pending(c, u)
         try:
             tid = db.create_tenant(c, body.business_name, body.trade_template)
@@ -162,7 +170,7 @@ def signup(body: Signup, request: Request, bg: BackgroundTasks):
 @r.post("/signup/verify")
 def verify(body: Verify, request: Request):
     throttle(f"verify:ip:{auth.client_ip(request)}", 30, 900, "Too many requests. Try again later.")
-    with db.tx("owner", "signup") as c:
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         us = c.execute("select id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchall()
         hit = _redeem(c, us, "verify", body.code)  # bound to its own user: another pending account of this email stays pending
         if hit:
@@ -176,9 +184,9 @@ def verify(body: Verify, request: Request):
 def resend(body: EmailOnly, request: Request, bg: BackgroundTasks):
     _guard(request, "resend", body.email, 10, 3, 900)
     echo = {}
-    with db.tx("owner", "signup") as c:
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         u = c.execute("select id, tenant_id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchone()
-        if u:
+        if u and _quota(body.email):
             code = _issue(c, u["id"], u["tenant_id"], "verify")
             bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code), category="signup")
             echo = _echo(code)
@@ -189,9 +197,9 @@ def resend(body: EmailOnly, request: Request, bg: BackgroundTasks):
 def forgot(body: EmailOnly, request: Request, bg: BackgroundTasks):
     _guard(request, "forgot", body.email, 10, 3, 900)
     echo = {}
-    with db.tx("owner", "signup") as c:
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         us = c.execute("select id, tenant_id from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
-        if us:
+        if us and _quota(body.email):
             code = None  # ONE code for the email: one row per account, all bound to the email
             for u in us:
                 code = _issue(c, u["id"], u["tenant_id"], "reset", code, body.email)
@@ -205,7 +213,7 @@ def reset(body: Reset, request: Request):
     throttle(f"reset:ip:{auth.client_ip(request)}", 30, 900, "Too many requests. Try again later.")
     if why := auth.weak_password(body.new_password, body.email.split("@")[0]):
         raise ApiError(422, "weak_password", why)  # before the code is spent
-    with db.tx("owner", "signup") as c:
+    with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         us = c.execute("select id, username from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
         ok = _redeem(c, us, "reset", body.code, body.email)
         if ok:  # the code proves the mailbox: every verified active account with this email gets the new password

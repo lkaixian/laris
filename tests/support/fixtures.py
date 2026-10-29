@@ -62,14 +62,14 @@ class FakeSvc(Services):
 class Env:
     def __init__(self, client, ai, svc):
         self.c, self.ai, self.svc = client, ai, svc
-        with db.tx() as c:
+        with db.tx(tenant=db.ALL_TENANTS) as c:
             self.owner = str(c.execute("select id from users where role='owner'").fetchone()["id"])
             self.staff = str(c.execute("select id from users where role='staff'").fetchone()["id"])
         self.O = {"X-Role": "owner", "X-User": self.owner}
         self.S = {"X-Role": "staff", "X-User": self.staff}
 
     def sql(self, q, p=(), role="owner"):
-        with db.tx(role, self.owner) as c:
+        with db.tx(role, self.owner, tenant=db.ALL_TENANTS) as c:
             cur = c.execute(q, p)
             return cur.fetchall() if cur.description else None
 

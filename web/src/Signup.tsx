@@ -135,7 +135,7 @@ function Avail({ state }: { state: 'idle' | 'checking' | 'ok' }) {
 }
 
 const pause = (ms: number) => new Promise(r => setTimeout(r, ms))
-const isFree = async (kind: 'business' | 'email', value: string) => (await publicApi<{ available: boolean }>('POST', '/signup/check', { kind, value })).available
+const isFree = async (name: string) => (await publicApi<{ available: boolean }>('POST', '/signup/check', { name })).available
 
 export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => void }) {
   const toast = useToast()
@@ -153,13 +153,13 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
   const inflight = useRef(false)
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setF(p => ({ ...p, [k]: e.target.value })); setErrs(p => ({ ...p, [k]: '' })); setAvail('idle') }
 
-  // Runs a check with the dots, shows "Available" for a beat, then moves on. A taken value stays on the step with an error.
-  const checked = async (field: string, kind: 'business' | 'email', value: string, taken: string, next: () => Promise<void> | void) => {
+  // Business name check with the dots, "Available" for a beat, then on to step 2. A taken name stays on the step with an error.
+  const checkName = async (name: string) => {
     setBusy(true); setFormErr(''); setAvail('checking')
     try {
-      const [free] = await Promise.all([isFree(kind, value), pause(700)])
-      if (!free) { setAvail('idle'); setErrs({ [field]: taken }); requestAnimationFrame(focusFirstInvalid); return }
-      setAvail('ok'); await pause(500); await next()
+      const [free] = await Promise.all([isFree(name), pause(700)])
+      if (!free) { setAvail('idle'); setErrs({ business_name: 'That business name is already taken. Try another.' }); requestAnimationFrame(focusFirstInvalid); return }
+      setAvail('ok'); await pause(500); setAvail('idle'); setStep(2)
     } catch (x) { setAvail('idle'); setFormErr(msg(x)) } finally { setBusy(false) }
   }
 
@@ -169,7 +169,7 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
     if (bn.length < 2 || bn.length > 80) e.business_name = 'Business name needs 2 to 80 characters.'
     setErrs(e)
     if (Object.keys(e).length) { requestAnimationFrame(focusFirstInvalid); return }
-    void checked('business_name', 'business', bn, 'That business name is already taken. Try another.', () => { setAvail('idle'); setStep(2) })
+    void checkName(bn)
   }
 
   const step2 = () => {
@@ -182,7 +182,8 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
     if (f.confirm !== f.password) e.confirm = 'The two passwords do not match.'
     setErrs(e)
     if (Object.keys(e).length) { requestAnimationFrame(focusFirstInvalid); return }
-    void checked('email', 'email', em, 'This email already has an account. Sign in, or use another email.', async () => {
+    setBusy(true); setFormErr(''); setAvail('checking')  // dots while the code is sent
+    void (async () => {
       try {
         const r = await publicApi<{ message?: string; dev_code?: string }>('POST', '/signup', { business_name: f.business_name.trim(), owner_name: on, email: em, password: f.password, trade_template: f.trade_template })
         savePending({ kind: 'signup', email: em }); setPending(em); setInfo(r.message ?? 'If this email can be used, we sent a 6-digit code'); setDev(r.dev_code); setAvail('idle'); setStep(3)
@@ -193,8 +194,8 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
         else if (t?.code === 'unknown_template') { setErrs({ trade_template: t.message }); setStep(1) }
         else setFormErr(msg(x))
         if (t?.status === 422 || t?.status === 429) requestAnimationFrame(focusFirstInvalid)
-      }
-    })
+      } finally { setBusy(false) }
+    })()
   }
 
   const verify = async (c: string) => {
@@ -231,14 +232,14 @@ export function Register({ dark, setDark }: { dark: boolean; setDark: (d: boolea
         {bar}
         <Card title="Your account" lead={<>Creating <strong className="break-words text-ink">{f.business_name.trim()}</strong>. We email a 6-digit code to confirm your address.</>} focusKey="account" onSubmit={step2}>
           <Field label="Your name" name="owner_name" autoComplete="name" maxLength={80} value={f.owner_name} onChange={set('owner_name')} error={errs.owner_name} />
-          <Field label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={f.email} onChange={set('email')} error={errs.email} />
+          <Field label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={f.email} onChange={set('email')} error={errs.email} hint="Already use this email for another business? That is fine. You choose between your businesses when you sign in." />
           <Field label="Password" name="password" type="password" autoComplete="new-password" aria-describedby={pwHelp} value={f.password} onChange={set('password')} error={errs.password} />
           <Checklist id={pwHelp} pw={f.password} avoid={identity(f.email.trim(), f.owner_name.trim())} />
           <Field label="Confirm password" name="confirm" type="password" autoComplete="new-password" value={f.confirm} onChange={set('confirm')} error={errs.confirm} />
-          <Avail state={avail} />
+          {avail === 'checking' && <p role="status" className="flex items-center text-sm text-muted">Sending your code<Dots /></p>}
           {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
           <p className="text-xs text-muted">By creating an account you agree to use LARIS for your business and to keep your sign-in details private.</p>
-          <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Please wait...' : 'Check email and create account'}</button>
+          <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? 'Please wait...' : 'Create account'}</button>
           <button type="button" className="link justify-self-start text-sm" onClick={() => { setErrs({}); setFormErr(''); setAvail('idle'); setStep(1) }}>Back</button>
         </Card>
         <Back />

@@ -64,7 +64,7 @@ Not doing: live WhatsApp (Meta approval cannot finish in 24 h; Telegram is the l
 - **GPU cold start:** pod costs about $0.59/h. Keep it stopped until Sat, start at kickoff, keep it warm through Sunday's slot, stop it after. Send a warm-up request 10 minutes before the pitch. Check the US$25 credit covers about 30 h.
 - **Fallbacks, in order:** warm pod -> ILMU-only path (text quotes still work without vision) -> pre-recorded run of the same step. Know which slide/clip to cut to and rehearse it once.
 - **Network:** test the XMUM Wi-Fi against Telegram and the Replit URL on Sat morning; bring a phone hotspot.
-- **Deploy:** `ALLOW_RLS_BYPASS=1` (or the `laris_app` role) must be set before the first publish or the app refuses to start; set `TRUST_PROXY=1`, `SECRET_KEY`, `APP_PUBLIC_URL`. Publish once at kickoff to prove it boots, again only after freeze.
+- **Deploy:** run as the `laris_app` role (db/roles.sql). `ALLOW_RLS_BYPASS=1` only lets the app start without it: row-level security is then off for every business, and public signup is open, so use it for synthetic demo data only, never real customer data. Set `REQUIRE_USER_TOKEN=1` and `SECRET_KEY`; set `TRUST_PROXY=1`, `SECRET_KEY`, `APP_PUBLIC_URL`. Publish once at kickoff to prove it boots, again only after freeze.
 - **Own laptop + HDMI adapter + backup video on a USB stick.**
 - Demo login is public in the README: leave until judging ends, then change the password and stop the pod.
 

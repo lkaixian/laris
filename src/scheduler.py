@@ -100,18 +100,31 @@ def remind_jobs(c, tid) -> int:
     return sent
 
 
+SCHED_LOCK = 7412340002  # pg_try_advisory_lock key: with two instances running, only one does a pass at a time
+
+
 def run_once() -> dict:
+    """One pass, skipped (all zeros) when another instance holds the lock. See _run."""
+    import psycopg
+    with psycopg.connect(db.url(), autocommit=True, prepare_threshold=None, connect_timeout=15) as lk:
+        if not lk.execute("select pg_try_advisory_lock(%s)", (SCHED_LOCK,)).fetchone()[0]:
+            log.info("scheduler: another instance is running a pass, skipped")
+            return {"expired": 0, "followups": 0, "purged": 0, "reminders": 0}
+        return _run()  # the lock is released when `lk` closes
+
+
+def _run() -> dict:
     """Per tenant: blank old chat text, expire sent quotes past valid_until (allowed transition, owner-level system actor), queue a
     follow-up for sent/read quotes with no decision after the template's followup_hours (once per quote), and email job reminders."""
     out, errors, last = {"expired": 0, "followups": 0, "purged": 0, "reminders": 0}, 0, None
     try:
-        with db.tx("owner", "system:scheduler") as c:
+        with db.tx("owner", "system:scheduler", tenant=db.ALL_TENANTS) as c:
             tenants = c.execute("select id, trade_template from tenants order by name, id").fetchall()
     except Exception as e:
         log.warning("scheduler: could not list tenants: %s", type(e).__name__)
         tenants, errors, last = [], 1, type(e).__name__
     try:
-        with db.tx("owner", "system:scheduler") as c:
+        with db.tx("owner", "system:scheduler", tenant=db.ALL_TENANTS) as c:
             log.info("scheduler: purged %s stale row(s)", purge_stale(c))
     except Exception as e:
         errors, last = errors + 1, type(e).__name__

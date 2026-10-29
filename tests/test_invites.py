@@ -30,7 +30,7 @@ def fresh(monkeypatch, tmp_path):
 
 def bearer(e, uid):
     """Real session for a user: once somebody has a password, header-only demo mode is off."""
-    with db.tx("owner") as c:
+    with db.tx("owner", tenant=db.ALL_TENANTS) as c:
         return {"Authorization": "Bearer " + auth.new_session(c, uid)[0]}
 
 

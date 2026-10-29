@@ -15,7 +15,7 @@ def model(monkeypatch, out):
 
 
 def ask(e, text, tid=None, who=None):
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         who = who or cust(e, c)
         return availability.answer(c, tid or e.tid, who, text)
 
@@ -78,17 +78,17 @@ def quote_model(monkeypatch, qty=None, terms=(), uom="kg"):
 
 def shown(e, monkeypatch, who):
     model(monkeypatch, {"intent": "availability", "search_terms": ["esun"]})
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         return availability.answer(c, e.tid, who, "any esun available")
 
 
 def test_quote_follow_up_uses_memory_and_drafts_a_quote_for_review(e, monkeypatch):
     item(e, "eSUN PLA white", price=45, currency="RM")
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         who = cust(e, c)
     shown(e, monkeypatch, who)
     quote_model(monkeypatch, 50)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         r = availability.answer(c, e.tid, who, "Ok, nak sebut harga. Quote kalau ambil bulk 50kg")
     assert "50 kg eSUN PLA white" in r and "Price at this quantity RM 45.00 per unit" in r and "confirm it" in r
     l = e.sql("select l.*, d.status, d.direction, d.kind from document_lines l join documents d on d.id=l.document_id where l.review_reason like 'catalog%%'")[0]
@@ -107,18 +107,18 @@ def test_quote_follow_up_uses_memory_and_drafts_a_quote_for_review(e, monkeypatc
 
 def test_quote_asks_quantity_and_which_one(e, monkeypatch):
     item(e, "eSUN PLA white", price=45)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         who = cust(e, c)
     shown(e, monkeypatch, who)
     n = e.sql("select count(*) n from documents")[0]["n"]
     quote_model(monkeypatch, None)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         assert availability.answer(c, e.tid, who, "quote please") == "How many eSUN PLA white do you need?"
     assert e.sql("select count(*) n from documents")[0]["n"] == n
     item(e, "eSUN PETG black")
     shown(e, monkeypatch, who)
     quote_model(monkeypatch, 5)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         assert availability.answer(c, e.tid, who, "quote 5").startswith("Which one: 1)")
         quote_model(monkeypatch, 5, ["petg"])
         assert "5 kg eSUN PETG black" in availability.answer(c, e.tid, who, "petg 5kg")  # picking narrows what was shown
@@ -135,7 +135,7 @@ def test_quote_without_memory_or_match_is_left_to_the_order_path(e, monkeypatch)
 def test_memory_expires_is_per_party_and_tenant_scoped(e, monkeypatch):
     item(e, "eSUN PLA white", price=45)
     other = str(e.sql("insert into tenants(name, trade_template, min_margin_pct) values ('Other','made_to_order',20) returning id")[0]["id"])
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         a, b = cust(e, c, "A"), cust(e, c, "B")
     shown(e, monkeypatch, a)
     quote_model(monkeypatch, 50)
@@ -149,11 +149,11 @@ def test_memory_expires_is_per_party_and_tenant_scoped(e, monkeypatch):
 
 def test_unconfirmed_item_is_never_quoted(e, monkeypatch):
     item(e, "eSUN review", status="needs_review")
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         who = cust(e, c)
     availability._LAST[(e.tid, str(who))] = (availability.time.monotonic(), [{"id": e.sql("select id from listing_items")[0]["id"]}])
     quote_model(monkeypatch, 50)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         assert availability.answer(c, e.tid, who, "quote 50kg") is None
     quote_model(monkeypatch, 50, ["esun"])
     assert ask(e, "quote 50 esun") is None
@@ -164,11 +164,11 @@ SPOOL = ('[{"size": null, "min_qty": "10", "price": "40"}, {"size": null, "min_q
 
 
 def quote_line(e, monkeypatch, text, qty, terms=(), uom="spool"):
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         who = cust(e, c)
     shown(e, monkeypatch, who)
     quote_model(monkeypatch, qty, terms, uom)
-    with db.tx("owner", e.owner) as c:
+    with db.tx("owner", e.owner, tenant=db.ALL_TENANTS) as c:
         r = availability.answer(c, e.tid, who, text)
     return r, e.sql("select l.description, l.unit_price, l.needs_review, l.review_reason, l.price_source from document_lines l "
                     "join documents d on d.id = l.document_id where l.review_reason like 'catalog%%' order by d.doc_no desc limit 1")[0]

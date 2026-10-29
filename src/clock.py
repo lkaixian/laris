@@ -109,7 +109,7 @@ def _upsert(c, now, ntp, behind):
 def _store(conn, now, ntp, behind):
     """Write the watermark in its OWN connection and transaction: it commits at once and holds no lock, whatever the request's `conn` is doing.
     (`conn` is unused here; tests replace this with an in-transaction write because PGlite serves one connection at a time.)"""
-    with db.tx("staff", "system:clock", timeout=5) as c:
+    with db.tx("staff", "system:clock", timeout=5, tenant=db.ALL_TENANTS) as c:
         _upsert(c, now, ntp, behind)
 
 

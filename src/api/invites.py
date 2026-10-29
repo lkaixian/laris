@@ -129,7 +129,7 @@ class Accept(Preview):
 @r.post("/invites/preview")
 def preview(body: Preview, request: Request):
     throttle(f"invite-preview:ip:{auth.client_ip(request)}", 30, 900, "Too many requests. Try again later.")
-    with db.tx("owner", "invite") as c:
+    with db.tx("owner", "invite", tenant=db.ALL_TENANTS) as c:
         row = c.execute("""select coalesce(t.display_name, t.name) as business_name, r.name as role_name, i.email
                            from invites i join tenants t on t.id = i.tenant_id join roles r on r.id = i.role_id
                            where i.token_sha256=%s and i.status='pending' and i.expires_at > now()""", (auth.token_hash(body.token),)).fetchone()
@@ -144,7 +144,7 @@ def accept(body: Accept, request: Request):
     if why := auth.weak_password(body.password, body.username):
         raise ApiError(422, "weak_password", why)
     pw = auth.hash_password(body.password)
-    with db.tx("owner", "invite") as c:  # any ApiError below rolls the whole thing back, the invite included
+    with db.tx("owner", "invite", tenant=db.ALL_TENANTS) as c:  # any ApiError below rolls the whole thing back, the invite included
         # the conditional update is the lock: of two simultaneous accepts of one token only one gets a row back
         inv = c.execute("""update invites set status='accepted', accepted_at=now() where token_sha256=%s and status='pending' and expires_at > now()
                            returning id, tenant_id, email, role_id""", (auth.token_hash(body.token),)).fetchone()

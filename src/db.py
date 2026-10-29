@@ -15,10 +15,14 @@ def url() -> str:
     return os.environ["DATABASE_URL"]
 
 
+ALL_TENANTS = "*"
+
+
 @contextmanager
-def tx(role="staff", actor="", tenant="*", timeout=15):
+def tx(role="staff", actor="", tenant="", timeout=15):
     """Commit on clean exit, roll back on exception. prepare_threshold=None keeps PGlite/pgbouncer happy.
-    tenant '*' is for work that crosses tenants on purpose; request code narrows it once the user is known (db/rls.sql)."""
+    A call that names no tenant sees no tenant rows (db/rls.sql); work that crosses tenants on purpose passes ALL_TENANTS,
+    and request code narrows it once the user is known."""
     with psycopg.connect(url(), row_factory=dict_row, prepare_threshold=None, connect_timeout=timeout) as conn:
         conn.execute("select set_config('laris.role', %s, true), set_config('laris.actor', %s, true), set_config('laris.tenant', %s, true)",
                      (role, str(actor or ""), str(tenant)))

@@ -102,7 +102,7 @@ def _open(request: Request, write: bool):
     tok = got[7:] if got.startswith("Bearer ") else None
     shared = os.environ.get("APP_TOKEN")
     shared_ok = bool(shared) and tok is not None and hmac.compare_digest(tok.encode(), shared.encode())
-    with db.tx("staff", "") as conn:
+    with db.tx("staff", "", tenant=db.ALL_TENANTS) as conn:
         u = conn.execute("""select u.id, u.tenant_id, u.name, u.role, r.permissions from users u left join roles r on r.id = u.role_id
                             left join sessions s on s.user_id = u.id and s.token_sha256 = %(h)s and s.expires_at > now()
                             where u.active and (s.token_sha256 is not null
@@ -181,14 +181,26 @@ def guarded():
 HITS = defaultdict(deque)
 
 
-def throttle(key: str, limit: int, window: int, msg: str, hits=HITS):
-    """Sliding window: at most `limit` calls per `key` in `window` seconds, else 429 (the existing error shape)."""
-    now, q = time.monotonic(), hits[key]
+def hit(key: str, limit: int, window: int, hits=HITS) -> bool:
+    """Sliding window: True and counted if `key` has fewer than `limit` calls in the last `window` seconds, else False.
+    Keys made from attacker-chosen text would pile up, so past 5000 keys the idle ones (nothing in a day) are dropped."""
+    now = time.monotonic()
+    if len(hits) > 5000:
+        for k in [k for k, v in hits.items() if not v or now - v[-1] > 86400]:
+            del hits[k]
+    q = hits[key]
     while q and now - q[0] > window:
         q.popleft()
     if len(q) >= limit:
-        raise ApiError(429, "slow_down", msg)
+        return False
     q.append(now)
+    return True
+
+
+def throttle(key: str, limit: int, window: int, msg: str, hits=HITS):
+    """At most `limit` calls per `key` in `window` seconds, else 429 (the existing error shape)."""
+    if not hit(key, limit, window, hits):
+        raise ApiError(429, "slow_down", msg)
 
 
 def audit(ctx: Ctx, entity: str, entity_id, event: str, before=None, after=None):

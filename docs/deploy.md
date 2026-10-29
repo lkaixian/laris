@@ -154,7 +154,7 @@ Open Tools > Secrets (or the lock icon). Add each key below. Values come from th
 | `RUNPOD_API_KEY` | RunPod auth (STT fallback and vision) | yes (sponsor proof) |
 | `RUNPOD_VISION_URL` | catalog photo model: `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1` (section 10b) | only for catalog photos |
 | `RUNPOD_VISION_MODEL` | model name served by that endpoint (default `Qwen/Qwen2.5-VL-7B-Instruct`) | no |
-| `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit |
+| `TRUST_PROXY` = `1` | behind Replit's proxy: the client address for sign-in throttling is the LAST `X-Forwarded-For` entry (the one the proxy appended). Leave unset anywhere else, or anyone can spoof their address | yes on Replit It is only correct with exactly one proxy hop (Replit). A custom domain through another CDN or proxy needs a trusted-hop count first (not built), otherwise every IP limit is wrong. |
 | `DEMO_MODE` = `1` | allow header-only demo mode (no sign-in) on a Replit deployment or with `APP_TOKEN` set; ignored once any account has a password | demo only, then delete |
 | `SEED` = `1` | synthetic demo data, first bootstrap only | demo only, then delete |
 

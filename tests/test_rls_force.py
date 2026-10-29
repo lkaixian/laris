@@ -35,7 +35,7 @@ def test_owner_obeys_rls_and_apply_schema_twice(owner_url, monkeypatch):
     monkeypatch.delenv("DATABASE_URL_OWNER", raising=False)
     db.apply_schema(seed=True)
     db.apply_schema(seed=True)
-    with db.tx() as c:
+    with db.tx(tenant=db.ALL_TENANTS) as c:
         assert c.execute("select count(*) n from tenants").fetchone()["n"] == 1
         assert c.execute("select count(*) n from tenant_fields").fetchone()["n"] > 0
         a = c.execute("select id from tenants").fetchone()["id"]

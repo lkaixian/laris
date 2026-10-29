@@ -11,7 +11,8 @@ let s = {
   consent: mockAiOn ? { at: new Date(Date.now() - 864e5 * 3).toISOString(), by: 'SAMPLE Owner', version: 1 } : { at: null as string | null, by: null as string | null, version: null as number | null },
   legacy: mode === 'legacy',
 }
-const view = () => ({ mode: s.mode, provider: s.provider, custom: s.custom, consent: s.consent, disclosure: { version: 1, text: TEXT }, available: { ilmu: mode !== 'noilmu' }, legacy_assistant: s.legacy })
+const RAG_TEXT = 'What is sent in this mode: your question AND short extracts of your own records that match it. Emails, phone numbers, ID numbers, card numbers and the names in your contact book are replaced first. Addresses are NOT hidden. Each person only gets answers from records their role may see. LARIS keeps only a count of each AI call. You must tell your customers and suppliers in your privacy notice (SAMPLE text).'
+const view = () => ({ mode: s.mode, provider: s.provider, custom: s.custom, consent: s.consent, disclosure: { version: 1, text: TEXT }, rag_disclosure: { version: 2, text: RAG_TEXT }, available: { ilmu: mode !== 'noilmu' }, legacy_assistant: s.legacy })
 
 // Returns undefined when the path is not one of ours. `guide` is open to every signed-in user.
 export function mockAi(method: string, p: string, owner: boolean, body: any): unknown {

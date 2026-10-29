@@ -7,10 +7,10 @@ import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 
 /* Owner page: the optional AI guide (src/api/ai_guide.py). Off until the owner switches it on and confirms the disclosure. */
-type Mode = 'off' | 'guide' | 'guide_data'
+type Mode = 'off' | 'guide' | 'guide_data' | 'rag'
 interface View {
   mode: Mode; provider: 'ilmu' | 'custom'; custom: { base_url: string; model: string; has_key: boolean }
-  consent: { at: string | null; by: string | null; version: number | null }; disclosure: { version: number; text: string }
+  consent: { at: string | null; by: string | null; version: number | null }; disclosure: { version: number; text: string }; rag_disclosure: { version: number; text: string }
   available: { ilmu: boolean }; legacy_assistant: boolean
 }
 
@@ -24,6 +24,8 @@ const S = {
   guideH: { en: 'Answers where to click. Sends only the question you type, with emails, phone numbers and ID numbers removed. Never your quotes, customers or costs.', ms: 'Menjawab di mana hendak klik. Hanya menghantar soalan yang anda taip, dengan emel, nombor telefon dan nombor ID dibuang. Tidak pernah sebut harga, pelanggan atau kos anda.' },
   data: { en: 'Guide plus my data', ms: 'Panduan serta data saya' },
   dataH: { en: 'The Assistant page also answers questions about your own quotes and contacts. It still sends only the question, never the records.', ms: 'Halaman Pembantu juga menjawab soalan tentang sebut harga dan kenalan anda sendiri. Ia tetap hanya menghantar soalan, bukan rekod.' },
+  rag: { en: 'Guide plus my data, read by the AI', ms: 'Panduan serta data saya, dibaca oleh AI' },
+  ragH: { en: 'The Assistant can answer from short extracts of your quotes, contacts and catalog. Emails, phone numbers, ID and card numbers and the names in your contact book are hidden first; addresses are not. Each person only gets what their role may see. Needs its own agreement below.', ms: 'Pembantu boleh menjawab daripada petikan ringkas sebut harga, kenalan dan katalog anda. Emel, nombor telefon, nombor ID dan kad serta nama dalam buku kenalan disembunyikan dahulu; alamat tidak. Setiap orang hanya mendapat apa yang dibenarkan oleh peranan mereka. Memerlukan persetujuan tersendiri di bawah.' },
   prov: { en: 'Which AI service', ms: 'Perkhidmatan AI yang mana' },
   ilmu: { en: 'LARIS hosted ILMU', ms: 'ILMU yang dihoskan LARIS' },
   noIlmu: { en: 'Not available on this server. Choose your own AI server.', ms: 'Tidak tersedia pada pelayan ini. Pilih pelayan AI anda sendiri.' },
@@ -57,6 +59,7 @@ export function AiSettingsView() {
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [status, setStatus] = useState('')
   const [v, setV] = useState<View>()
   const d = v ?? s.data
+  const pick = (m: Mode) => { setMode(m); setAgree(false) }  // a tick given for one notice never carries over to another
   const load = (x: View) => { setV(x); setMode(x.mode); setProv(x.provider); setUrl(x.custom.base_url); setModel(x.custom.model); setKey(''); setAgree(false) }
   useEffect(() => { if (s.data) load(s.data) }, [s.data])
 
@@ -93,9 +96,10 @@ export function AiSettingsView() {
             {d.legacy_assistant && <p className="card border-l-4 border-l-amber text-sm">{t(S.legacy, lang)}</p>}
             <fieldset className="grid gap-1">
               <legend className="mb-1 text-sm font-semibold">{t(S.mode, lang)}</legend>
-              {radio('ai-mode', mode === 'off', () => setMode('off'), t(S.off, lang), t(S.offH, lang))}
-              {radio('ai-mode', mode === 'guide', () => setMode('guide'), t(S.guide, lang), t(S.guideH, lang))}
-              {radio('ai-mode', mode === 'guide_data', () => setMode('guide_data'), t(S.data, lang), t(S.dataH, lang))}
+              {radio('ai-mode', mode === 'off', () => pick('off'), t(S.off, lang), t(S.offH, lang))}
+              {radio('ai-mode', mode === 'guide', () => pick('guide'), t(S.guide, lang), t(S.guideH, lang))}
+              {radio('ai-mode', mode === 'guide_data', () => pick('guide_data'), t(S.data, lang), t(S.dataH, lang))}
+              {radio('ai-mode', mode === 'rag', () => pick('rag'), t(S.rag, lang), t(S.ragH, lang))}
             </fieldset>
             {mode !== 'off' && <>
               <fieldset className="grid gap-1">
@@ -121,7 +125,7 @@ export function AiSettingsView() {
               </fieldset>
               <section className="rounded-ui border border-soft p-3" aria-labelledby="ai-notice">
                 <h2 id="ai-notice" className="mb-1 text-sm font-semibold">{t(S.notice, lang)}</h2>
-                <p className="text-sm">{d.disclosure.text}</p>
+                <p className="text-sm">{(mode === 'rag' ? d.rag_disclosure : d.disclosure).text}</p>
               </section>
               <label className="flex min-h-11 items-start gap-2 text-sm font-semibold">
                 <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={agree} aria-required="true" onChange={e => setAgree(e.target.checked)} />{t(S.agree, lang)}</label>

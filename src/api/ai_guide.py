@@ -30,6 +30,14 @@ AI_DISCLOSURE = {"version": 1, "text": (
     "or costs is sent in Guide only mode. Guide plus my data also lets the Assistant answer from your records; it uses the existing "
     "Assistant, which also sends only the question, never the records. You must tell your customers about this in your privacy notice. "
     "The provider's own data retention applies; for your own server, that is your responsibility. You can turn this off at any time.")}
+RAG_DISCLOSURE = {"version": 2, "text": (
+    "What is sent in this mode: your question AND short extracts of your own records that match it (quotes, contacts, catalog items; "
+    "supplier prices and costs only when the person asking has the See costs permission). Before anything leaves, email addresses, phone "
+    "numbers, ID numbers and card numbers are replaced by placeholders, and so are the names in your contact book. Addresses and any name "
+    "that is not in your contact book are NOT hidden. It goes to the AI provider you choose here: hosted ILMU, or your own AI server, which may be "
+    "outside Malaysia. Each person only gets answers from records their role may see. LARIS keeps a count of each AI call, never the question, "
+    "the extracts or the answer; the provider's own retention applies. Under the PDPA you must tell your customers and suppliers in your privacy notice "
+    "that their details may be processed by an AI service. You can turn this off at any time, and your agreement and its date are recorded.")}
 LIMIT, WINDOW = 20, 60  # guide questions per user per minute
 _HITS = defaultdict(deque)  # ponytail: in-memory per process (single worker)
 MAX_BODY, MAX_REPLY, MAX_TIME = 8_192, 65_536, 15
@@ -149,7 +157,7 @@ def view(ctx: Ctx, row) -> dict:
             "custom": {"base_url": row["custom_base_url"] if row else None, "model": row["custom_model"] if row else None,
                        "has_key": bool(row and row["custom_key_enc"])},
             "consent": {"at": row["consent_at"] if row else None, "by": by["name"] if by else None, "version": row["consent_version"] if row else None},
-            "disclosure": AI_DISCLOSURE, "available": {"ilmu": bool(os.environ.get("ILMU_API_KEY", "").strip())},
+            "disclosure": AI_DISCLOSURE, "rag_disclosure": RAG_DISCLOSURE, "available": {"ilmu": bool(os.environ.get("ILMU_API_KEY", "").strip())},
             "legacy_assistant": row is None}
 
 
@@ -160,7 +168,7 @@ class CustomIn(BaseModel, extra="forbid"):
 
 
 class AiIn(BaseModel, extra="forbid"):
-    mode: Literal["off", "guide", "guide_data"]
+    mode: Literal["off", "guide", "guide_data", "rag"]
     provider: Literal["ilmu", "custom"] | None = None
     custom: CustomIn | None = None
     accept_disclosure: bool = False
@@ -196,9 +204,11 @@ def set_ai(body: AiIn, ctx: Ctx = Depends(write_ctx)):
             raise ApiError(422, "bad_url", str(e)) from None
     was_on = bool(old and old["mode"] != "off")
     moved = was_on and (old["provider"] != provider or host_of(old["custom_base_url"]) != host_of(url))
-    if body.mode != "off" and (not was_on or moved) and not body.accept_disclosure:
+    rag_new = body.mode == "rag" and not (old and old["mode"] == "rag" and (old["consent_version"] or 0) >= RAG_DISCLOSURE["version"])
+    if body.mode != "off" and (not was_on or moved or rag_new) and not body.accept_disclosure:
         raise ApiError(422, "disclosure_required", "Read the AI notice and tick the box to accept it before turning the AI on.")
     agreed = body.mode != "off" and body.accept_disclosure
+    shown = RAG_DISCLOSURE if body.mode == "rag" else AI_DISCLOSURE  # the text the owner was shown is the version recorded
     action = "disable" if body.mode == "off" else "change" if was_on else "enable"
     ctx.conn.execute("""insert into tenant_ai(tenant_id, mode, provider, custom_base_url, custom_model, custom_key_enc, consent_version, consent_at, consent_by)
                         values (%(t)s, %(m)s, %(p)s, %(u)s, %(mo)s, %(k)s, case when %(a)s then %(v)s end, case when %(a)s then now() end, case when %(a)s then %(by)s::uuid end)
@@ -207,9 +217,9 @@ def set_ai(body: AiIn, ctx: Ctx = Depends(write_ctx)):
                           consent_at=case when %(a)s then now() else tenant_ai.consent_at end,
                           consent_by=case when %(a)s then %(by)s::uuid else tenant_ai.consent_by end, updated_at=now()""",
                       {"t": ctx.tenant_id, "m": body.mode, "p": provider, "u": url, "mo": model, "k": enc, "a": agreed,
-                       "v": AI_DISCLOSURE["version"], "by": str(ctx.user_id)})
+                       "v": shown["version"], "by": str(ctx.user_id)})
     ctx.conn.execute("insert into ai_consent_log(tenant_id, user_id, action, mode, provider, host, disclosure_version) values (%s,%s,%s,%s,%s,%s,%s)",
-                     (ctx.tenant_id, ctx.user_id, action, body.mode, provider, host_of(url), AI_DISCLOSURE["version"] if agreed else None))
+                     (ctx.tenant_id, ctx.user_id, action, body.mode, provider, host_of(url), shown["version"] if agreed else None))
     audit(ctx, "tenant_ai", ctx.tenant_id, "ai settings changed",
           {"mode": old["mode"], "provider": old["provider"], "host": host_of(old["custom_base_url"])} if old else None,
           {"mode": body.mode, "provider": provider, "host": host_of(url)})

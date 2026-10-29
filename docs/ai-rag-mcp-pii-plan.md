@@ -45,7 +45,21 @@ Known limit: when a model call fails and the route then raises (supplier documen
 
 3a DONE 2026-10-30: `src/rag.py` (retrieval engine and source registry) and `GET /api/ai/passages?q=` (what the AI may read for this caller). Sources: quotes, contacts, catalog (open to every role), costs and supplier_docs (need `view_costs`). Tests in `tests/test_rag.py`. No model reads the passages yet.
 
-3b is next and needs a decision: sending records to a model changes what the owner consented to (today's text says the Assistant never sends records). It needs a new AI mode, a new disclosure version and a consent step in AI settings before any passage is sent. The `ask` intent, citations and the prompt-injection test come with 3b.
+3b DONE 2026-10-30: a fourth AI mode `rag` with its own consent (disclosure version 2, `tenant_ai.consent_version >= 2` is checked on every use), the Assistant `ask` intent, citations from our data, migration `0003_ai_mode_rag.sql`, and the opt-in radio in AI settings. Owners on `guide` or `guide_data` are unchanged: nothing about their consent moved.
+
+### How 3b meets the PDPA 2010 (Malaysia)
+
+| Principle | What the code does |
+|---|---|
+| Notice and Choice | Opt-in only. The owner must tick agreement to the version 2 notice, which names what is sent, to whom, that addresses and unlisted names are not hidden, and that the provider may be outside Malaysia. The tick resets when the mode changes. The notice and the time are stored (`ai_consent_log`, `tenant_ai`) and audited. The owner must also update their own privacy notice, and the text says so |
+| General | Nothing is sent unless `mode = rag` and version 2 is on record; otherwise `ask` falls back to the local search |
+| Disclosure | Only the caller's own business and only the sources their role may see (`src/rag.py`); at most 5 extracts of 300 characters; masked first (`src/parse_util.py` Mask) |
+| Cross-border transfer | Disclosed in the notice, with the provider the owner picked; a custom server host is logged |
+| Security | RLS plus a tenant filter, the role gate in the registry, no prompt or answer stored (`ai_calls` holds counts) |
+| Retention | No text stored; call counts purged after 90 days |
+| Data integrity and access | Answers link back to the source record; an erased customer (`erase_party`) is gone from the database, so from retrieval too |
+
+Residual risk to tell owners: masking is regex plus the contact book, so a name that is not a contact and any address still reach the provider. A lawyer should read the version 2 notice before it is shown to real customers' owners.
 
 - A **source registry**: each source (catalog items, quotes, contacts, jobs, supplier notes) declares the permission it needs and a function that builds its text from the same scrubbed view the API returns. A source the caller lacks the permission for is never searched, and the denial is recorded in `ai_calls`.
 - Index: Postgres full-text (`tsvector`) first. pgvector only if measured recall is poor and the model host offers embeddings. Retrieval runs on the caller's RLS connection.

@@ -1,6 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api, ApiError, getAccount, MOCK } from './api'
-import { ActionError, Async, PageHeader, msg, useAction, useFetch } from './ui'
+import { ActionError, Async, EmptyState, PageHeader, msg, useAction, useFetch } from './ui'
+import { ConfirmDialog, DataTable, FilterBar, FilterSelect, MoreMenu, Tabs, ToggleChip } from './kit'
+import type { Col } from './kit'
 import { useToast } from './Toast'
 import { TelegramLinkControls } from './TelegramLink'
 import { locale, t, useLang } from './i18n'
@@ -16,183 +19,285 @@ const S = {
   notLinked: { en: 'Not linked', ms: 'Tidak dipautkan', zh: '未链接', ta: 'இணைக்கப்படவில்லை' },
   addPw: { en: 'Add with a password', ms: 'Tambah dengan kata laluan', zh: '用密码添加', ta: 'கடவுச்சொல்லுடன் சேர்' },
   pw10: { en: 'The password needs at least 10 characters.', ms: 'Kata laluan mesti sekurang-kurangnya 10 aksara.', zh: '密码至少需要 10 个字符。', ta: 'கடவுச்சொல் குறைந்தது 10 எழுத்துகள் கொண்டிருக்க வேண்டும்.' },
-} satisfies Record<string, Text>
+  team: { en: 'Team', ms: 'Pasukan', zh: '团队', ta: 'குழு' },
+  invite: { en: 'Invite person', ms: 'Jemput orang', zh: '邀请成员', ta: 'நபரை அழைக்கவும்' },
+  byEmail: { en: 'By email', ms: 'Melalui e-mel', zh: '通过邮件', ta: 'மின்னஞ்சல் மூலம்' },
+  withPw: { en: 'With a password', ms: 'Dengan kata laluan', zh: '用密码', ta: 'கடவுச்சொல்லுடன்' },
+  all: { en: 'All', ms: 'Semua', zh: '全部', ta: 'அனைத்தும்' },
+  status: { en: 'Status', ms: 'Status', zh: '状态', ta: 'நிலை' },
+  active: { en: 'Active', ms: 'Aktif', zh: '正常', ta: 'செயலில்' },
+  invited: { en: 'Invited', ms: 'Dijemput', zh: '已邀请', ta: 'அழைக்கப்பட்டது' },
+  expired: { en: 'Invite expired', ms: 'Jemputan tamat tempoh', zh: '邀请已过期', ta: 'அழைப்பு காலாவதியானது' },
+  deactivated: { en: 'Deactivated', ms: 'Dinyahaktifkan', zh: '已停用', ta: 'செயலிழக்கப்பட்டது' },
+  save: { en: 'Save', ms: 'Simpan', zh: '保存', ta: 'சேமி' },
+  name: { en: 'Name', ms: 'Nama', zh: '姓名', ta: 'பெயர்' },
+  sessions: { en: 'Sessions', ms: 'Sesi', zh: '会话', ta: 'அமர்வுகள்' },
+  you: { en: 'You', ms: 'Anda', zh: '你', ta: 'நீங்கள்' },
+}  satisfies Record<string, Text>
 
 interface Member { id: string; name: string; username: string | null; role: 'owner' | 'staff'; role_key?: string; role_name?: string; active: boolean; has_password: boolean; sessions: number; telegram_linked?: boolean }
 
 interface Invite { id: string; email: string; role_key: string; role_name: string; status: 'pending' | 'accepted' | 'revoked' | 'expired'; invited_by_name?: string; created_at: string; expires_at: string }
 
-// Owner: invite by email. The person sets their own name, username and password on #/invite. Accepted and revoked ones are not listed (the person shows above).
-function Invites({ opts, onChange }: { opts: { key: string; name: string }[]; onChange: () => void }) {
-  useLang()
-  const s = useFetch<Invite[]>('/invites')
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('staff')
-  const [formErr, setFormErr] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [busyId, setBusyId] = useState('')
-  const [rowErr, setRowErr] = useState('')
-  const a = useAction()
-  const toast = useToast()
-  const list = (s.data ?? []).filter(i => i.status === 'pending' || i.status === 'expired')
-  const send = () => {
-    const em = email.trim()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || em.length > 254) return setFormErr(t({ en: 'Enter a valid email address.', ms: 'Masukkan alamat e-mel yang sah.', zh: '请输入有效的电子邮件地址。', ta: 'சரியான மின்னஞ்சல் முகவரியை உள்ளிடவும்.' }))
-    setFormErr('')
-    a.run(async () => { await api('POST', '/invites', { email: em, role }); setEmail(''); toast(t({ en: `Invitation sent to ${em}`, ms: `Jemputan dihantar kepada ${em}`, zh: `邀请已发送给 ${em}`, ta: `${em} க்கு அழைப்பு அனுப்பப்பட்டது` })); s.reload(); onChange() })
-  }
-  const row = async (i: Invite, fn: () => Promise<unknown>, done: string) => {
-    if (busyId) return
-    setBusyId(i.id); setRowErr('')
-    try { await fn(); toast(done); s.reload() } catch (e) { setRowErr(msg(e)); if (e instanceof ApiError && e.status === 409) s.reload() } finally { setBusyId(''); setConfirm('') }  // 409: it changed meanwhile, show the current list
-  }
+type Opt = { key: string; name: string }
+interface Row { id: string; invite: boolean; name: string; sub: string; roleKey: string; roleName: string; status: 'active' | 'inactive' | 'invited' | 'expired'; linked: boolean; sessions: number; m?: Member; i?: Invite }
+type Dlg = { k: 'invite' } | { k: 'role' | 'pw' | 'deact' | 'revoke'; r: Row }
+type Chip = '' | 'owner' | 'staff' | 'invite' | 'nolink'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const field = 'flex flex-col gap-1 text-sm font-semibold'
+
+// Native <dialog> shell for the small forms (the kit ConfirmDialog is for yes/no). Escape closes; the browser traps focus and keeps the page inert.
+function FormDialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const d = ref.current
+    if (!d) return
+    if (open && !d.open) d.showModal()
+    if (!open && d.open) d.close()
+  }, [open])
   return (
-    <section className="mt-8 border-t border-soft pt-6" aria-labelledby="inv" data-tour="team-invite">
-      <h2 id="inv" className="text-base font-semibold">{t({ en: 'Invite by email', ms: 'Jemput melalui e-mel', zh: '通过电子邮件邀请', ta: 'மின்னஞ்சல் மூலம் அழைக்கவும்' })}</h2>
-      <p className="mb-2 text-sm text-muted">{t({ en: 'We email a link. The person chooses their own username and password, so you never see it.', ms: 'Kami e-melkan pautan. Orang itu memilih sendiri nama pengguna dan kata laluan, jadi anda tidak pernah melihatnya.', zh: '我们会发送一个链接到对方邮箱。对方自行设置用户名和密码，你不会看到。', ta: 'நாங்கள் இணைப்பை மின்னஞ்சல் செய்கிறோம். அவர் தனது பயனர்பெயரையும் கடவுச்சொல்லையும் தானே தேர்வு செய்வார், எனவே நீங்கள் அதைப் பார்க்க மாட்டீர்கள்.' })}</p>
-      <form className="card grid max-w-xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" data-guide="tm-invite" noValidate onSubmit={e => { e.preventDefault(); send() }}>
-        <label className="flex flex-col gap-1 text-sm font-semibold sm:col-span-2" data-guide="tm-email">{t({ en: 'Email address', ms: 'Alamat e-mel', zh: '电子邮件地址', ta: 'மின்னஞ்சல் முகவரி' })}
-          <input className="input font-normal" type="email" name="invite_email" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={email}
-            aria-invalid={formErr ? true : undefined} aria-describedby={formErr ? 'inv-err' : undefined} onChange={e => { setEmail(e.target.value); setFormErr('') }} /></label>
-        <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.role)}
-          <select className="input font-normal" value={role} onChange={e => setRole(e.target.value)}>{opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
-        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t(S.sending) : t({ en: 'Send invitation', ms: 'Hantar jemputan', zh: '发送邀请', ta: 'அழைப்பை அனுப்பு' })}</button></div>
-        {formErr && <p id="inv-err" role="alert" className="text-sm text-warn sm:col-span-2">{formErr}</p>}
-      </form>
-      <ActionError err={a.err} onRetry={send} label={t(S.again)} />
-      <h3 className="mt-6 text-base font-semibold">{t({ en: 'Pending invitations', ms: 'Jemputan belum diterima', zh: '待处理的邀请', ta: 'நிலுவையில் உள்ள அழைப்புகள்' })}</h3>
-      {rowErr && <p role="alert" className="mt-2 text-sm text-warn">{rowErr}</p>}
-      <div className="mt-2" data-guide="tm-pending">
-        <Async s={s} rows={2} empty={!list.length} emptyText={t({ en: 'No pending invitations.', ms: 'Tiada jemputan belum diterima.', zh: '没有待处理的邀请。', ta: 'நிலுவையில் உள்ள அழைப்புகள் இல்லை.' })} emptyHint={t({ en: 'Invite a colleague by email and they show up here until they accept.', ms: 'Jemput rakan sekerja melalui e-mel dan mereka akan dipaparkan di sini sehingga menerima.', zh: '通过电子邮件邀请同事，对方接受之前会显示在这里。', ta: 'சக ஊழியரை மின்னஞ்சல் மூலம் அழைக்கவும்; அவர் ஏற்கும் வரை இங்கே தோன்றுவார்.' })}>
-          <ul className="grid gap-2">
-            {list.map(i => (
-              <li key={i.id} className="card">
-                <p className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 break-all font-semibold">{i.email}</span>
-                  <span className="badge">{i.role_name}</span>
-                  <span className={i.status === 'expired' ? 'badge badge-warn' : 'badge'}>{i.status === 'expired' ? t({ en: 'Expired', ms: 'Tamat tempoh', zh: '已过期', ta: 'காலாவதியானது' }) : t({ en: 'Pending', ms: 'Belum diterima', zh: '待处理', ta: 'நிலுவையில்' })}</span>
-                </p>
-                <p className="mt-1 text-sm text-muted">{t({ en: `Sent ${relTime(i.created_at)}.`, ms: `Dihantar ${relTime(i.created_at)}.`, zh: `发送于${relTime(i.created_at)}。`, ta: `அனுப்பியது: ${relTime(i.created_at)}.` })} {i.status === 'expired' ? t({ en: `Expired ${relTime(i.expires_at)}.`, ms: `Tamat tempoh ${relTime(i.expires_at)}.`, zh: `过期于${relTime(i.expires_at)}。`, ta: `காலாவதியானது: ${relTime(i.expires_at)}.` }) : t({ en: `Expires ${relTime(i.expires_at)}.`, ms: `Tamat tempoh ${relTime(i.expires_at)}.`, zh: `将于${relTime(i.expires_at)}过期。`, ta: `காலாவதியாகும்: ${relTime(i.expires_at)}.` })}</p>
-                {confirm === i.id ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t({ en: `Confirm revoking the invitation for ${i.email}`, ms: `Sahkan pembatalan jemputan untuk ${i.email}`, zh: `确认撤销发给 ${i.email} 的邀请`, ta: `${i.email} க்கான அழைப்பை ரத்து செய்வதை உறுதிப்படுத்தவும்` })}>
-                    <span className="text-sm font-semibold">{t({ en: `Revoke the invitation for ${i.email}?`, ms: `Batalkan jemputan untuk ${i.email}?`, zh: `撤销发给 ${i.email} 的邀请？`, ta: `${i.email} க்கான அழைப்பை ரத்து செய்யவா?` })}</span>
-                    <button type="button" className="btn btn-danger" autoFocus aria-disabled={!!busyId || undefined} onClick={() => row(i, () => api('DELETE', `/invites/${i.id}`), t({ en: `Invitation for ${i.email} revoked.`, ms: `Jemputan untuk ${i.email} dibatalkan.`, zh: `发给 ${i.email} 的邀请已撤销。`, ta: `${i.email} க்கான அழைப்பு ரத்து செய்யப்பட்டது.` }))}>{t({ en: 'Yes, revoke', ms: 'Ya, batalkan', zh: '是，撤销', ta: 'ஆம், ரத்து செய்' })}<span className="sr-only"> {i.email}</span></button>
-                    <button type="button" className="btn" onClick={() => { setConfirm(''); requestAnimationFrame(() => document.getElementById('rv-' + i.id)?.focus()) }}>{t(S.cancel)}</button>
-                  </div>
-                ) : (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" className="btn" aria-disabled={!!busyId || undefined} onClick={() => row(i, () => api('POST', `/invites/${i.id}/resend`), t({ en: `Invitation sent again to ${i.email}.`, ms: `Jemputan dihantar semula kepada ${i.email}.`, zh: `已再次向 ${i.email} 发送邀请。`, ta: `${i.email} க்கு அழைப்பு மீண்டும் அனுப்பப்பட்டது.` }))}>{busyId === i.id ? t(S.sending) : t({ en: 'Resend', ms: 'Hantar semula', zh: '重新发送', ta: 'மீண்டும் அனுப்பு' })}<span className="sr-only"> {t({ en: `invitation to ${i.email}`, ms: `jemputan kepada ${i.email}`, zh: `发给 ${i.email} 的邀请`, ta: `${i.email} க்கான அழைப்பு` })}</span></button>
-                    {i.status === 'pending' && <button id={'rv-' + i.id} type="button" className="btn" onClick={() => setConfirm(i.id)}>{t({ en: 'Revoke', ms: 'Batalkan', zh: '撤销', ta: 'ரத்து செய்' })}<span className="sr-only"> {t({ en: `invitation to ${i.email}`, ms: `jemputan kepada ${i.email}`, zh: `发给 ${i.email} 的邀请`, ta: `${i.email} க்கான அழைப்பு` })}</span></button>}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Async>
-      </div>
-    </section>
+    <dialog ref={ref} aria-labelledby="fd-title" onCancel={e => { e.preventDefault(); onClose() }} className="m-auto max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-card bg-surface p-5 text-ink shadow-3 backdrop:bg-ink/50">
+      <h2 id="fd-title" className="text-md font-semibold">{title}</h2>
+      {open && children}
+    </dialog>
   )
 }
 
-// Owner: who can sign in. Passwords are never shown; a reset signs that person out everywhere.
+const Buttons = ({ onCancel, busy, label }: { onCancel: () => void; busy: boolean; label: string }) => (
+  <div className="mt-2 flex justify-end gap-2">
+    <button type="button" className="btn" onClick={onCancel}>{t(S.cancel)}</button>
+    <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? t(S.working) : label}</button>
+  </div>
+)
+
+function RoleBody({ m, opts, busy, onSave, onCancel }: { m: Member; opts: Opt[]; busy: boolean; onSave: (role: string) => void; onCancel: () => void }) {
+  useLang()
+  const cur = m.role_key ?? m.role
+  const [sel, setSel] = useState(cur)
+  const changed = sel !== cur
+  return (
+    <form className="mt-3 grid gap-3" onSubmit={e => { e.preventDefault(); if (changed && !busy) onSave(sel) }}>
+      <label className={field}>{t({ en: `Role for ${m.name}`, ms: `Peranan untuk ${m.name}`, zh: `${m.name} 的角色`, ta: `${m.name} க்கான பங்கு` })}
+        <select className="input font-normal" value={sel} aria-describedby={changed ? 'rw-warn' : undefined} onChange={e => setSel(e.target.value)}>{opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
+      {changed && <p id="rw-warn" className="text-sm font-semibold text-warn">{t({ en: 'They will be signed out on every device when you save a new role.', ms: 'Mereka akan dilog keluar pada setiap peranti apabila anda menyimpan peranan baharu.', zh: '保存新角色后，对方会在所有设备上被退出登录。', ta: 'புதிய பங்கைச் சேமிக்கும்போது அவர்கள் எல்லா சாதனங்களிலும் வெளியேற்றப்படுவார்கள்.' })}</p>}
+      <Buttons onCancel={onCancel} busy={busy} label={t(S.save)} />
+    </form>
+  )
+}
+
+function PwBody({ m, busy, onSave, onCancel }: { m: Member; busy: boolean; onSave: (pw: string) => void; onCancel: () => void }) {
+  useLang()
+  const [pw, setPw] = useState('')
+  const [err, setErr] = useState('')
+  return (
+    <form className="mt-3 grid gap-3" noValidate onSubmit={e => { e.preventDefault(); if (pw.length < 10) return setErr(t(S.pw10)); onSave(pw) }}>
+      <label className={field} data-guide="tm-password">{t({ en: `New password for ${m.name}`, ms: `Kata laluan baharu untuk ${m.name}`, zh: `${m.name} 的新密码`, ta: `${m.name} க்கான புதிய கடவுச்சொல்` })}
+        <input className="input font-normal" type="password" autoComplete="new-password" value={pw} aria-invalid={err ? true : undefined} aria-describedby="pw-hint" onChange={e => { setPw(e.target.value); setErr('') }} /></label>
+      <p id="pw-hint" className={`text-sm ${err ? 'text-warn' : 'text-muted'}`} role={err ? 'alert' : undefined}>{err || t({ en: 'At least 10 characters. They are signed out on every device.', ms: 'Sekurang-kurangnya 10 aksara. Mereka dilog keluar pada setiap peranti.', zh: '至少 10 个字符。对方会在所有设备上被退出登录。', ta: 'குறைந்தது 10 எழுத்துகள். அவர்கள் எல்லா சாதனங்களிலும் வெளியேற்றப்படுவார்கள்.' })}</p>
+      <Buttons onCancel={onCancel} busy={busy} label={t(S.save)} />
+    </form>
+  )
+}
+
+// Two ways in: an email link (the person picks their own password) or a first password you set and tell them in person.
+function InviteBody({ opts, busy, onEmail, onPw, onCancel }: { opts: Opt[]; busy: boolean; onEmail: (email: string, role: string) => void; onPw: (f: { name: string; username: string; role: string; password: string }) => void; onCancel: () => void }) {
+  useLang()
+  const [tab, setTab] = useState('email')
+  const [email, setEmail] = useState('')
+  const [f, setF] = useState({ name: '', username: '', role: 'staff', password: '' })
+  const [err, setErr] = useState('')
+  const roleSel = (v: string, set: (v: string) => void) => <select className="input font-normal" value={v} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select>
+  return (
+    <div className="mt-3">
+      <Tabs label={t(S.invite)} value={tab} onChange={v => { setTab(v); setErr('') }} options={[{ value: 'email', label: t(S.byEmail) }, { value: 'pw', label: t(S.withPw) }]} />
+      {tab === 'email' ? (
+        <form className="grid gap-3" noValidate onSubmit={e => {
+          e.preventDefault()
+          const em = email.trim()
+          if (!EMAIL_RE.test(em) || em.length > 254) return setErr(t({ en: 'Enter a valid email address.', ms: 'Masukkan alamat e-mel yang sah.', zh: '请输入有效的电子邮件地址。', ta: 'சரியான மின்னஞ்சல் முகவரியை உள்ளிடவும்.' }))
+          onEmail(em, f.role)
+        }}>
+          <p className="text-sm text-muted">{t({ en: 'We email a link. The person chooses their own username and password, so you never see it.', ms: 'Kami e-melkan pautan. Orang itu memilih sendiri nama pengguna dan kata laluan, jadi anda tidak pernah melihatnya.', zh: '我们会发送一个链接到对方邮箱。对方自行设置用户名和密码，你不会看到。', ta: 'நாங்கள் இணைப்பை மின்னஞ்சல் செய்கிறோம். அவர் தனது பயனர்பெயரையும் கடவுச்சொல்லையும் தானே தேர்வு செய்வார், எனவே நீங்கள் அதைப் பார்க்க மாட்டீர்கள்.' })}</p>
+          <label className={field} data-guide="tm-email">{t({ en: 'Email address', ms: 'Alamat e-mel', zh: '电子邮件地址', ta: 'மின்னஞ்சல் முகவரி' })}
+            <input className="input font-normal" type="email" name="invite_email" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={email}
+              aria-invalid={err ? true : undefined} aria-describedby={err ? 'inv-err' : undefined} onChange={e => { setEmail(e.target.value); setErr('') }} /></label>
+          <label className={field}>{t(S.role)}{roleSel(f.role, role => setF({ ...f, role }))}</label>
+          {err && <p id="inv-err" role="alert" className="text-sm text-warn">{err}</p>}
+          <Buttons onCancel={onCancel} busy={busy} label={busy ? t(S.sending) : t({ en: 'Send invitation', ms: 'Hantar jemputan', zh: '发送邀请', ta: 'அழைப்பை அனுப்பு' })} />
+        </form>
+      ) : (
+        <form className="grid gap-3" noValidate onSubmit={e => {
+          e.preventDefault()
+          if (!f.name.trim() || !f.username.trim()) return setErr(t({ en: 'Enter a name and a username.', ms: 'Masukkan nama dan nama pengguna.', zh: '请输入姓名和用户名。', ta: 'பெயரையும் பயனர்பெயரையும் உள்ளிடவும்.' }))
+          if (f.password.length < 10) return setErr(t(S.pw10))
+          onPw({ ...f, name: f.name.trim(), username: f.username.trim() })
+        }}>
+          <p className="text-sm text-muted">{t({ en: 'For people without an email address. You set the first password and tell them in person.', ms: 'Untuk orang tanpa alamat e-mel. Anda menetapkan kata laluan pertama dan memberitahu mereka secara peribadi.', zh: '适用于没有电子邮件地址的人。由你设置初始密码并当面告知对方。', ta: 'மின்னஞ்சல் முகவரி இல்லாதவர்களுக்கு. நீங்கள் முதல் கடவுச்சொல்லை அமைத்து நேரில் தெரிவிக்கவும்.' })}</p>
+          <label className={field}>{t(S.name)}<input className="input font-normal" value={f.name} onChange={e => { setF({ ...f, name: e.target.value }); setErr('') }} /></label>
+          <label className={field}>{t({ en: 'Username (letters, numbers, . _ -)', ms: 'Nama pengguna (huruf, nombor, . _ -)', zh: '用户名（字母、数字、. _ -）', ta: 'பயனர்பெயர் (எழுத்துகள், எண்கள், . _ -)' })}
+            <input className="input font-normal" autoCapitalize="none" value={f.username} onChange={e => { setF({ ...f, username: e.target.value }); setErr('') }} /></label>
+          <label className={field}>{t(S.role)}{roleSel(f.role, role => setF({ ...f, role }))}</label>
+          <label className={field}>{t({ en: 'First password (10+ characters)', ms: 'Kata laluan pertama (10+ aksara)', zh: '初始密码（至少 10 个字符）', ta: 'முதல் கடவுச்சொல் (10+ எழுத்துகள்)' })}
+            <input className="input font-normal" type="password" autoComplete="new-password" value={f.password} onChange={e => { setF({ ...f, password: e.target.value }); setErr('') }} /></label>
+          {err && <p role="alert" className="text-sm text-warn">{err}</p>}
+          <Buttons onCancel={onCancel} busy={busy} label={t(S.addPw)} />
+        </form>
+      )}
+    </div>
+  )
+}
+
+const statusText = (s: Row['status']) => t(s === 'active' ? S.active : s === 'invited' ? S.invited : s === 'expired' ? S.expired : S.deactivated)
+
+// Owner: who can sign in, and who is invited. People and invitations share one table; actions live in a row menu. Passwords are never shown; a reset signs that person out everywhere.
 export function TeamView({ owner, meId }: { owner: boolean; meId: string }) {
   useLang()
   const s = useFetch<Member[]>('/users')
-  const roles = useFetch<{ roles: { key: string; name: string }[] }>('/roles')
+  const inv = useFetch<Invite[]>(owner ? '/invites' : null)
+  const roles = useFetch<{ roles: Opt[] }>('/roles')
   const opts = roles.data?.roles ?? [{ key: 'owner', name: t({ en: 'Owner', ms: 'Pemilik', zh: '店主', ta: 'உரிமையாளர்' }) }, { key: 'staff', name: t({ en: 'Staff (no cost or margin)', ms: 'Kakitangan (tanpa kos atau margin)', zh: '员工（看不到成本和利润率）', ta: 'ஊழியர் (செலவு, margin தெரியாது)' }) }]  // class options until /roles answers
-  const [pick, setPick] = useState<Record<string, string>>({})
   const a = useAction()
   const last = useRef<() => void>(undefined)
-  const [f, setF] = useState({ name: '', username: '', role: 'staff', password: '' })
-  const [reset, setReset] = useState<Record<string, string>>({})
-  const [err, setErr] = useState('')
+  const inviteBtn = useRef<HTMLButtonElement>(null)
+  const [dlg, setDlg] = useState<Dlg | null>(null)
+  const [q, setQ] = useState('')
+  const [roleF, setRoleF] = useState('')
+  const [statusF, setStatusF] = useState('')
+  const [chip, setChip] = useState<Chip>('')
+  const [busyId, setBusyId] = useState('')
+  const [rowErr, setRowErr] = useState('')
   const toast = useToast()
-  if (!owner) return <><PageHeader title={t({ en: 'Team', ms: 'Pasukan', zh: '团队', ta: 'குழு' })} /><p className="card text-muted">{t({ en: 'Owner only.', ms: 'Pemilik sahaja.', zh: '仅限店主。', ta: 'உரிமையாளருக்கு மட்டும்.' })}</p></>
+  if (!owner) return <><PageHeader title={t(S.team)} /><p className="card text-muted">{t({ en: 'Owner only.', ms: 'Pemilik sahaja.', zh: '仅限店主。', ta: 'உரிமையாளருக்கு மட்டும்.' })}</p></>
 
+  const reload = () => { s.reload(); inv.reload() }
+  // Close a dialog and put focus back where the person was: that row's menu button, or the Invite button.
+  const close = (id?: string) => {
+    setDlg(null)
+    requestAnimationFrame(() => (id ? [...document.querySelectorAll<HTMLElement>(`[data-row="${id}"] > div > button`)].find(b => b.offsetParent !== null) : undefined)?.focus() ?? inviteBtn.current?.focus())
+  }
   const run = (fn: () => Promise<unknown>, done: string) => {
-    last.current = () => run(fn, done); setErr('')
-    a.run(async () => { await fn(); toast(done); s.reload() })
+    last.current = () => run(fn, done)
+    a.run(async () => { await fn(); toast(done); reload() })
   }
-  const add = () => {
-    if (!f.name.trim() || !f.username.trim()) return setErr(t({ en: 'Enter a name and a username.', ms: 'Masukkan nama dan nama pengguna.', zh: '请输入姓名和用户名。', ta: 'பெயரையும் பயனர்பெயரையும் உள்ளிடவும்.' }))
-    if (f.password.length < 10) return setErr(t(S.pw10))
-    run(async () => { await api('POST', '/users', { ...f, name: f.name.trim(), username: f.username.trim() }); setF({ name: '', username: '', role: 'staff', password: '' }) }, t({ en: `${f.name.trim()} can now sign in.`, ms: `${f.name.trim()} kini boleh log masuk.`, zh: `${f.name.trim()} 现在可以登录了。`, ta: `${f.name.trim()} இப்போது உள்நுழையலாம்.` }))
+  const edit = (m: Member, body: object, done: string) => run(async () => { await api('POST', `/users/${m.id}`, body); close(m.id) }, done)
+  const row = async (i: Invite, fn: () => Promise<unknown>, done: string) => {
+    if (busyId) return
+    setBusyId(i.id); setRowErr('')
+    try { await fn(); toast(done); reload() } catch (e) { setRowErr(msg(e)); if (e instanceof ApiError && e.status === 409) reload() } finally { setBusyId(''); close() }  // 409: it changed meanwhile, show the current list
   }
-  const edit = (m: Member, body: object, done: string) => run(() => api('POST', `/users/${m.id}`, body), done)
+
+  const members = s.data ?? []
+  const activeOwners = members.filter(m => m.active && (m.role_key ?? m.role) === 'owner').length
+  const rows: Row[] = [
+    ...members.map((m): Row => ({ id: m.id, invite: false, name: m.name, sub: m.username ?? t({ en: 'No sign-in account yet', ms: 'Belum ada akaun log masuk', zh: '还没有登录账户', ta: 'உள்நுழைவு கணக்கு இன்னும் இல்லை' }), roleKey: m.role_key ?? m.role, roleName: m.role_name ?? m.role, status: m.active ? 'active' : 'inactive', linked: !!m.telegram_linked, sessions: m.sessions, m })),
+    ...(inv.data ?? []).filter(i => i.status === 'pending' || i.status === 'expired').map((i): Row => ({ id: i.id, invite: true, name: i.email, sub: t({ en: `Sent ${relTime(i.created_at)}.`, ms: `Dihantar ${relTime(i.created_at)}.`, zh: `发送于${relTime(i.created_at)}。`, ta: `அனுப்பியது: ${relTime(i.created_at)}.` }) + ' ' + (i.status === 'expired' ? t({ en: `Expired ${relTime(i.expires_at)}.`, ms: `Tamat tempoh ${relTime(i.expires_at)}.`, zh: `过期于${relTime(i.expires_at)}。`, ta: `காலாவதியானது: ${relTime(i.expires_at)}.` }) : t({ en: `Expires ${relTime(i.expires_at)}.`, ms: `Tamat tempoh ${relTime(i.expires_at)}.`, zh: `将于${relTime(i.expires_at)}过期。`, ta: `காலாவதியாகும்: ${relTime(i.expires_at)}.` })), roleKey: i.role_key, roleName: i.role_name, status: i.status === 'expired' ? 'expired' : 'invited', linked: false, sessions: 0, i })),
+  ]
+  const rank = (r: Row) => r.status === 'invited' ? 3 : r.status === 'expired' ? 4 : r.status === 'inactive' ? 2 : r.roleKey === 'owner' ? 0 : 1  // owners, active people, deactivated, invitations
+  rows.sort((x, y) => rank(x) - rank(y) || x.name.localeCompare(y.name, locale()))
+  const needle = q.trim().toLowerCase()
+  const inChip = (r: Row) => chip === '' || (chip === 'owner' ? !r.invite && r.roleKey === 'owner' : chip === 'staff' ? !r.invite && r.roleKey !== 'owner' : chip === 'invite' ? r.invite : !r.invite && r.status === 'active' && !r.linked)
+  const shown = rows.filter(r => (!needle || `${r.name} ${r.sub}`.toLowerCase().includes(needle)) && (!roleF || r.roleKey === roleF) && (!statusF || r.status === statusF) && inChip(r))
+  const count = (f: (r: Row) => boolean) => rows.filter(f).length
+  const firstInvite = shown.find(r => r.invite)?.id
+  const clear = () => { setQ(''); setRoleF(''); setStatusF(''); setChip('') }
+  const chips: [Chip, string, number, boolean?][] = [
+    ['', t({ en: count(r => !r.invite) === 1 ? 'person' : 'people', ms: 'orang', zh: '位成员', ta: 'பேர்' }), count(r => !r.invite)],
+    ['owner', t({ en: count(r => !r.invite && r.roleKey === 'owner') === 1 ? 'owner' : 'owners', ms: 'pemilik', zh: '位店主', ta: 'உரிமையாளர்கள்' }), count(r => !r.invite && r.roleKey === 'owner')],
+    ['staff', t({ en: 'staff and other roles', ms: 'kakitangan dan peranan lain', zh: '位员工及其他角色', ta: 'ஊழியர்கள், பிற பங்குகள்' }), count(r => !r.invite && r.roleKey !== 'owner')],
+    ['invite', t({ en: count(r => r.invite) === 1 ? 'invitation waiting' : 'invitations waiting', ms: 'jemputan menunggu', zh: '个待处理邀请', ta: 'நிலுவை அழைப்புகள்' }), count(r => r.invite), true],
+    ['nolink', t({ en: 'not linked to Telegram', ms: 'belum dipautkan ke Telegram', zh: '位未链接 Telegram', ta: 'Telegram இணைக்கப்படவில்லை' }), count(r => !r.invite && r.status === 'active' && !r.linked), true],
+  ]
+
+  const cols: Col<Row>[] = [
+    { key: 'name', head: t(S.name), mobile: 'title', cell: r => (
+      <div className="min-w-0" data-guide={r.id === firstInvite ? 'tm-pending' : undefined}>
+        <span className="break-all">{r.name}</span>{r.id === meId && <> <span className="badge">{t(S.you)}</span></>}
+        <span className="block break-all text-sm font-normal text-muted">{r.sub}</span>
+      </div>) },
+    { key: 'role', head: t(S.role), mobile: 'sub', cell: r => <span className="badge">{r.roleName}</span> },
+    { key: 'status', head: t(S.status), mobile: 'badge', cell: r => <span className={r.status === 'active' || r.status === 'invited' ? 'badge' : 'badge badge-warn'}>{statusText(r.status)}</span> },
+    { key: 'tg', head: 'Telegram', mobile: 'meta', cell: r => r.invite ? '-' : r.linked ? t(S.linked) : t(S.notLinked) },
+    { key: 'ses', head: t(S.sessions), mobile: 'meta', cell: r => r.invite ? '-' : r.sessions },
+    { key: 'act', head: t({ en: 'Actions', ms: 'Tindakan', zh: '操作', ta: 'செயல்கள்' }), mobile: 'badge', cell: r => {
+      const m = r.m, locked = r.id === meId || (r.roleKey === 'owner' && r.status === 'active' && activeOwners === 1)  // you and the last owner cannot be demoted or deactivated
+      const item = 'sidelink w-full text-left'
+      const who = r.name
+      return (
+        <div data-row={r.id} className="ml-auto flex justify-end" data-guide={r.id === shown.find(x => !x.invite)?.id ? 'tm-password' : undefined}>
+          <MoreMenu label={<>{t({ en: 'More', ms: 'Lagi', zh: '更多', ta: 'மேலும்' })}<span className="sr-only"> {t({ en: `actions for ${who}`, ms: `tindakan untuk ${who}`, zh: `${who} 的操作`, ta: `${who} க்கான செயல்கள்` })}</span></>  as unknown as string}>
+            {m ? <>
+              {!locked && <button type="button" data-close className={item} onClick={() => setDlg({ k: 'role', r })}>{t({ en: 'Change role', ms: 'Tukar peranan', zh: '更改角色', ta: 'பங்கை மாற்று' })}</button>}
+              <button type="button" data-close className={item} onClick={() => setDlg({ k: 'pw', r })}>{t({ en: 'Set a new password', ms: 'Tetapkan kata laluan baharu', zh: '设置新密码', ta: 'புதிய கடவுச்சொல்லை அமை' })}</button>
+              <div className="grid gap-0.5 [&_.btn]:w-full [&_.btn]:px-3 [&_.btn]:justify-start [&_.btn]:border-transparent [&_.btn]:bg-transparent [&_.btn]:text-sm [&_.btn]:font-medium"><TelegramLinkControls base={`/users/${m.id}`} who={m.name} linked={!!m.telegram_linked} onChange={s.reload} /></div>
+              {m.active ? !locked && <button type="button" data-close className={`${item} text-warn`} onClick={() => setDlg({ k: 'deact', r })}>{t({ en: 'Deactivate', ms: 'Nyahaktifkan', zh: '停用', ta: 'செயலிழக்கச் செய்' })}</button>
+                : <button type="button" data-close className={item} onClick={() => edit(m, { active: true }, t({ en: `${m.name} reactivated.`, ms: `${m.name} diaktifkan semula.`, zh: `${m.name} 已重新启用。`, ta: `${m.name} மீண்டும் செயல்படுத்தப்பட்டார்.` }))}>{t({ en: 'Reactivate', ms: 'Aktifkan semula', zh: '重新启用', ta: 'மீண்டும் செயல்படுத்து' })}</button>}
+            </> : r.i && <>
+              <button type="button" data-close className={item} aria-disabled={!!busyId || undefined} onClick={() => row(r.i!, () => api('POST', `/invites/${r.id}/resend`), t({ en: `Invitation sent again to ${r.name}.`, ms: `Jemputan dihantar semula kepada ${r.name}.`, zh: `已再次向 ${r.name} 发送邀请。`, ta: `${r.name} க்கு அழைப்பு மீண்டும் அனுப்பப்பட்டது.` }))}>{t({ en: 'Resend invitation', ms: 'Hantar semula jemputan', zh: '重新发送邀请', ta: 'அழைப்பை மீண்டும் அனுப்பு' })}</button>
+              {r.status === 'invited' && <button type="button" data-close className={`${item} text-warn`} onClick={() => setDlg({ k: 'revoke', r })}>{t({ en: 'Revoke invitation', ms: 'Batalkan jemputan', zh: '撤销邀请', ta: 'அழைப்பை ரத்து செய்' })}</button>}
+            </>}
+          </MoreMenu>
+        </div>
+      )
+    } },
+  ]
+
+  const dm = dlg && dlg.k !== 'invite' ? dlg.r : undefined
+  const err = <ActionError err={a.err} onRetry={() => last.current?.()} label={t(S.again)} />
+  const soloHint = !inv.loading && members.filter(m => m.active).length === 1 && !rows.some(r => r.invite)
 
   return (
     <>
-      <PageHeader title={t({ en: 'Team', ms: 'Pasukan', zh: '团队', ta: 'குழு' })} description={t({ en: 'People who can sign in. Staff cannot see cost or margin. Deactivating someone ends their session at once.', ms: 'Orang yang boleh log masuk. Kakitangan tidak dapat melihat kos atau margin. Menyahaktifkan seseorang menamatkan sesinya serta-merta.', zh: '可以登录的人员。员工看不到成本或利润率。停用某人会立即结束其登录状态。', ta: 'உள்நுழையக்கூடியவர்கள். ஊழியர்கள் செலவு அல்லது margin ஐப் பார்க்க முடியாது. ஒருவரை செயலிழக்கச் செய்தால் அவர் அமர்வு உடனே முடிவடையும்.' })} />
+      <PageHeader title={t(S.team)} description={t({ en: 'People who can sign in. Staff cannot see cost or margin. Deactivating someone ends their session at once.', ms: 'Orang yang boleh log masuk. Kakitangan tidak dapat melihat kos atau margin. Menyahaktifkan seseorang menamatkan sesinya serta-merta.', zh: '可以登录的人员。员工看不到成本或利润率。停用某人会立即结束其登录状态。', ta: 'உள்நுழையக்கூடியவர்கள். ஊழியர்கள் செலவு அல்லது margin ஐப் பார்க்க முடியாது. ஒருவரை செயலிழக்கச் செய்தால் அவர் அமர்வு உடனே முடிவடையும்.' })}
+        actions={<button ref={inviteBtn} type="button" className="btn btn-primary" data-guide="tm-invite" onClick={() => setDlg({ k: 'invite' })}>{t(S.invite)}</button>} />
       {roles.error && <p role="alert" className="mb-2 text-sm text-warn">{t({ en: 'Could not load the role list, so only the standard roles are shown.', ms: 'Senarai peranan tidak dapat dimuatkan, jadi hanya peranan standard dipaparkan.', zh: '无法加载角色列表，因此只显示标准角色。', ta: 'பங்குகளின் பட்டியலை ஏற்ற முடியவில்லை, எனவே நிலையான பங்குகள் மட்டும் காட்டப்படுகின்றன.' })}</p>}
-      {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
-      <ActionError err={a.err} onRetry={() => last.current?.()} label={t(S.again)} />
-      <Async s={s} rows={3} empty={!s.data?.length} emptyText={t({ en: 'No users yet.', ms: 'Belum ada pengguna.', zh: '还没有用户。', ta: 'பயனர்கள் இன்னும் இல்லை.' })} emptyHint={t({ en: 'Add the first person below.', ms: 'Tambah orang pertama di bawah.', zh: '请在下方添加第一位成员。', ta: 'முதல் நபரை கீழே சேர்க்கவும்.' })} >
-        <ul className="grid gap-2" data-guide="tm-list">
-          {s.data?.map(m => (
-            <li key={m.id} className="card">
-              <p className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">{m.name}</span>
-                <span className="badge">{m.role_name ?? m.role}</span>
-                {!m.active && <span className="badge badge-warn">{t({ en: 'Deactivated', ms: 'Dinyahaktifkan', zh: '已停用', ta: 'செயலிழக்கப்பட்டது' })}</span>}
-                {m.id === meId && <span className="badge">{t({ en: 'You', ms: 'Anda', zh: '你', ta: 'நீங்கள்' })}</span>}
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                {m.username ? <>{t({ en: 'Signs in as', ms: 'Log masuk sebagai', zh: '登录名：', ta: 'உள்நுழைவு பெயர்:' })} <span className="font-semibold text-ink">{m.username}</span></> : t({ en: 'No sign-in account yet', ms: 'Belum ada akaun log masuk', zh: '还没有登录账户', ta: 'உள்நுழைவு கணக்கு இன்னும் இல்லை' })}
-                {m.sessions > 0 && ` · ${t({ en: `${m.sessions} active ${m.sessions === 1 ? 'session' : 'sessions'}`, ms: `${m.sessions} sesi aktif`, zh: `${m.sessions} 个活动会话`, ta: `${m.sessions} செயலில் உள்ள அமர்வுகள்` })}`}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-                <span>Telegram: <span className="font-semibold text-ink">{m.telegram_linked ? t(S.linked) : t(S.notLinked)}</span></span>
-                <TelegramLinkControls base={`/users/${m.id}`} who={m.name} linked={!!m.telegram_linked} onChange={s.reload} />
-              </div>
-              <div className="mt-3 flex flex-wrap items-end gap-2">
-                <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: `New password for ${m.name}`, ms: `Kata laluan baharu untuk ${m.name}`, zh: `${m.name} 的新密码`, ta: `${m.name} க்கான புதிய கடவுச்சொல்` })}
-                  <input className="input font-normal" type="password" autoComplete="new-password" value={reset[m.id] ?? ''}
-                    onChange={e => setReset({ ...reset, [m.id]: e.target.value })} />
-                </label>
-                <button type="button" className="btn" onClick={() => {
-                  const p = reset[m.id] ?? ''
-                  if (p.length < 10) return setErr(t(S.pw10))
-                  edit(m, { password: p }, t({ en: `Password for ${m.name} changed.`, ms: `Kata laluan ${m.name} telah ditukar.`, zh: `${m.name} 的密码已更改。`, ta: `${m.name} இன் கடவுச்சொல் மாற்றப்பட்டது.` })); setReset({ ...reset, [m.id]: '' })
-                }}>{t({ en: `Set password for ${m.name}`, ms: `Tetapkan kata laluan untuk ${m.name}`, zh: `设置 ${m.name} 的密码`, ta: `${m.name} க்கு கடவுச்சொல் அமை` })}</button>
-                {(() => {
-                  const cur = m.role_key ?? m.role, sel = pick[m.id] ?? cur, changed = sel !== cur
-                  return <>
-                    <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: `Role for ${m.name}`, ms: `Peranan untuk ${m.name}`, zh: `${m.name} 的角色`, ta: `${m.name} க்கான பங்கு` })}
-                      <select className="input font-normal" value={sel} aria-describedby={changed ? `rw-${m.id}` : undefined} onChange={e => setPick({ ...pick, [m.id]: e.target.value })}>
-                        {opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
-                    <button type="button" className="btn" aria-disabled={!changed || undefined} onClick={() => {
-                      if (changed) edit(m, { role: sel }, (r => t({ en: `${m.name} now holds the ${r} role.`, ms: `${m.name} kini memegang peranan ${r}.`, zh: `${m.name} 现在的角色是${r}。`, ta: `${m.name} இப்போது ${r} பங்கை வகிக்கிறார்.` }))(opts.find(o => o.key === sel)?.name ?? sel))
-                    }}>{t({ en: `Change role for ${m.name}`, ms: `Tukar peranan untuk ${m.name}`, zh: `更改 ${m.name} 的角色`, ta: `${m.name} இன் பங்கை மாற்று` })}</button>
-                    {changed && <p id={`rw-${m.id}`} className="basis-full text-sm font-semibold text-warn">{t({ en: 'They will be signed out on every device when you save a new role.', ms: 'Mereka akan dilog keluar pada setiap peranti apabila anda menyimpan peranan baharu.', zh: '保存新角色后，对方会在所有设备上被退出登录。', ta: 'புதிய பங்கைச் சேமிக்கும்போது அவர்கள் எல்லா சாதனங்களிலும் வெளியேற்றப்படுவார்கள்.' })}</p>}
-                  </>
-                })()}
-                <button type="button" className={m.active ? 'btn btn-danger' : 'btn'} onClick={() => edit(m, { active: !m.active }, m.active ? t({ en: `${m.name} deactivated.`, ms: `${m.name} dinyahaktifkan.`, zh: `${m.name} 已停用。`, ta: `${m.name} செயலிழக்கப்பட்டார்.` }) : t({ en: `${m.name} reactivated.`, ms: `${m.name} diaktifkan semula.`, zh: `${m.name} 已重新启用。`, ta: `${m.name} மீண்டும் செயல்படுத்தப்பட்டார்.` }))}>
-                  {m.active ? t({ en: `Deactivate ${m.name}`, ms: `Nyahaktifkan ${m.name}`, zh: `停用 ${m.name}`, ta: `${m.name} ஐ செயலிழக்கச் செய்` }) : t({ en: `Reactivate ${m.name}`, ms: `Aktifkan semula ${m.name}`, zh: `重新启用 ${m.name}`, ta: `${m.name} ஐ மீண்டும் செயல்படுத்து` })}</button>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {inv.error && <p role="alert" className="mb-2 text-sm text-warn">{inv.error}</p>}
+      {rowErr && <p role="alert" className="mb-2 text-sm text-warn">{rowErr}</p>}
+      {!dlg && err}
+      <Async s={s} shape="table" rows={4}>
+        <div role="group" aria-label={t({ en: 'Summary. Select one to filter the list.', ms: 'Ringkasan. Pilih satu untuk menapis senarai.', zh: '概览。选择一项即可筛选列表。', ta: 'சுருக்கம். பட்டியலை வடிகட்ட ஒன்றைத் தேர்ந்தெடுக்கவும்.' })} className="mb-3 flex flex-wrap gap-2">
+          {chips.map(([k, label, n, warn]) => <ToggleChip key={k || 'all'} pressed={chip === k} warn={warn && n > 0} onClick={() => setChip(chip === k ? '' : k)}><span className="tabular-nums">{n}</span> {label}</ToggleChip>)}
+        </div>
+        <FilterBar label={t({ en: 'Filter the team', ms: 'Tapis pasukan', zh: '筛选团队', ta: 'குழுவை வடிகட்டு' })} search={{ value: q, onChange: setQ, label: t({ en: 'Search by name, username or email', ms: 'Cari mengikut nama, nama pengguna atau e-mel', zh: '按姓名、用户名或邮箱搜索', ta: 'பெயர், பயனர்பெயர் அல்லது மின்னஞ்சலால் தேடு' }) }}>
+          <FilterSelect label={t(S.role)} value={roleF} onChange={setRoleF}><option value="">{t(S.all)}</option>{opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</FilterSelect>
+          <FilterSelect label={t(S.status)} value={statusF} onChange={setStatusF}><option value="">{t(S.all)}</option>{(['active', 'inactive', 'invited', 'expired'] as const).map(v => <option key={v} value={v}>{statusText(v)}</option>)}</FilterSelect>
+        </FilterBar>
+        <p role="status" className="sr-only">{t({ en: `${shown.length} of ${rows.length} shown`, ms: `${shown.length} daripada ${rows.length} dipaparkan`, zh: `显示 ${shown.length} / ${rows.length}`, ta: `${rows.length} இல் ${shown.length} காட்டப்படுகிறது` })}</p>
+        {shown.length ? (
+          <div data-guide="tm-list">
+            <DataTable label={t({ en: 'Team members and invitations', ms: 'Ahli pasukan dan jemputan', zh: '团队成员和邀请', ta: 'குழு உறுப்பினர்களும் அழைப்புகளும்' })} caption={t({ en: 'Who can sign in and who is invited, with role, status and Telegram link.', ms: 'Siapa yang boleh log masuk dan siapa yang dijemput, dengan peranan, status dan pautan Telegram.', zh: '可登录和受邀的人员，含角色、状态和 Telegram 链接情况。', ta: 'உள்நுழையக்கூடியவர்களும் அழைக்கப்பட்டவர்களும்: பங்கு, நிலை, Telegram இணைப்புடன்.' })} maxH="max-h-[70vh] min-h-80" rows={shown} rowKey={r => (r.invite ? 'i' : 'u') + r.id} cols={cols} current={r => r.id === meId} />
+          </div>
+        ) : <EmptyState title={t({ en: 'No one matches these filters.', ms: 'Tiada yang sepadan dengan tapisan ini.', zh: '没有符合筛选条件的人员。', ta: 'இந்த வடிகட்டிகளுக்குப் பொருந்தியவர் யாரும் இல்லை.' })} action={{ label: t({ en: 'Clear all', ms: 'Kosongkan semua', zh: '全部清除', ta: 'அனைத்தையும் அழி' }), onClick: clear }} />}
+        {soloHint && <div className="mt-4"><EmptyState title={t({ en: 'It is just you so far. Invite your first teammate.', ms: 'Setakat ini hanya anda. Jemput rakan sepasukan pertama anda.', zh: '目前只有你一个人。邀请你的第一位队友吧。', ta: 'இதுவரை நீங்கள் மட்டுமே. உங்கள் முதல் குழு உறுப்பினரை அழைக்கவும்.' })} hint={t({ en: 'They get their own sign-in, and staff never see cost or margin.', ms: 'Mereka mendapat log masuk sendiri, dan kakitangan tidak pernah melihat kos atau margin.', zh: '对方会有自己的登录账户，员工看不到成本或利润率。', ta: 'அவர்களுக்குத் தனி உள்நுழைவு கிடைக்கும்; ஊழியர்கள் செலவு அல்லது margin ஐப் பார்க்க மாட்டார்கள்.' })} action={{ label: t(S.invite), onClick: () => setDlg({ k: 'invite' }) }} /></div>}
       </Async>
-      <Invites opts={opts} onChange={s.reload} />
-      <section className="mt-8 border-t border-soft pt-6" aria-labelledby="newu" data-guide="tm-password">
-        <h2 id="newu" className="text-base font-semibold">{t(S.addPw)}</h2>
-        <p className="text-sm text-muted">{t({ en: 'For people without an email address. You set the first password and tell them in person.', ms: 'Untuk orang tanpa alamat e-mel. Anda menetapkan kata laluan pertama dan memberitahu mereka secara peribadi.', zh: '适用于没有电子邮件地址的人。由你设置初始密码并当面告知对方。', ta: 'மின்னஞ்சல் முகவரி இல்லாதவர்களுக்கு. நீங்கள் முதல் கடவுச்சொல்லை அமைத்து நேரில் தெரிவிக்கவும்.' })}</p>
-        <form className="mt-2 grid max-w-xl gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); add() }}>
-          <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'Name', ms: 'Nama', zh: '姓名', ta: 'பெயர்' })}
-            <input className="input font-normal" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></label>
-          <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'Username (letters, numbers, . _ -)', ms: 'Nama pengguna (huruf, nombor, . _ -)', zh: '用户名（字母、数字、. _ -）', ta: 'பயனர்பெயர் (எழுத்துகள், எண்கள், . _ -)' })}
-            <input className="input font-normal" autoCapitalize="none" value={f.username} onChange={e => setF({ ...f, username: e.target.value })} /></label>
-          <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.role)}
-            <select className="input font-normal" value={f.role} onChange={e => setF({ ...f, role: e.target.value })}>
-              {opts.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}</select></label>
-          <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'First password (10+ characters)', ms: 'Kata laluan pertama (10+ aksara)', zh: '初始密码（至少 10 个字符）', ta: 'முதல் கடவுச்சொல் (10+ எழுத்துகள்)' })}
-            <input className="input font-normal" type="password" autoComplete="new-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></label>
-          <div className="sm:col-span-2"><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t(S.working) : t(S.addPw)}</button></div>
-        </form>
-      </section>
+
+      <FormDialog open={dlg?.k === 'invite'} title={t(S.invite)} onClose={() => close()}>
+        {err}
+        <InviteBody opts={opts} busy={a.busy} onCancel={() => close()}
+          onEmail={(em, role) => run(async () => { await api('POST', '/invites', { email: em, role }); close() }, t({ en: `Invitation sent to ${em}`, ms: `Jemputan dihantar kepada ${em}`, zh: `邀请已发送给 ${em}`, ta: `${em} க்கு அழைப்பு அனுப்பப்பட்டது` }))}
+          onPw={f => run(async () => { await api('POST', '/users', f); close() }, t({ en: `${f.name} can now sign in.`, ms: `${f.name} kini boleh log masuk.`, zh: `${f.name} 现在可以登录了。`, ta: `${f.name} இப்போது உள்நுழையலாம்.` }))} />
+      </FormDialog>
+      <FormDialog open={dlg?.k === 'role'} title={t({ en: 'Change role', ms: 'Tukar peranan', zh: '更改角色', ta: 'பங்கை மாற்று' })} onClose={() => close(dm?.id)}>
+        {err}
+        {dm?.m && <RoleBody m={dm.m} opts={opts} busy={a.busy} onCancel={() => close(dm.id)}
+          onSave={role => edit(dm.m!, { role }, (r => t({ en: `${dm.name} now holds the ${r} role.`, ms: `${dm.name} kini memegang peranan ${r}.`, zh: `${dm.name} 现在的角色是${r}。`, ta: `${dm.name} இப்போது ${r} பங்கை வகிக்கிறார்.` }))(opts.find(o => o.key === role)?.name ?? role))} />}
+      </FormDialog>
+      <FormDialog open={dlg?.k === 'pw'} title={t({ en: 'Set a new password', ms: 'Tetapkan kata laluan baharu', zh: '设置新密码', ta: 'புதிய கடவுச்சொல்லை அமை' })} onClose={() => close(dm?.id)}>
+        {err}
+        {dm?.m && <PwBody m={dm.m} busy={a.busy} onCancel={() => close(dm.id)}
+          onSave={password => edit(dm.m!, { password }, t({ en: `Password for ${dm.name} changed.`, ms: `Kata laluan ${dm.name} telah ditukar.`, zh: `${dm.name} 的密码已更改。`, ta: `${dm.name} இன் கடவுச்சொல் மாற்றப்பட்டது.` }))} />}
+      </FormDialog>
+      <ConfirmDialog open={dlg?.k === 'deact' || dlg?.k === 'revoke'} danger onCancel={() => close(dlg?.k === 'deact' ? dm?.id : undefined)}
+        title={dlg?.k === 'revoke' ? t({ en: `Revoke the invitation for ${dm?.name ?? ''}?`, ms: `Batalkan jemputan untuk ${dm?.name ?? ''}?`, zh: `撤销发给 ${dm?.name ?? ''} 的邀请？`, ta: `${dm?.name ?? ''} க்கான அழைப்பை ரத்து செய்யவா?` }) : t({ en: `Deactivate ${dm?.name ?? ''}?`, ms: `Nyahaktifkan ${dm?.name ?? ''}?`, zh: `停用 ${dm?.name ?? ''}？`, ta: `${dm?.name ?? ''} ஐ செயலிழக்கச் செய்யவா?` })}
+        body={dlg?.k === 'revoke' ? t({ en: 'The link in the email stops working.', ms: 'Pautan dalam e-mel tidak lagi berfungsi.', zh: '邮件中的链接将失效。', ta: 'மின்னஞ்சலில் உள்ள இணைப்பு செயல்படாது.' })
+          : <>{t({ en: 'They cannot sign in, and their session ends at once. You can reactivate them later.', ms: 'Mereka tidak boleh log masuk dan sesi mereka tamat serta-merta. Anda boleh mengaktifkannya semula kemudian.', zh: '对方将无法登录，其登录状态会立即结束。你以后可以重新启用。', ta: 'அவர்களால் உள்நுழைய முடியாது; அவர்கள் அமர்வு உடனே முடிவடையும். பின்னர் மீண்டும் செயல்படுத்தலாம்.' })}{a.err && <span role="alert" className="mt-2 block text-warn">{a.err.text}</span>}</>}
+        confirmLabel={dlg?.k === 'revoke' ? t({ en: 'Yes, revoke', ms: 'Ya, batalkan', zh: '是，撤销', ta: 'ஆம், ரத்து செய்' }) : t({ en: 'Deactivate', ms: 'Nyahaktifkan', zh: '停用', ta: 'செயலிழக்கச் செய்' })}
+        onConfirm={() => dlg?.k === 'revoke' ? dm?.i && row(dm.i, () => api('DELETE', `/invites/${dm.id}`), t({ en: `Invitation for ${dm.name} revoked.`, ms: `Jemputan untuk ${dm.name} dibatalkan.`, zh: `发给 ${dm.name} 的邀请已撤销。`, ta: `${dm.name} க்கான அழைப்பு ரத்து செய்யப்பட்டது.` }))
+          : dm?.m && edit(dm.m, { active: false }, t({ en: `${dm.name} deactivated.`, ms: `${dm.name} dinyahaktifkan.`, zh: `${dm.name} 已停用。`, ta: `${dm.name} செயலிழக்கப்பட்டார்.` }))} />
     </>
   )
 }
+
 
 const MIN_PASSWORD = 10 // server rule (docs/api-contract.md, POST /api/me/password); the common-password check is server-side only
 

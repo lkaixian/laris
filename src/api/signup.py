@@ -13,7 +13,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 from .. import auth, db, mailer
 from ..errors import ApiError
 from ..templates import KEY_RE, TemplateError
-from .deps import hit, svc, throttle
+from .deps import svc, throttle
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
@@ -108,10 +108,10 @@ def _guard(request: Request, what: str, email: str, n_ip: int, n_email: int, win
     throttle(f"{what}:{email}", n_email, window, "Too many requests for this email. Try again later.")
 
 
-def _quota(email: str) -> bool:
-    """One more emailed code today for this email? Counted only when a code is really issued (signup, resend and reset together), so
-    requests for an address with no account cannot use up the quota of its real owner."""
-    return hit(f"codes:{email}", MAX_DAILY, 86400)
+def _quota(email: str):
+    """One more emailed code today for this email, else 429. Counted only when a code is really issued (signup, resend and reset
+    together), so requests for an address with no account cannot use up the quota of its real owner."""
+    throttle(f"codes:{email}", MAX_DAILY, 86400, "Too many codes requested for this email today. Try again tomorrow.")
 
 
 def _drop_pending(c, u):  # u: an unverified owner alone in its tenant
@@ -144,8 +144,7 @@ def signup(body: Signup, request: Request, bg: BackgroundTasks):
     _guard(request, "signup", body.email, 5, 3, 3600)
     if why := auth.weak_password(body.password, body.email.split("@")[0]):
         raise ApiError(422, "weak_password", why)
-    if not _quota(body.email):
-        raise ApiError(429, "slow_down", "Too many codes requested for this email today. Try again tomorrow.")
+    _quota(body.email)
     pw = auth.hash_password(body.password)
     with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         # the same email may own other businesses; only an earlier unverified attempt (alone in its own tenant) is replaced
@@ -186,7 +185,8 @@ def resend(body: EmailOnly, request: Request, bg: BackgroundTasks):
     echo = {}
     with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         u = c.execute("select id, tenant_id from users where lower(email)=%s and not active and email_verified_at is null for update", (body.email,)).fetchone()
-        if u and _quota(body.email):
+        if u:
+            _quota(body.email)
             code = _issue(c, u["id"], u["tenant_id"], "verify")
             bg.add_task(svc(request).mail, body.email, *mailer.verification_mail(code), category="signup")
             echo = _echo(code)
@@ -199,7 +199,8 @@ def forgot(body: EmailOnly, request: Request, bg: BackgroundTasks):
     echo = {}
     with db.tx("owner", "signup", tenant=db.ALL_TENANTS) as c:
         us = c.execute("select id, tenant_id from users where lower(email)=%s and active and email_verified_at is not null order by id for update", (body.email,)).fetchall()
-        if us and _quota(body.email):
+        if us:
+            _quota(body.email)
             code = None  # ONE code for the email: one row per account, all bound to the email
             for u in us:
                 code = _issue(c, u["id"], u["tenant_id"], "reset", code, body.email)

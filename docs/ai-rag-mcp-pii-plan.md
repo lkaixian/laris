@@ -69,6 +69,8 @@ Residual risk to tell owners: masking is regex plus the contact book, so a name 
 
 ## Stage 4: MCP server
 
+4 DONE 2026-10-30: `src/api/mcp.py`, migration `0004_mcp_key_role.sql`, key creation with `mcp_role_id` in API access, tests in `tests/test_mcp.py`, usage in `docs/reusable-api.md`. One tool (`search`), not five: `get_quote`, `stale_costs`, `cost_of` and `jobs` were left out because each would need its own role gate and masking review. Thin JSON-RPC route, no `mcp` SDK, so no new dependency. CI result pending.
+
 - Read-only tools mapped onto the registry: `search`, `get_quote`, `stale_costs`, `cost_of`, `jobs`. No write tool; at most a proposal the person confirms in the app, as the Assistant does for `job_move`.
 - Auth is the existing API token, bound to one role; the same permission checks run per tool. Output is masked by default. Every call is written to `ai_calls`.
 - Transport: streamable HTTP, so any MCP client the business picks can connect. Documented in `docs/reusable-api.md`.

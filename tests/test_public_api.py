@@ -38,7 +38,7 @@ def test_key_shown_once_and_only_hash_stored(env):
     assert k["key"] not in json.dumps(row, default=str)
     lst = e.c.get("/api/settings/api-keys", headers=e.O)
     assert lst.status_code == 200 and k["key"] not in lst.text
-    assert lst.json()[0].keys() == {"id", "name", "key_prefix", "created_at", "last_used_at", "revoked"}
+    assert lst.json()[0].keys() == {"id", "name", "key_prefix", "created_at", "last_used_at", "revoked", "mcp_role"}
     assert e.sql("select count(*) n from audit_log where entity='api_keys' and event='api key created'")[0]["n"] == 1
     assert k["key"] not in json.dumps(e.sql("select after from audit_log where entity='api_keys'"), default=str)
 

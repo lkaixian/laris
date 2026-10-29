@@ -26,6 +26,7 @@ OPEN = {
     ("POST", "/api/v1/quote-price"),  # no user session at all: an owner-issued API key (X-API-Key) is the credential; read-only pricing, tests/test_public_api.py
     ("POST", "/api/public/quote/{token}/accept"), ("POST", "/api/public/quote/{token}/decline"),  # the customer's own link, tests/test_accept.py
     ("POST", "/api/assistant/guide"),  # navigation help for any signed-in user; 403 ai_off unless the owner turned it on, tests/test_ai_guide.py
+    ("POST", "/api/mcp"),  # no user session: an owner-issued MCP key bound to a staff role is the credential; read-only search, tests/test_mcp.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
 }
 ID = str(uuid4())

@@ -71,7 +71,7 @@ export function mockPrivacy(method: string, p: string, owner: boolean, body: any
   }
   if (p === '/settings/api-keys' && method === 'GET') return keys
   if (p === '/settings/api-keys' && method === 'POST') {
-    const k = { id: 'k' + (keys.length + 1), name: String(body.name).trim(), key_prefix: 'lar_Zt8w', created_at: new Date().toISOString(), last_used_at: null, revoked: false }
+    const k = { id: 'k' + (keys.length + 1), name: String(body.name).trim(), key_prefix: 'lar_Zt8w', created_at: new Date().toISOString(), last_used_at: null, revoked: false, mcp_role: body.mcp_role_id ? 'Staff' : null }
     keys.push(k); return { id: k.id, name: k.name, key: 'lar_Zt8wSAMPLEdoNotUseThisKey0123456789', note: 'Copy it now, it is shown once.' }
   }
   if ((m = p.match(/^\/settings\/api-keys\/([^/]+)$/)) && method === 'DELETE') {

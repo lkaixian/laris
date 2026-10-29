@@ -4,7 +4,7 @@ import { Async, PageHeader, msg, useAction, ActionError, useFetch } from './ui'
 import { useToast } from './Toast'
 
 interface Usage { period: string; approved_quotes: number; quotes_sent: number; api_calls: number; free_allowance: number; over_allowance: boolean; note: string }
-interface Key { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; revoked: boolean }
+interface Key { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; revoked: boolean; mcp_role: string | null }
 
 const day = (s: string) => new Date(s).toLocaleDateString()
 
@@ -35,6 +35,10 @@ function UsageCard() {
 function Keys() {
   const s = useFetch<Key[]>('/settings/api-keys')
   const [name, setName] = useState('')
+  const [ai, setAi] = useState(false)
+  const [roleId, setRoleId] = useState('')
+  const roles = useFetch<{ roles: { id: string; name: string; class: string }[] }>('/roles')
+  const staffRoles = (roles.data?.roles ?? []).filter(x => x.class === 'staff')
   const [made, setMade] = useState<{ name: string; key: string }>()
   const [copied, setCopied] = useState('')
   const [ask, setAsk] = useState('')
@@ -44,8 +48,9 @@ function Keys() {
   const box = useRef<HTMLInputElement>(null)
   const create = () => {
     if (!name.trim()) return setErr('Give the key a name, for example the program that will use it.')
+    if (ai && !roleId) return setErr('Choose which role the AI tool acts as.')
     setErr(''); setCopied('')
-    add.run(async () => { const r = await api<{ name: string; key: string }>('POST', '/settings/api-keys', { name: name.trim() }); setMade(r); setName(''); s.reload(); requestAnimationFrame(() => box.current?.select()) })
+    add.run(async () => { const r = await api<{ name: string; key: string }>('POST', '/settings/api-keys', { name: name.trim(), ...(ai ? { mcp_role_id: roleId } : {}) }); setMade(r); setName(''); s.reload(); requestAnimationFrame(() => box.current?.select()) })
   }
   const copy = async () => {
     try { await navigator.clipboard.writeText(made!.key); setCopied('Copied.') } catch { box.current?.select(); setCopied('Could not copy automatically. The key is selected, press Ctrl+C.') }
@@ -62,6 +67,17 @@ function Keys() {
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-semibold">New key name
           <input className="input font-normal" maxLength={60} value={name} onChange={e => setName(e.target.value)} /></label>
         <button type="submit" className="btn btn-primary" aria-disabled={add.busy || undefined}>{add.busy ? 'Creating...' : 'Create key'}</button>
+        <div className="w-full">
+          <label className="flex min-h-11 items-start gap-2 text-sm font-semibold">
+            <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={ai} onChange={e => setAi(e.target.checked)} />
+            <span>This key is for an AI tool (MCP)<span className="block font-normal text-muted">The tool can search your quotes, contacts and catalog, limited to what the role below may see. It needs your agreement under AI settings first. Names and contact details are replaced by placeholders, but addresses are not.</span></span></label>
+          {ai && (
+            <label className="mt-1 flex max-w-sm flex-col gap-1 text-sm font-semibold">Acts as this role
+              <select className="input font-normal" value={roleId} onChange={e => setRoleId(e.target.value)}>
+                <option value="">Choose a role</option>
+                {staffRoles.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>)}
+        </div>
       </form>
       {err && <p role="alert" className="mb-2 text-sm text-warn">{err}</p>}
       <ActionError err={add.err} onRetry={create} label="Retry creating the key" />
@@ -81,7 +97,7 @@ function Keys() {
         <ul className="grid gap-2">
           {list.map(k => (
             <li key={k.id} className="card">
-              <p className="flex flex-wrap items-center gap-2"><span className="font-semibold">{k.name}</span>{k.revoked && <span className="badge badge-warn">Revoked</span>}</p>
+              <p className="flex flex-wrap items-center gap-2"><span className="font-semibold">{k.name}</span>{k.mcp_role && <span className="badge">AI tool, acts as {k.mcp_role}</span>}{k.revoked && <span className="badge badge-warn">Revoked</span>}</p>
               <p className="break-all font-mono text-sm">{k.key_prefix}...</p>
               <p className="text-sm text-muted">Created {day(k.created_at)}. {k.last_used_at ? `Last used ${day(k.last_used_at)}.` : 'Never used.'}</p>
               {!k.revoked && (ask === k.id ? (
@@ -113,6 +129,10 @@ export function ApiAccessView() {
 
 curl -X POST -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" ${base}/quote-price -d '{"items":[{"recipe_key":"signboard_60x30","qty":2}]}'`}</pre>
         <p className="mt-2 text-sm text-muted">The first call lists the items you can price. The second returns selling prices only, never costs or margins.</p>
+        <h3 className="mt-4 font-semibold">For an AI tool (MCP)</h3>
+        <p className="mt-1 text-sm text-muted">Add this address as a remote MCP server in your AI tool and send the key as a Bearer token. It has one read-only tool, search.</p>
+        <pre className="mt-2 whitespace-pre-wrap break-all rounded-ui bg-soft p-3 font-mono text-xs">{`${location.origin}/api/mcp
+Authorization: Bearer YOUR_API_KEY`}</pre>
       </section>
     </>
   )

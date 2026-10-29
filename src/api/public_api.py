@@ -15,6 +15,7 @@ from .. import db, pricing
 from ..errors import ApiError
 from ..pipeline import MAX_ITEMS, MAX_QTY, MY
 from ..templates import load_template
+from .ai_guide import ai_row
 from .deps import JR, Ctx, audit, guarded, read_ctx, reply, require_owner, throttle, write_ctx
 
 r = APIRouter(prefix="/api")
@@ -50,6 +51,7 @@ def usage(ctx: Ctx = Depends(read_ctx)):
 # ---- API keys (owner) ----------------------------------------------------------------------------------------------
 class KeyIn(BaseModel, extra="forbid"):
     name: str = Field(min_length=1, max_length=60)
+    mcp_role_id: UUID | None = None  # set: an MCP key for an AI tool, limited to what this staff role may read (src/api/mcp.py)
 
 
 def _sha(k: str) -> str:
@@ -59,8 +61,8 @@ def _sha(k: str) -> str:
 @r.get("/settings/api-keys")
 def list_keys(ctx: Ctx = Depends(read_ctx)):
     require_owner(ctx)
-    rows = ctx.conn.execute("""select id, name, key_prefix, created_at, last_used_at, revoked_at is not null as revoked
-                               from api_keys where tenant_id=%s order by created_at, id""", (ctx.tenant_id,)).fetchall()
+    rows = ctx.conn.execute("""select k.id, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at is not null as revoked, r.name as mcp_role
+                               from api_keys k left join roles r on r.id = k.role_id where k.tenant_id=%s order by k.created_at, k.id""", (ctx.tenant_id,)).fetchall()
     return reply(ctx, rows)
 
 
@@ -70,11 +72,17 @@ def create_key(body: KeyIn, ctx: Ctx = Depends(write_ctx)):
     name = body.name.strip()
     if not name:
         raise ApiError(422, "bad_name", "give the key a name")
+    if body.mcp_role_id:
+        from .assistant import rag_on  # the same consent gate as the Assistant reading records
+        if not rag_on(ai_row(ctx)):
+            raise ApiError(422, "ai_consent_required", "Turn on 'Guide plus my data, read by the AI' in AI settings first: an AI tool reading your records needs that agreement.")
+        if not ctx.conn.execute("select 1 from roles where id=%s and tenant_id=%s and class='staff'", (body.mcp_role_id, ctx.tenant_id)).fetchone():
+            raise ApiError(422, "bad_role", "choose one of your staff roles; an AI tool can never act as the owner")
     key = "lar_" + secrets.token_urlsafe(24)  # 32 url-safe characters
     with guarded():
-        kid = ctx.conn.execute("insert into api_keys(tenant_id, name, key_prefix, key_hash, created_by) values (%s,%s,%s,%s,%s) returning id",
-                               (ctx.tenant_id, name, key[:8], _sha(key), ctx.user_id)).fetchone()["id"]
-    audit(ctx, "api_keys", kid, "api key created", None, {"name": name, "key_prefix": key[:8]})
+        kid = ctx.conn.execute("insert into api_keys(tenant_id, name, key_prefix, key_hash, created_by, role_id) values (%s,%s,%s,%s,%s,%s) returning id",
+                               (ctx.tenant_id, name, key[:8], _sha(key), ctx.user_id, body.mcp_role_id)).fetchone()["id"]
+    audit(ctx, "api_keys", kid, "api key created", None, {"name": name, "key_prefix": key[:8], **({"mcp_role_id": str(body.mcp_role_id)} if body.mcp_role_id else {})})
     return reply(ctx, {"id": kid, "name": name, "key": key, "note": "Copy it now, it is shown once."}, 201)
 
 

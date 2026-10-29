@@ -20,7 +20,7 @@ const S = {
   hidden: { en: 'Values hidden from the AI', ms: 'Nilai disembunyikan daripada AI' },
   when: { en: 'When', ms: 'Bila' }, what: { en: 'What', ms: 'Apa' }, who: { en: 'Who', ms: 'Siapa' }, result: { en: 'Result', ms: 'Hasil' },
   ok: { en: 'Answered', ms: 'Dijawab' }, bad: { en: 'Failed', ms: 'Gagal' }, none: { en: 'none', ms: 'tiada' },
-  auto: { en: 'Customer chat', ms: 'Sembang pelanggan' },
+  auto: { en: 'Customer chat', ms: 'Sembang pelanggan' }, tool: { en: 'AI tool key', ms: 'Kunci alat AI' },
   emptyT: { en: 'No AI calls yet', ms: 'Belum ada panggilan AI' },
   emptyH: { en: 'A row appears here each time the AI reads a message, a document or a question.', ms: 'Satu baris muncul di sini setiap kali AI membaca mesej, dokumen atau soalan.' },
 } satisfies Record<string, Text>
@@ -28,6 +28,7 @@ const KIND: Record<string, Text> = {
   enquiry: { en: 'Customer enquiry', ms: 'Pertanyaan pelanggan' }, supplier_doc: { en: 'Supplier document', ms: 'Dokumen pembekal' },
   rfq_reply: { en: 'Supplier reply to an ask', ms: 'Balasan pembekal' }, availability: { en: 'Stock question', ms: 'Soalan stok' },
   assistant: { en: 'Assistant', ms: 'Pembantu' }, guide: { en: 'Guide', ms: 'Panduan' },
+  ask: { en: 'Assistant, reading records', ms: 'Pembantu, membaca rekod' }, mcp: { en: 'AI tool search (MCP)', ms: 'Carian alat AI (MCP)' },
 }
 const MASK: Record<string, Text> = {
   EMAIL: { en: 'email', ms: 'emel' }, PHONE: { en: 'phone', ms: 'telefon' }, ID: { en: 'ID number', ms: 'nombor ID' },
@@ -64,7 +65,7 @@ export function AiActivity() {
                   <tr key={i} className="border-t border-soft align-top">
                     <td className="py-1.5 pr-3 tabular-nums">{new Date(c.at).toLocaleString()}</td>
                     <td className="py-1.5 pr-3">{c.kind in KIND ? t(KIND[c.kind], lang) : c.kind}</td>
-                    {d.scope === 'all' && <td className="py-1.5 pr-3">{c.person ?? t(S.auto, lang)}</td>}
+                    {d.scope === 'all' && <td className="py-1.5 pr-3">{c.person ?? t(c.kind === 'mcp' ? S.tool : S.auto, lang)}</td>}
                     <td className="py-1.5 pr-3">{t(c.ok ? S.ok : S.bad, lang)} <span className="text-muted tabular-nums">{c.ms} ms</span></td>
                     <td className="py-1.5">{hide(c.masked)}</td>
                   </tr>))}

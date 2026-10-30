@@ -146,6 +146,80 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
   )
 }
 
+const IS = {
+  title: { en: 'Add a quote you already sent', ms: 'Tambah sebut harga yang sudah anda hantar', zh: '添加您已发出的报价', ta: 'நீங்கள் ஏற்கனவே அனுப்பிய மேற்கோளைச் சேர்' },
+  intro: { en: 'Made it in Excel or Word and sent it yourself? Add the file here. LARIS reads the lines, files it as sent, follows up if there is no reply, and can make an accept link.', ms: 'Buat dalam Excel atau Word dan hantar sendiri? Tambah fail di sini. LARIS membaca baris, memfailkannya sebagai dihantar, menyusul jika tiada balasan, dan boleh membuat pautan terima.', zh: '用 Excel 或 Word 做好并自己发出了报价？在此添加文件。LARIS 会读取各行、记为已发送、无回复时跟进，并可生成接受链接。', ta: 'Excel அல்லது Word இல் செய்து நீங்களே அனுப்பினீர்களா? கோப்பை இங்கே சேர்க்கவும். LARIS வரிகளைப் படித்து, அனுப்பியதாகப் பதிவு செய்து, பதில் இல்லையெனில் பின்தொடர்ந்து, ஏற்பு இணைப்பையும் உருவாக்கும்.' },
+  customer: { en: 'Customer name', ms: 'Nama pelanggan', zh: '客户名称', ta: 'வாடிக்கையாளர் பெயர்' },
+  sentOn: { en: 'Date you sent it (optional)', ms: 'Tarikh anda menghantarnya (pilihan)', zh: '发出日期（可选）', ta: 'நீங்கள் அனுப்பிய தேதி (விருப்பம்)' },
+  needCust: { en: 'Enter the customer name.', ms: 'Masukkan nama pelanggan.', zh: '请输入客户名称。', ta: 'வாடிக்கையாளர் பெயரை உள்ளிடவும்.' },
+  add: { en: 'Read quote and add as sent', ms: 'Baca sebut harga dan tambah sebagai dihantar', zh: '读取报价并添加为已发送', ta: 'மேற்கோளைப் படித்து அனுப்பியதாகச் சேர்' },
+  note: { en: 'Prices are copied from your file, not worked out by LARIS. Check any line marked for review.', ms: 'Harga disalin daripada fail anda, bukan dikira oleh LARIS. Semak mana-mana baris yang ditanda untuk semakan.', zh: '价格取自您的文件，不是 LARIS 计算的。请检查标记为需审核的行。', ta: 'விலைகள் உங்கள் கோப்பிலிருந்து நகலெடுக்கப்பட்டவை, LARIS கணக்கிட்டவை அல்ல. மதிப்பாய்வுக்குக் குறிக்கப்பட்ட வரிகளைச் சரிபார்க்கவும்.' },
+} satisfies Record<string, Text>
+
+// Owner only: a quote made and sent outside LARIS -> a tracked outgoing quote in status "sent" (POST /documents/import-sent).
+function ImportSent({ onDone }: { onDone: () => void }) {
+  useLang()
+  const [text, setText] = useState('')
+  const [customer, setCustomer] = useState('')
+  const [sentOn, setSentOn] = useState('')
+  const [formErr, setFormErr] = useState('')
+  const [res, setRes] = useState<{ doc: DocSummary; review: Line[] }>()
+  const file = useRef<HTMLInputElement>(null)
+  const out = useRef<HTMLDivElement>(null)
+  const a = useAction()
+  useEffect(() => { if (res) out.current?.focus() }, [res])
+  const submit = () => {
+    const f = file.current?.files?.[0]
+    if (!customer.trim()) return setFormErr(t(IS.needCust))
+    if (!f && !text.trim()) return setFormErr(t(S.needFile))
+    if (f && text.trim()) return setFormErr(t(S.notBoth))
+    if (f && /\.(xls|doc)$/i.test(f.name)) return setFormErr(t(S.oldFormat))
+    setFormErr('')
+    const fd = new FormData()
+    if (f) fd.append('file', f); else fd.append('text', text.trim())
+    fd.append('customer', customer.trim())
+    if (sentOn) fd.append('sent_on', sentOn)
+    a.run(async () => {
+      const doc = await api<DocSummary>('POST', '/documents/import-sent', fd)
+      const d = await api<DocDetail>('GET', `/documents/${doc.id}`)
+      setRes({ doc, review: d.lines.filter(l => l.needs_review) })
+      setText(''); setCustomer(''); setSentOn(''); if (file.current) file.current.value = ''
+      onDone()
+    })
+  }
+  return (
+    <details data-guide="tk-import" className="card mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(IS.title)}</summary>
+      <p className="mt-1 text-sm text-muted">{t(IS.intro)}</p>
+      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+        <label className="flex flex-col gap-1 text-sm font-semibold">{t(IS.customer)}
+          <input className="input font-normal" maxLength={120} value={customer} onChange={e => setCustomer(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.quoteFile)}
+          <input ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input py-2 font-normal" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.orPaste)}
+          <textarea className="input min-h-20 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">{t(IS.sentOn)}
+          <input type="date" className="input w-fit font-normal" max={new Date().toISOString().slice(0, 10)} value={sentOn} onChange={e => setSentOn(e.target.value)} />
+        </label>
+        <p className="text-sm text-muted">{t(IS.note)}</p>
+        {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
+        <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t(S.reading) : t(IS.add)}</button></div>
+      </form>
+      <ActionError err={a.err} onRetry={submit} label={t(S.retryRead)} />
+      {res && (
+        <div ref={out} tabIndex={-1} className="card mt-3" aria-labelledby="imp-res">
+          <h3 id="imp-res" className="font-semibold">{t({ en: `Added ${res.doc.doc_no ?? 'quote'} for ${res.doc.party.name} as sent`, ms: `${res.doc.doc_no ?? 'Sebut harga'} untuk ${res.doc.party.name} ditambah sebagai dihantar`, zh: `已为 ${res.doc.party.name} 添加 ${res.doc.doc_no ?? '报价'}（已发送）`, ta: `${res.doc.party.name} க்கான ${res.doc.doc_no ?? 'மேற்கோள்'} அனுப்பியதாகச் சேர்க்கப்பட்டது` })}</h3>
+          <p className="mt-1 text-sm">{res.review.length > 0 ? t({ en: `${res.review.length} ${res.review.length === 1 ? 'line needs' : 'lines need'} a look: a quantity or price could not be read.`, ms: `${res.review.length} baris perlu disemak: kuantiti atau harga tidak dapat dibaca.`, zh: `${res.review.length} 行需要查看：无法读取数量或价格。`, ta: `${res.review.length} வரிகளைப் பார்க்க வேண்டும்: அளவு அல்லது விலையைப் படிக்க முடியவில்லை.` }) : t(S.noneReview)}</p>
+          <a className="link inline-flex min-h-11 items-center" href={`#/doc/${res.doc.id}`}>{t({ en: 'Open the quote', ms: 'Buka sebut harga', zh: '打开报价', ta: 'மேற்கோளைத் திற' })}</a>
+        </div>
+      )}
+    </details>
+  )
+}
+
 const CHANNELS: [string, Text][] = [['telegram', { en: 'Telegram', ms: 'Telegram' }], ['whatsapp', { en: 'WhatsApp', ms: 'WhatsApp' }], ['web', { en: 'Web', ms: 'Web', zh: '网页', ta: 'இணையம்' }], ['upload', { en: 'Upload', ms: 'Muat naik', zh: '上传', ta: 'பதிவேற்றம்' }]]
 function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: boolean) => void }) {
   useLang()
@@ -239,7 +313,7 @@ export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
         <div className="grid gap-6 md:grid-cols-2">
           {lane('Received', t(S.received), t(S.supQuotes), pick(s.data?.received ?? []), can('upload_documents') ? <><UploadQuote onDone={s.reload} open={up} onToggle={setUp} />{!MOCK && <ManualQuote onDone={s.reload} />}</> : null,
             { title: t(S.noSup), hint: t(S.noSupHint), action: can('upload_documents') ? { label: t(S.uploadSup), onClick: () => openForm('quote-file') } : undefined })}
-          {lane('Sent', t(S.sent), t(S.custQuotes), pick(s.data?.sent ?? []), <SimulateEnquiry open={sim} onToggle={setSim} />,
+          {lane('Sent', t(S.sent), t(S.custQuotes), pick(s.data?.sent ?? []), <>{owner && can('upload_documents') && <ImportSent onDone={s.reload} />}<SimulateEnquiry open={sim} onToggle={setSim} /></>,
             { title: t(S.noCust), hint: t(S.noCustHint), action: { label: t(S.sample), onClick: () => openForm('enquiry-text') } })}
         </div>
       </Async>

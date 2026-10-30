@@ -290,6 +290,65 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
     return {"doc_id": doc_id, "doc_no": doc_no, "ok": v["ok"], "doc_flags": v["doc_flags"]}
 
 
+def import_own_quote(conn, tenant_id, *, customer_name, data: bytes | None = None, mime: str | None = None, text: str | None = None,
+                     sent_on: date | None = None, actor=None, ilmu_client=None, ocr=ocr_mod, raw: dict | None = None) -> dict:
+    """A quotation the owner already made and sent outside LARIS (Excel, Word, PDF, photo or pasted text) -> an outgoing document in status
+    'sent', so it is tracked, chased and can get an accept link like any other. The owner is the approver (the actor must be an owner; the caller checks).
+    Prices are what the paper says and are stored as owner_override (a person's own prices, never AI); the model only reads the paper. The customer is
+    named by the caller: the paper's header carries the business's own name, so it cannot be read from the file. A line with no readable qty or price,
+    or whose arithmetic does not add up, is flagged for review."""
+    t = conn.execute("select * from tenants where id=%s", (tenant_id,)).fetchone()
+    tpl = load_template(t["trade_template"])
+    manual = raw is not None
+    if not manual:
+        src, ocr_conf = _source_text(data, mime, text, ocr)
+        with ai_log.logged(conn, tenant_id, actor, "own_quote"):
+            raw = _ilmu(ilmu.extract_json, src[:20000], SUPPLIER_SCHEMA, client=ilmu_client, names=contact_names(conn, tenant_id))
+        for l in raw.get("lines") if isinstance(raw.get("lines"), list) else []:
+            if isinstance(l, dict):
+                l.setdefault("ocr_confidence", round(ocr_conf, 3)) if ocr_conf is not None else None
+    v = validate.validate_extraction(raw, tpl["item_catalog"])
+    if not v["lines"]:
+        raise ApiError(422, "no_lines", "no line items found in that file")
+    today = today_my()
+    if sent_on and sent_on > today:
+        raise ApiError(422, "future_date", "the date you sent it cannot be in the future")
+    sha = hashlib.sha256(json.dumps(raw, sort_keys=True, default=str).encode() if manual else data if data else (text or "").encode()).hexdigest()
+    if conn.execute("select 1 from documents where tenant_id=%s and direction='out' and extraction->>'source_sha256'=%s", (tenant_id, sha)).fetchone():
+        raise ApiError(409, "duplicate", "this exact quotation was already added")
+    party_id = party(conn, tenant_id, "customer", customer_name)
+    doc_no = str(raw["doc_no"])[:100] if raw.get("doc_no") else next_quote_no(conn, tenant_id, t["quote_prefix"])
+    if conn.execute("select 1 from documents where tenant_id=%s and direction='out' and party_id=%s and doc_no=%s", (tenant_id, party_id, doc_no)).fetchone():
+        raise ApiError(409, "duplicate", f"quotation {doc_no} already recorded for this customer")
+    tot = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
+    cur = str(raw.get("currency") or "").upper()
+    sent_at = datetime.combine(sent_on, datetime.min.time(), MY).replace(hour=12) if sent_on else datetime.now(timezone.utc)
+    doc_id = conn.execute(
+        """insert into documents(tenant_id,direction,kind,party_id,doc_no,status,issued_on,valid_until,currency,stated_total,tax_total,
+                                 extraction,source_channel,created_by,approved_by,approved_at,sent_at)
+           values (%s,'out','quotation',%s,%s,'sent',%s,%s,%s,%s,%s,%s,'upload',%s,%s,now(),%s) returning id""",
+        (tenant_id, party_id, doc_no, _date(raw.get("issued_on")) or sent_on or today, _date(raw.get("valid_until")),
+         cur if re.fullmatch(r"[A-Z]{3}", cur) else t["currency"], _dec(tot.get("grand_total")), _dec(tot.get("sst")),
+         Jsonb({"llm": raw, "doc_flags": v["doc_flags"], "source_sha256": sha, "imported_sent": True}), actor, actor, sent_at)).fetchone()["id"]
+    review = 0
+    for n, l in enumerate(v["lines"], 1):
+        qty, up = _dec(l.get("qty")), _dec(l.get("unit_price"))
+        qty = qty if qty and qty > 0 else None
+        flag = qty is None or up is None or "arith_mismatch" in l["failed"] or "low_ocr_confidence" in l["failed"]
+        review += flag
+        disc = _dec(l.get("discount_pct"))
+        conn.execute(
+            """insert into document_lines(document_id,line_no,description,qty,uom,unit_price,price_source,price_override_reason,needs_review,
+                                          discount_pct,tax_rate,section,review_reason)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (doc_id, n, str(l.get("description") or "")[:500], qty, str(l.get("uom") or "unit")[:20], up,
+             "owner_override" if up is not None else None, "taken from the owner's own quotation" if up is not None else None, flag,
+             disc if disc is not None and disc <= 100 else None, _dec(l.get("tax_rate")),
+             str(l["section"])[:100] if l.get("section") else None,
+             "; ".join(l["failed"]) if flag else None))
+    return {"doc_id": doc_id, "doc_no": doc_no, "lines": len(v["lines"]), "review": review, "doc_flags": v["doc_flags"]}
+
+
 # ---------------------------------------------------------------- (b) customer enquiry in
 def _items_schema(tpl):
     names = "; ".join(f"{k}: {r.get('description', k)}" for k, r in tpl["recipes"].items())

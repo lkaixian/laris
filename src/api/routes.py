@@ -560,6 +560,27 @@ def ingest(request: Request, file: UploadFile | None = File(None), text: str | N
     return reply(ctx, summary(ctx, get_doc(ctx, res["doc_id"])), 201)
 
 
+@r.post("/documents/import-sent")
+def import_sent(request: Request, file: UploadFile | None = File(None), text: str | None = Form(None, max_length=100_000),
+                customer: str = Form(..., min_length=1, max_length=120), sent_on: date | None = Form(None), ctx: Ctx = Depends(write_ctx)):
+    """Owner only: add a quotation you already made and sent yourself (PDF, photo, XLSX, DOCX, CSV or pasted text) so LARIS tracks and chases it.
+    Added as 'sent', approved by you; prices are the paper's own."""
+    require_owner(ctx)
+    throttle(f"ai:{ctx.tenant_id}", 30, 600, "Too many requests in 10 minutes. Wait a while.")
+    data = read_capped(file, MAX_UPLOAD, "file over 10 MB") if file else None
+    if not data and not text:
+        raise ApiError(422, "empty", "send a file or text")
+    mime = None
+    if data:
+        mime = sniff(data, file.filename, file.content_type)
+        if not mime:
+            raise ApiError(415, "unsupported_media", "upload a PDF, photo (JPEG, PNG, WebP), XLSX, DOCX or CSV; old .xls/.doc are not supported")
+    res = pipeline.import_own_quote(ctx.conn, ctx.tenant_id, customer_name=customer.strip(), data=data, mime=mime, text=text, sent_on=sent_on,
+                                    actor=ctx.user_id, ilmu_client=svc(request).ilmu, ocr=svc(request).ocr)
+    audit(ctx, "documents", res["doc_id"], "own quotation added as sent", None, {"lines": res["lines"], "needs_review": res["review"]})
+    return reply(ctx, summary(ctx, get_doc(ctx, res["doc_id"])), 201)
+
+
 @r.post("/parties/{party_id}/erase")
 def erase_party(party_id: UUID, ctx: Ctx = Depends(write_ctx)):
     """PDPA erasure request for a customer: identity and chat text go, the quote rows stay (financial record)."""

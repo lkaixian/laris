@@ -426,6 +426,17 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     log(who, 'in-2', 'SAMPLE-A-002: uploaded')
     return docs['in-2'].doc
   }
+  if (p === '/documents/import-sent' && method === 'POST') {
+    // The file or text is not really read: any upload becomes a sent quote for the named customer.
+    need()
+    const name = String(body.get('customer') ?? '').trim()
+    if (!name) throw new ApiError(422, 'validation', 'customer is required')
+    const id = 'out-imp-' + Object.keys(docs).length
+    docs[id] = { doc: D(id, 'out', `QT-2026-${String(900 + Object.keys(docs).length).padStart(4, '0')}`, { id: 'p-imp', name }, 'sent', 780, ago(0)),
+      lines: [L(id + 'l1', 1, 'SAMPLE acrylic signboard 60x30', 6, 'pcs', 120, {}), L(id + 'l2', 2, 'SAMPLE installation', 1, 'job', 60, {})], messages: [] }
+    log(who, id, 'own quotation added as sent')
+    return docs[id].doc
+  }
   if (p === '/enquiries/simulate' && method === 'POST') {
     perm('manage_contacts')
     down(body.text)

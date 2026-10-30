@@ -4,6 +4,12 @@
 
 LARIS lets a small made-to-order business quote from the chat apps it already uses: customers ask on Telegram (WhatsApp is built but not connected to Meta), AI reads the request, rules set the price, and the owner approves.
 
+## Tests
+
+![Test map: one square per pytest test, grouped by file](docs/tests.svg)
+
+Regenerate with `python scripts/tests_map.py`.
+
 ## Team Information
 
 | Field | Details |

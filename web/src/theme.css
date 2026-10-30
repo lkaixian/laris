@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
+@font-face { font-family: Ubuntu; font-style: normal; font-weight: 400; font-display: swap; src: url("/fonts/ubuntu-400.ttf") format("truetype"); }
+@font-face { font-family: Ubuntu; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/ubuntu-500.ttf") format("truetype"); }
+@font-face { font-family: Ubuntu; font-style: normal; font-weight: 700; font-display: swap; src: url("/fonts/ubuntu-700.ttf") format("truetype"); }
+@font-face { font-family: Ubuntu; font-style: italic; font-weight: 400; font-display: swap; src: url("/fonts/ubuntu-400-italic.ttf") format("truetype"); }
+
 /*
   ALL styling decisions live here. DESIGN.md: green and white, light and dark, ENERGY 1 / RHYTHM 2 / MOTION 1.
-  Typeface: Cambria (owner's choice, 2026-10-29), with Caladea from Google Fonts where Cambria is not installed; offline it falls back to Georgia or the system serif.
+  Typeface: Ubuntu (owner's choice, 2026-10-30), served from /fonts (self-hosted) so every device gets the same face with no network dependency.
   Two palettes keyed on <html data-theme>. Measured WCAG contrast is listed in the hand-off report; keep pairs >= 4.5:1 (text) and >= 3:1 (borders, focus ring).
 */
 :root, :root[data-theme="light"] {
@@ -33,9 +38,8 @@
 @media (pointer: coarse), (max-width: 767px) { :root { --control-h: 44px; --control-h-sm: 44px; } }
 
 @theme inline {
-  /* Cambria where installed (Windows, Office on Mac); Caladea is its metric-compatible open twin from Google Fonts; then serif.
-     Chinese and Tamil fall through to the system fonts for their scripts. */
-  --font-sans: Cambria, Caladea, Georgia, "Noto Serif", "Noto Serif CJK SC", "Noto Sans Tamil", "Latha", serif;
+  /* Ubuntu has no Chinese or Tamil glyphs, so those scripts fall through to the system fonts. */
+  --font-sans: Ubuntu, "Noto Sans", "Noto Sans CJK SC", "Noto Sans Tamil", "Latha", sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-ink: var(--ink);

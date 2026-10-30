@@ -198,6 +198,11 @@
   .ask-fab[data-open="true"] .ask-fab-label { max-width: 0; margin-left: 0; opacity: 0; }
   .ask-icon { animation: ask-icon-in 220ms var(--ease-tile) both; }
   .ask-turn { animation: page-in 180ms ease-out both; }
+  /* Public homepage (Landing.tsx): each section eases up as it scrolls into view where the browser supports scroll timelines; elsewhere it is simply there. */
+  @supports (animation-timeline: view()) {
+    .land-reveal { animation: land-in linear both; animation-timeline: view(); animation-range: entry 0% entry 30%; }
+    @keyframes land-in { from { opacity: 0; transform: translateY(16px); } }
+  }
   .ask-dots > span { animation: ask-dot 1s ease-in-out infinite; animation-delay: calc(var(--i) * 150ms); }
   .row { @apply block px-4 py-3 transition-colors hover:bg-tint; }
   th { @apply bg-surface-2 px-3 py-2 text-left text-xs font-medium text-muted; }

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { api, resolveMe, getRole, setRole, MOCK, authConfig, getToken, getAccount, can, canOpen, ApiError } from './api'
 import type { License } from './api'
 import Login from './Login'
+import Landing from './Landing'
 import { Register, Forgot } from './Signup'
 import AcceptInvite from './Invite'
 import Accept from './Accept'
@@ -436,7 +437,7 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
 const safeDecode = (s = '') => { try { return decodeURIComponent(s) } catch { return '' } }
 const NOT_ENFORCED: License = { status: 'active', plan: null, seats: null, seats_used: 0, expires_at: null, days_left: null, enforced: false, read_only: false, clock: null }
 
-const AUTH_ORDER: Record<string, number> = { login: 0, register: 1, forgot: 1 }  // moving to a higher number slides forward
+const AUTH_ORDER: Record<string, number> = { welcome: -1, login: 0, register: 1, forgot: 1 }  // moving to a higher number slides forward
 const routeOf = (h: string) => (h.split('/')[1] || 'home').split('?')[0]
 
 // Put a list page back where the reader left it (after Back from a document). Waits for the content to be tall enough; stops if the reader scrolls.
@@ -549,6 +550,8 @@ function AppShell() {
   if (pub) return <Accept token={hash.split('/')[2]?.split('?')[0] ?? ''} />  // customer link: outside the shell, no sign-in
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
+  // Public homepage: #/welcome, and the bare address for a visitor who is not signed in.
+  if (route === 'welcome' || (gate === 'login' && ['', '#', '#/'].includes(hash))) return <Landing dark={dark} setDark={setDark} />
   if (route === 'invite') return <AcceptInvite dark={dark} setDark={setDark} />
   if (gate === 'login' || (['login', 'register', 'forgot'].includes(route) && (MOCK || !getToken()))) {
     if (route === 'register') return <Register dark={dark} setDark={setDark} />

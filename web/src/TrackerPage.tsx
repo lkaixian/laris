@@ -15,7 +15,8 @@ const S = {
   needFile: { en: 'Choose a file or paste the quote text.', ms: 'Pilih fail atau tampal teks sebut harga.', zh: '请选择文件或粘贴报价文本。', ta: 'கோப்பைத் தேர்ந்தெடுக்கவும் அல்லது மேற்கோள் உரையை ஒட்டவும்.' },
   notBoth: { en: 'Use either a file or pasted text, not both.', ms: 'Guna sama ada fail atau teks yang ditampal, bukan kedua-duanya.', zh: '请使用文件或粘贴文本，二者选其一。', ta: 'கோப்பு அல்லது ஒட்டிய உரை — இரண்டில் ஒன்றை மட்டும் பயன்படுத்தவும்.' },
   uploadSup: { en: 'Upload supplier quote', ms: 'Muat naik sebut harga pembekal', zh: '上传供应商报价', ta: 'சப்ளையர் மேற்கோளைப் பதிவேற்று' },
-  quoteFile: { en: 'Quote file (PDF, photo or text)', ms: 'Fail sebut harga (PDF, foto atau teks)', zh: '报价文件（PDF、照片或文本）', ta: 'மேற்கோள் கோப்பு (PDF, படம் அல்லது உரை)' },
+  quoteFile: { en: 'Quote file (PDF, Excel, Word, CSV, photo or text)', ms: 'Fail sebut harga (PDF, Excel, Word, CSV, foto atau teks)', zh: '报价文件（PDF、Excel、Word、CSV、照片或文本）', ta: 'மேற்கோள் கோப்பு (PDF, Excel, Word, CSV, படம் அல்லது உரை)' },
+  oldFormat: { en: 'Old Excel and Word files (.xls, .doc) cannot be read. Save it as .xlsx or .docx, or as a PDF, and upload that.', ms: 'Fail Excel dan Word lama (.xls, .doc) tidak dapat dibaca. Simpan sebagai .xlsx atau .docx, atau sebagai PDF, dan muat naik itu.', zh: '无法读取旧版 Excel 和 Word 文件（.xls、.doc）。请另存为 .xlsx 或 .docx，或 PDF，再上传。', ta: 'பழைய Excel மற்றும் Word கோப்புகளை (.xls, .doc) படிக்க முடியாது. .xlsx அல்லது .docx ஆக, அல்லது PDF ஆகச் சேமித்து அதைப் பதிவேற்றவும்.' },
   orPaste: { en: 'Or paste the quote text', ms: 'Atau tampal teks sebut harga', zh: '或粘贴报价文本', ta: 'அல்லது மேற்கோள் உரையை ஒட்டவும்' },
   supName: { en: 'Supplier name (optional)', ms: 'Nama pembekal (pilihan)', zh: '供应商名称（可选）', ta: 'சப்ளையர் பெயர் (விருப்பம்)' },
   reading: { en: 'Reading the quote...', ms: 'Membaca sebut harga...', zh: '正在读取报价...', ta: 'மேற்கோளைப் படிக்கிறது...' },
@@ -45,7 +46,7 @@ const S = {
   allDocs: { en: 'All documents', ms: 'Semua dokumen', zh: '全部文档', ta: 'அனைத்து ஆவணங்களும்' },
   openCust: { en: 'Open customer quotes', ms: 'Sebut harga pelanggan terbuka', zh: '未结客户报价', ta: 'திறந்த வாடிக்கையாளர் மேற்கோள்கள்' },
   noSup: { en: 'No supplier quotes yet.', ms: 'Belum ada sebut harga pembekal.', zh: '暂无供应商报价。', ta: 'இன்னும் சப்ளையர் மேற்கோள்கள் இல்லை.' },
-  noSupHint: { en: 'Upload a PDF, a photo or pasted text and LARIS reads the prices for you.', ms: 'Muat naik PDF, foto atau teks yang ditampal dan LARIS membaca harga untuk anda.', zh: '上传 PDF、照片或粘贴文本，LARIS 会为您读取价格。', ta: 'PDF, படம் அல்லது ஒட்டிய உரையைப் பதிவேற்றினால் LARIS விலைகளை உங்களுக்காகப் படிக்கும்.' },
+  noSupHint: { en: 'Upload a PDF, Excel, Word or CSV file, a photo or pasted text and LARIS reads the prices for you.', ms: 'Muat naik fail PDF, Excel, Word atau CSV, foto atau teks yang ditampal dan LARIS membaca harga untuk anda.', zh: '上传 PDF、Excel、Word 或 CSV 文件、照片或粘贴文本，LARIS 会为您读取价格。', ta: 'PDF, Excel, Word அல்லது CSV கோப்பு, படம் அல்லது ஒட்டிய உரையைப் பதிவேற்றினால் LARIS விலைகளை உங்களுக்காகப் படிக்கும்.' },
   noCust: { en: 'No customer quotes yet.', ms: 'Belum ada sebut harga pelanggan.', zh: '暂无客户报价。', ta: 'இன்னும் வாடிக்கையாளர் மேற்கோள்கள் இல்லை.' },
   noCustHint: { en: 'A quote appears here when a customer asks for a price.', ms: 'Sebut harga muncul di sini apabila pelanggan meminta harga.', zh: '客户询价后，报价会显示在这里。', ta: 'வாடிக்கையாளர் விலை கேட்கும்போது மேற்கோள் இங்கே தோன்றும்.' },
   sample: { en: 'Try a sample enquiry', ms: 'Cuba contoh pertanyaan', zh: '试试示例询价', ta: 'மாதிரி விசாரணையை முயற்சிக்கவும்' },
@@ -101,6 +102,7 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
     const f = file.current?.files?.[0]
     if (!f && !text.trim()) return setFormErr(t(S.needFile))
     if (f && text.trim()) return setFormErr(t(S.notBoth))
+    if (f && /\.(xls|doc)$/i.test(f.name)) return setFormErr(t(S.oldFormat))  // the server refuses these with a 415; say why and what to do before sending
     setFormErr('')
     const fd = new FormData()
     if (f) fd.append('file', f); else fd.append('text', text.trim())
@@ -118,7 +120,7 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(S.uploadSup)}</summary>
       <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.quoteFile)}
-          <input id="quote-file" ref={file} type="file" accept=".pdf,.txt,image/*" className="input py-2 font-normal" />
+          <input id="quote-file" ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input py-2 font-normal" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.orPaste)}
           <textarea className="input min-h-24 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />

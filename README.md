@@ -10,6 +10,12 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 
 Regenerate with `python scripts/tests_map.py`.
 
+## Features
+
+![How far each feature got: one box per area sized by feature count, one coloured cell per feature](docs/features.svg)
+
+Regenerate with `python scripts/features_map.py` (statuses are kept by hand in that file).
+
 ## Team Information
 
 | Field | Details |

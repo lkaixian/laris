@@ -481,15 +481,15 @@ function PhotoDialog({ id, showPrice, onClose }: { id: string; showPrice: boolea
   const counts = d ? (['confirmed', 'needs_review', 'discarded'] as const).map(k => [k, d.items.filter(i => i.status === k).length] as const) : []
   return (
     <dialog ref={ref} aria-labelledby="pd-title" onCancel={e => { e.preventDefault(); onClose() }} onClose={onClose}
-      className="m-auto w-[calc(100%-2rem)] max-w-3xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
-      <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
+      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-3xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline p-4">
         <div className="min-w-0">
           <h2 id="pd-title" className="text-md font-semibold">{photoFrom(d && when(d.created_at))}</h2>
           {d && <p className="text-sm text-muted">{d.party_name ? t({ en: `Supplier: ${d.party_name}`, ms: `Pembekal: ${d.party_name}`, zh: `供应商：${d.party_name}`, ta: `சப்ளையர்: ${d.party_name}` }) : t(S.noSup)}{d.note ? ` · ${d.note}` : ''}</p>}
         </div>
         <button type="button" className="btn" onClick={onClose} autoFocus>{t(S.close)}</button>
       </div>
-      <div className="max-h-[70vh] overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <Async s={s} rows={3} shape="detail">
           {d && (
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -514,7 +514,7 @@ function PhotoDialog({ id, showPrice, onClose }: { id: string; showPrice: boolea
           )}
         </Async>
       </div>
-      <div className="flex justify-end border-t border-hairline p-4">
+      <div className="flex shrink-0 justify-end border-t border-hairline p-4">
         <a className="btn btn-primary" href={`#/catalog/${id}`} onClick={onClose}>{t({ en: 'Open to review and edit', ms: 'Buka untuk semak dan sunting', zh: '打开以审核和编辑', ta: 'மதிப்பாய்வு செய்து திருத்த திற' })}</a>
       </div>
     </dialog>

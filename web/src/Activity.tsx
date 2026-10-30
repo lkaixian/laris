@@ -243,12 +243,12 @@ function EntryDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const keys = d ? [...new Set([...Object.keys(d.before ?? {}), ...Object.keys(d.after ?? {})])].filter(k => show(d.before?.[k]) !== show(d.after?.[k])) : []
   return (
     <dialog ref={ref} aria-labelledby="ent-h" onCancel={e => { e.preventDefault(); onClose() }} onClose={onClose}
-      className="m-auto w-[calc(100%-2rem)] max-w-xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
-      <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
+      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline p-4">
         <h2 id="ent-h" className="text-md font-semibold">{tx('act.details')}<span className="ml-2 text-sm font-normal text-muted">{tx('act.entry', id)}</span></h2>
         <button type="button" className="btn" onClick={onClose} autoFocus>{tx('as.close')}</button>
       </div>
-      <div className="max-h-[70vh] overflow-y-auto p-4 text-sm">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm">
         {err ? <p role="alert" className="text-warn">{err}</p> : !d ? <Skeleton rows={4} shape="text" /> : <>
           <p className="mb-3 break-words text-base font-semibold">{d.event}</p>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">

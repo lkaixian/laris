@@ -20,7 +20,11 @@ const make = (id: string, minsAgo: number) => ({
     price_tiers: [{ size: null, min_qty: '10', price: '19.50' }, { size: 'L', min_qty: '1', price: '23.00' }] }), item(4, { status: 'confirmed', stock_qty: '0.000' }), item(5)],
 })
 const CATS = ['Footwear', 'Hardware', 'Bags', 'Belts', 'Hardware', 'Rubber']  // what the pretend photo reader proposes
-const listings = [make('lst-1', 90)]
+// ?catalog=shapes adds a very tall photo and a photo with 40 products, to check that the dialog and review buttons stay reachable.
+const tall = svg(900, 2600, `<rect width="900" height="2600" fill="#f7f3ea"/><text x="40" y="1300" font-size="60" font-family="sans-serif">tall phone photo</text>`)
+const shapes = new URLSearchParams(location.search).get('catalog') === 'shapes'
+const listings = [make('lst-1', 90), ...(shapes ? [{ ...make('lst-tall', 30), image_url: tall, note: 'Tall photo' },
+  { ...make('lst-many', 60), note: '40 products', items: Array.from({ length: 40 }, (_, i) => ({ ...item(i % 6), id: `lm${i}`, position: i + 1 })) }] : [])]
 
 // Returns undefined when the path is not a listings route.
 export function mockListings(method: string, p: string, owner: boolean, body: any): unknown {

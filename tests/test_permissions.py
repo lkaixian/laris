@@ -36,6 +36,7 @@ REQ = {
     ("POST", "/api/documents/{doc_id}/transition"): {"json": SEND},
     ("POST", "/api/documents/{doc_id}/send"): {"json": {"channel": "email"}},
     ("POST", "/api/documents/{doc_id}/accept-link"): {},
+    ("POST", "/api/documents/import-sent"): {"data": {"customer": "x"}},
     ("POST", "/api/documents/{doc_id}/lines/{line_id}"): {"json": {"qty": 1}},
     ("POST", "/api/settings"): {"json": {"brand_color": "#112233"}},
     ("POST", "/api/jobs"): {"json": {"title": "Fix the shop sign"}},

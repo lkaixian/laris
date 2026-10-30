@@ -22,7 +22,7 @@ MATCH = """(p.name ilike %(q)s or p.contact ilike %(q)s or p.email ilike %(q)s o
 
 
 def like(q: str) -> str:
-    return "%" + q.strip().replace("\\", "\\\\").replace("%", "\%").replace("_", "\_") + "%"
+    return "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
 def list_contacts(ctx: Ctx, q: str = "", role: str | None = None, limit: int = 200):

@@ -121,7 +121,8 @@ def main(argv=None):
             sys.exit("--live needs ILMU_API_KEY in the environment")
         schema = _items_schema(tpl)
         if a.catalog:
-            schema["properties"]["items"]["items"]["properties"]["item_key"]["enum"] += [c["item_key"] for c in tpl["item_catalog"]]
+            enum = schema["properties"]["items"]["items"]["properties"]["item_key"]["enum"]
+            enum += [c["item_key"] for c in tpl["item_catalog"] if c["item_key"] not in enum]  # the live schema already offers them when the template has resale_markup_pct
         used = [0]
 
         def extract(text):

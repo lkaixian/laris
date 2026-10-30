@@ -84,3 +84,29 @@ def test_catalog_size_rules_moq_and_no_guess():
     assert catalog_price(None, [], 1)["why"] == "no price set" and catalog_price(D("8"), [], 3)["unit_price"] == D("8.00")
     with pytest.raises(ValueError):
         catalog_price(D("8"), [], 0)
+
+
+def test_raw_material_sells_as_its_own_line_at_the_resale_markup():
+    q = price_quote([{"item_key": "screw_m4", "qty": 100}], {"screw_m4": (D("0.10"), 7)}, T, {})
+    l = q["lines"][0]
+    assert l["uom"] == "pcs" and l["unit_price"] == D("0.14") and l["price_source"] == "cost_item_markup"  # 0.10 x 1.35, rounded
+    assert l["basis"] == [("screw_m4", D("100"), D("0.10"), 7)] and q["margin_pct"] > D(T["min_margin_pct"])
+
+
+def test_raw_material_needs_a_cost_and_a_template_markup():
+    with pytest.raises(MissingCost):
+        price_quote([{"item_key": "screw_m4", "qty": 1}], {}, T, {})
+    no_resale = {k: v for k, v in T.items() if k != "resale_markup_pct"}
+    with pytest.raises(KeyError):
+        price_quote([{"item_key": "screw_m4", "qty": 1}], {"screw_m4": (D("0.10"), 7)}, no_resale, {})
+    with pytest.raises(KeyError):
+        price_quote([{"item_key": "not_in_catalog", "qty": 1}], {}, T, {})
+    with pytest.raises(PriceInjection):
+        price_quote([{"item_key": "screw_m4", "qty": 1, "unit_price": 1}], {"screw_m4": (D("0.10"), 7)}, T, {})
+
+
+def test_extraction_schema_offers_raw_materials_only_when_the_template_allows_it():
+    from src.pipeline import _items_schema
+    enum = lambda t: _items_schema(t)["properties"]["items"]["items"]["properties"]["item_key"]["enum"]
+    assert "screw_m4" in enum(T) and "signboard_60x30" in enum(T)
+    assert "screw_m4" not in enum({k: v for k, v in T.items() if k != "resale_markup_pct"})

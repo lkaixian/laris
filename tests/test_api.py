@@ -1109,3 +1109,16 @@ def test_me_reports_whether_the_ai_guide_is_on(env):
     assert e.c.get("/api/me", headers=e.S).json()["ai_guide"] is True  # staff can see that it is on, not the settings
     e.sql("update tenant_ai set mode='off'")
     assert e.c.get("/api/me", headers=e.S).json()["ai_guide"] is False
+
+
+def test_raw_material_enquiry_becomes_a_draft_priced_by_the_rules(env):
+    e = env
+    e.stock_costs()  # pla black RM50/kg in the cost book
+    e.ai.payload = {"items": [{"item_key": "pla_1kg_black", "qty": 2}]}
+    r = e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "pla hitam 2 kg"}, headers=e.S)
+    assert r.status_code == 201, r.text
+    line = e.sql("select item_key, qty::float q, uom, unit_price::float p, price_source, description from document_lines where document_id=%s", (r.json()["id"],))[0]
+    assert (line["item_key"], line["q"], line["uom"], line["p"], line["price_source"]) == ("pla_1kg_black", 2.0, "kg", 67.5, "cost_item_markup")  # RM50 x 1.35
+    assert line["description"] == "pla 1kg black"
+    e.ai.payload = {"items": [{"item_key": "screw_m4", "qty": 10}]}  # no cost on file for it: staff must add a supplier quote first
+    assert e.c.post("/api/enquiries/simulate", json={"channel": "web", "text": "skru m4"}, headers=e.S).status_code == 422

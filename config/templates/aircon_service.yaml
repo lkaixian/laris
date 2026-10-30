@@ -1,6 +1,7 @@
 # SAMPLE template (invented, synthetic numbers). Small aircon service company.
 key: aircon_service
 min_margin_pct: 20
+resale_markup_pct: 30   # SAMPLE (invented): sells a raw material from item_catalog as it is, cost + this %; remove the line to stop quoting raw materials
 followup_hours: 24
 required_enquiry_fields: [service, units, location, preferred_date]
 item_catalog:

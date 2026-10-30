@@ -24,7 +24,7 @@ FEATURES = {
     "Privacy (PDPA)": [("Consent notice", A), ("/privacy /mydata /forget", A), ("Export person", G), ("Erase person", G),
         ("Breach register", G), ("DPO contact", G), ("Retention purge", G), ("Lawyer review", R)],
     "Catalog and stock": [("Photo to items", A), ("OCR cross-check", A), ("Availability reply", G), ("Stock count", G),
-        ("Quote from chat", G), ("Owner review", G), ("Raw-material match", R)],
+        ("Quote from chat", G), ("Owner review", G), ("Raw-material match", A)],
     "Integration": [("Recipes API", G), ("Price check API", G), ("Usage metering", G), ("Read-only MCP", G), ("Orbyte API", R)],
 }
 

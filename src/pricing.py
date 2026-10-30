@@ -73,6 +73,17 @@ def catalog_price(base_price, tiers, qty, size=None) -> dict:
     return {"unit_price": _q(uc), "size": size, "tier_min_qty": mq, "below_moq": None if moq is None else D(moq), "why": None}
 
 
+def resolve(template, key):
+    """The recipe for an enquiry item: a real recipe, or a raw material from item_catalog sold as it is (cost x resale_markup_pct, the same rules
+    and margin guard as any recipe). None when the key is neither, or the template sets no resale_markup_pct (then raw materials are not quoted)."""
+    if key in template["recipes"]:
+        return template["recipes"][key]
+    c = next((x for x in template["item_catalog"] if x["item_key"] == key), None)
+    if c is None or template.get("resale_markup_pct") is None:
+        return None
+    return {"description": key.replace("_", " "), "uom": c["uom"], "markup_pct": template["resale_markup_pct"], "bom": [{"item_key": key, "qty": 1}]}
+
+
 def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> dict:
     """items: [{item_key (recipe key), qty, attrs?}]. cost_lookup: {item_key: (unit_cost, cost_item_id) or [(min_qty, unit_cost, cost_item_id)] price tiers}.
     owner_overrides: {index: unit_price}, trusted caller (owner-authenticated) only."""
@@ -80,7 +91,7 @@ def price_quote(items, cost_lookup, template, tenant, owner_overrides=None) -> d
     lines = []
     for i, it in enumerate(items):
         _reject_price_keys(it)
-        recipe = template["recipes"].get(it["item_key"])
+        recipe = resolve(template, it["item_key"])
         if recipe is None:
             raise KeyError(f"unknown recipe {it['item_key']}")
         qty = D(it["qty"])

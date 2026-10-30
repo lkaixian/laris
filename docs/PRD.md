@@ -201,7 +201,7 @@ No values are claimed. Each row says how the team will measure.
 - Qwen LoRA fine-tune (dropped by the owner; few-shot prompting only).
 - Real Orbyte login or API integration.
 - A legally binding e-signature (the accept link is simulated).
-- Not built: STL weight pricing as a plugin, reply-polish with an LLM, multi-currency, unit-of-measure conversion, item aliases table, raw-material enquiry matching. Stock is a count the owner keys in (row 150); sales do not lower it.
+- Not built: STL weight pricing as a plugin, reply-polish with an LLM, multi-currency, unit-of-measure conversion, item aliases table (raw materials match by the trade template's aliases only). Stock is a count the owner keys in (row 150); sales do not lower it.
 
 ## 16. Open items for the team
 

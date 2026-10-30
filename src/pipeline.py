@@ -293,8 +293,10 @@ def ingest_supplier_document(conn, tenant_id, *, data: bytes | None = None, mime
 # ---------------------------------------------------------------- (b) customer enquiry in
 def _items_schema(tpl):
     names = "; ".join(f"{k}: {r.get('description', k)}" for k, r in tpl["recipes"].items())
+    raw = [c for c in tpl["item_catalog"] if tpl.get("resale_markup_pct") is not None and c["item_key"] not in tpl["recipes"]]  # raw materials sold as they are
+    names += "".join(f"; {c['item_key']}: raw material ({', '.join(c['aliases'][:4])})" for c in raw)
     return {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {
-        "item_key": {"type": "string", "enum": list(tpl["recipes"]), "description": names},
+        "item_key": {"type": "string", "enum": [*tpl["recipes"], *(c["item_key"] for c in raw)], "description": names},
         "qty": {"type": "number"}, "attrs": {"type": "object"}}, "required": ["item_key", "qty"]}}},
         "required": ["items"], "description": "Extract ONLY what the customer wants and how many. Never include prices."}
 
@@ -343,7 +345,7 @@ def handle_enquiry(conn, tenant_id, party_id, channel, text, *, actor=None, exte
             """insert into document_lines(document_id,line_no,description,item_key,qty,uom,unit_price,price_source,
                    needs_review,attrs,attrs_unmapped,other_cost_per_unit,review_reason)
                    values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
-            (doc_id, l["line_no"], tpl["recipes"][l["item_key"]].get("description", l["item_key"]), l["item_key"],
+            (doc_id, l["line_no"], pricing.resolve(tpl, l["item_key"]).get("description", l["item_key"]), l["item_key"],
              l["qty"], l["uom"], l["unit_price"], l["price_source"], l["line_no"] in flagged, Jsonb(attrs), Jsonb(unmapped),
              sum((q * u for _, q, u, cid in l["basis"] if cid is None), Decimal(0)) / l["qty"],  # labour + machine per unit
              "; ".join(f"below supplier MOQ for {k}: need {need:f}, minimum {mq:f}; priced at the lowest tier"

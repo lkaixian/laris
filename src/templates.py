@@ -32,6 +32,7 @@ def load_template(key: str) -> dict:
         _need({"item_key", "uom", "aliases"} <= it.keys(), f"{key}: bad catalog entry {it}")
         _need(it["item_key"] not in keys, f"{key}: duplicate item_key {it['item_key']}")
         keys.add(it["item_key"])
+    _need(t.get("resale_markup_pct", 0) >= 0, f"{key}: resale_markup_pct must be 0 or more")
     for name, r in t["recipes"].items():
         _need("uom" in r, f"{key}: recipe {name} needs uom")
         if "fixed_rate" in r:

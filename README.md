@@ -202,7 +202,7 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
   - WhatsApp is untested against Meta.
   - Telegram bot connection from the dashboard, one-tap bot creation, reactions and typing indicators have only been tested against fakes, not the real Telegram API.
   - ILMU speech and extraction are not validated on real Manglish audio; the accuracy tools exist (`docs/eval-manglish.md`) but have not been run live. Accuracy: [REAL DATA needed].
-  - Enquiries for raw materials (for example "skru m4") cannot be matched by the live extraction schema, only recipe items and confirmed catalog items.
+  - Raw-material enquiries (for example "skru m4") are matched to the template's item list and priced as cost plus the template's resale markup (`resale_markup_pct`, a sample number), but only when that material has a current supplier cost; otherwise the customer is told to wait. Tested with a fake model, not live ILMU, and the aliases come from the trade template, not the owner's own cost book.
   - OCR accuracy on real receipts is unmeasured. Minutes saved per quote and margin protected: [REAL DATA needed], nobody has timed a manual quote yet.
   - All data is synthetic. Single-process deployment with no failover; some rate limits and the 15-minute catalog memory are per process.
   - Row-level security and the database roles have not been tried on Replit's own Postgres, only on PGlite.
@@ -219,7 +219,8 @@ Proof of use: `submission/SDC2026_SparkSurge_RUNPOD_PROOF_OF_USE.pdf`
 - [x] Per-size prices and quantity tiers on catalog items (row 150)
 - [ ] Time real owners on manual versus LARIS quotes to measure minutes saved
 - [x] Stock levels so availability replies can say "in stock" (row 150)
-- [ ] Match raw-material enquiries, run the Manglish accuracy tools with a live ILMU key
+- [x] Match raw-material enquiries (row 208)
+- [ ] Run the Manglish accuracy tools with a live ILMU key
 - [ ] Lawyer review of the privacy wording and DPO appointment
 
 Owners, prerequisites and done-when for each item are in `docs/teammate-handoff.md`, Section 7.

@@ -13,7 +13,7 @@ python scripts/eval_enquiries.py --live --json out.json # real calls, 0.5 s apar
 python scripts/eval_enquiries.py --live --catalog       # also lets the model answer with raw material keys
 ```
 
-Live mode uses the same prompt schema, `redact()` and price-key check as `handle_enquiry`. Note: the real schema only allows recipe keys (signboard_60x30, plywood_shelf, print_part_small, design_service). Lines asking for raw materials (pla hitam, skru m4) can only score fully with `--catalog`; run both and report both, and tell the team if the gap matters. Cost: the tool prints an approximate token count (characters divided by 4) because ILMU responses are not read for usage; multiply by the current ILMU price.
+Live mode uses the same prompt schema, `redact()` and price-key check as `handle_enquiry`. Note: since row 208 the schema also offers raw-material keys (pla_1kg_black, screw_m4) when the template has `resale_markup_pct`, so `--catalog` only matters for a template without it. Cost: the tool prints an approximate token count (characters divided by 4) because ILMU responses are not read for usage; multiply by the current ILMU price.
 
 ## B. Voice notes (speech to text)
 

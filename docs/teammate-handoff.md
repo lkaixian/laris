@@ -19,7 +19,7 @@ Refreshed 2026-10-29 from `docs/BUILD_LOG.md` (last row 147), `next_step.txt`, `
 - Frontend, React (`web/src/`): app shell, Home, Tracker, quote pages, Catalog (`Listings.tsx`), Jobs board, Contacts, Team and Roles, Channels, BotSettings, Licence and Issuer pages, Privacy and requests screens, ApiAccess, public accept page (`Accept.tsx`, route `#/q/<token>`), guided Tour, Help Center, Ctrl+K Palette, AI guide (`AiSettings.tsx`, `GuideChat.tsx`). Mock mode (`mock.ts`, `mockAccept.ts`, `mockAi.ts`) runs the UI without a backend.
 - Tooling: accuracy tools (`scripts/eval_enquiries.py`, `scripts/eval_wer.py`, `tests/fixtures/enquiries_eval.jsonl`, protocol in `docs/eval-manglish.md`), `scripts/preview_emails.py`, `scripts/setup_channels.py`.
 - Tests: 686 collected at row 145 and all four groups passed locally, plus the three PGlite checks and the web build.
-- UI polish: only stage 1 (design tokens, row 137) is done. Stages 2 to 4 in `docs/ui-polish-spec.md` are NOT built.
+- UI polish: stages 1 to 4 are built (rows 137 and 147); see Section 7 for what was never opened on a real phone.
 - WhatsApp is built but not connected. Telegram has never run against the real Bot API (Section 2).
 
 ### Run the backend

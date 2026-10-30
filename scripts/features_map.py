@@ -20,7 +20,7 @@ FEATURES = {
         ("Assistant lookups", A), ("Assistant actions", A), ("Floating Ask", A)],
     "Supplier work": [("XLSX / CSV prices", G), ("DOCX prices", G), ("PDF prices", G), ("Photo prices (OCR)", A),
         ("Ask suppliers", A), ("Marked-up photo", A), ("Reply comparison", G)],
-    "Languages and UI": [("English", G), ("Malay", A), ("Chinese", A), ("Tamil", A), ("All pages translated", R), ("UI polish 2-4", R), ("Mock mode", G)],
+    "Languages and UI": [("English", G), ("Malay", A), ("Chinese", A), ("Tamil", A), ("All pages translated", G), ("UI polish 2-4", A), ("Mock mode", G)],
     "Privacy (PDPA)": [("Consent notice", A), ("/privacy /mydata /forget", A), ("Export person", G), ("Erase person", G),
         ("Breach register", G), ("DPO contact", G), ("Retention purge", G), ("Lawyer review", R)],
     "Catalog and stock": [("Photo to items", A), ("OCR cross-check", A), ("Availability reply", G), ("Stock count", G),

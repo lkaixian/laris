@@ -260,5 +260,5 @@ The **AI guide** answers "where do I click?" from the Ctrl+K palette. **Ask Lari
 | Ask Laris | Actions tested with a mocked model only, not a live one |
 | Audit log download | At most 1,000 entries per file; the PDF is a plain table |
 | Jobs made by hand | No quote, PDF or accept link; the amount is typed |
-| Languages | Chinese and Tamil cover the main work screens only; Home and Catalog photos are English; not reviewed by native speakers |
+| Languages | Every page is in English, Malay, Chinese and Tamil; server messages, AI answers and customer data stay English; not reviewed by native speakers |
 | Glass Home tiles | Blur needs a recent browser; older ones show plain tiles |

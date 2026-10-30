@@ -6,7 +6,7 @@ LARIS lets a small made-to-order business quote from the chat apps it already us
 
 ## Tests
 
-![Test map: one square per pytest test, grouped by file](docs/tests.svg)
+![Automated tests per area of the app: one row per area, one square per test](docs/tests.svg)
 
 Regenerate with `python scripts/tests_map.py`.
 

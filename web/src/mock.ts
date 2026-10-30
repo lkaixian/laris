@@ -382,7 +382,9 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     ]
     const rank = ['info', 'warn', 'critical']
     const items = k === 'ok' ? [] : all.filter(i => rank.indexOf(i.level) <= rank.indexOf(k))
-    return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items }
+    const services = [['database', 'ok'], ['licence', 'ok'], ['clock', 'warn'], ['scheduler', 'ok'], ['rag', 'off'], ['mcp', 'off'], ['ilmu', 'set'], ['vision', 'set'], ['ocr', 'ok'],
+      ['email', 'down'], ['telegram', 'set'], ['telegram_helper', 'off'], ['whatsapp', 'off']].map(([key, state]) => ({ key, state }))
+    return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services }
   }
   { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)

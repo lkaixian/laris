@@ -7,7 +7,9 @@ import type { Text } from './i18n'
 
 export type Level = 'ok' | 'info' | 'warn' | 'critical'
 export interface HealthItem { level: Exclude<Level, 'ok'>; code: string; message: string; fix: string }
-export interface Health { level: Level; items: HealthItem[] }
+export type SvcState = 'ok' | 'set' | 'warn' | 'down' | 'off'
+export interface Service { key: string; state: SvcState }
+export interface Health { level: Level; items: HealthItem[]; services?: Service[] }
 
 // Server health text, translated here by code ([message, fix]; {n} = the first number in the server message, {v} = the setting names in a "Set ... in Secrets" fix).
 // English and any unknown code show the server's own text. demo_mode and licence_expiring read differently per level, so those are keyed code:level.
@@ -94,6 +96,53 @@ export function healthText(i: HealthItem): { message: string; fix: string } {
   return { message: f(e[0]), fix: f(e[1]) }
 }
 
+// One tile per service. ok = checked just now; set = configured but not tested live (LARIS never calls Telegram, ILMU and the rest from here).
+const SVC: Record<string, Text> = {
+  database: { en: 'Database', ms: 'Pangkalan data', zh: '数据库', ta: 'தரவுத்தளம்' },
+  licence: { en: 'Licence', ms: 'Lesen', zh: '许可证', ta: 'உரிமம்' },
+  clock: { en: 'Trusted clock (NTP)', ms: 'Jam dipercayai (NTP)', zh: '可信时钟 (NTP)', ta: 'நம்பகமான கடிகாரம் (NTP)' },
+  scheduler: { en: 'Background runner', ms: 'Penjalan latar belakang', zh: '后台任务', ta: 'பின்னணி இயக்கி' },
+  rag: { en: 'Record search (RAG)', ms: 'Carian rekod (RAG)', zh: '记录检索 (RAG)', ta: 'பதிவுத் தேடல் (RAG)' },
+  mcp: { en: 'MCP server', ms: 'Pelayan MCP', zh: 'MCP 服务器', ta: 'MCP சேவையகம்' },
+  ilmu: { en: 'ILMU (messages, voice)', ms: 'ILMU (mesej, suara)', zh: 'ILMU（消息、语音）', ta: 'ILMU (செய்திகள், குரல்)' },
+  vision: { en: 'Photo reading (RunPod)', ms: 'Bacaan foto (RunPod)', zh: '照片识别 (RunPod)', ta: 'படம் வாசிப்பு (RunPod)' },
+  ocr: { en: 'Document OCR (Tesseract)', ms: 'OCR dokumen (Tesseract)', zh: '文档 OCR (Tesseract)', ta: 'ஆவண OCR (Tesseract)' },
+  email: { en: 'Email (Mailtrap)', ms: 'E-mel (Mailtrap)', zh: '电子邮件 (Mailtrap)', ta: 'மின்னஞ்சல் (Mailtrap)' },
+  telegram: { en: 'Telegram bot', ms: 'Bot Telegram', zh: 'Telegram 机器人', ta: 'Telegram பாட்' },
+  telegram_helper: { en: 'Telegram helper bot', ms: 'Bot pembantu Telegram', zh: 'Telegram 助手机器人', ta: 'Telegram உதவி பாட்' },
+  whatsapp: { en: 'WhatsApp', ms: 'WhatsApp', zh: 'WhatsApp', ta: 'WhatsApp' },
+}
+const SVC_STATE: Record<SvcState, Text> = {
+  ok: { en: 'Working', ms: 'Berfungsi', zh: '正常', ta: 'செயல்படுகிறது' },
+  set: { en: 'Set up', ms: 'Disediakan', zh: '已设置', ta: 'அமைக்கப்பட்டது' },
+  warn: { en: 'Problem', ms: 'Masalah', zh: '有问题', ta: 'சிக்கல்' },
+  down: { en: 'Down', ms: 'Terhenti', zh: '故障', ta: 'செயலிழந்தது' },
+  off: { en: 'Not set up', ms: 'Belum disediakan', zh: '未设置', ta: 'அமைக்கப்படவில்லை' },
+}
+const SVC_ORDER: SvcState[] = ['down', 'warn', 'off', 'set', 'ok']
+const svcTitle = { en: 'Services', ms: 'Perkhidmatan', zh: '服务', ta: 'சேவைகள்' } satisfies Text
+const svcNote = { en: '"Working" was checked just now. "Set up" means the key or token is in place; LARIS does not call the outside service to test it.', ms: '"Berfungsi" disemak sebentar tadi. "Disediakan" bermakna kunci atau token ada; LARIS tidak memanggil perkhidmatan luar untuk mengujinya.', zh: '“正常”表示刚刚检查过。“已设置”表示密钥或令牌已就位；LARIS 不会调用外部服务来测试。', ta: '"செயல்படுகிறது" என்பது இப்போதே சரிபார்க்கப்பட்டது. "அமைக்கப்பட்டது" என்றால் சாவி அல்லது டோக்கன் உள்ளது; வெளிச் சேவையை LARIS அழைத்துச் சோதிக்காது.' } satisfies Text
+
+function Services({ list }: { list: Service[] }) {
+  useLang()
+  const sorted = [...list].sort((a, b) => SVC_ORDER.indexOf(a.state) - SVC_ORDER.indexOf(b.state))
+  const bad = (x: SvcState) => x === 'down' || x === 'warn'
+  return (
+    <section aria-labelledby="st-services" className="mb-6" data-guide="sys-services">
+      <h2 id="st-services" className="mb-1 text-lg font-semibold">{t(svcTitle)} <span className="text-sm font-normal text-muted">({list.length})</span></h2>
+      <p className="mb-2 text-sm text-muted">{t(svcNote)}</p>
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {sorted.map(v => (
+          <li key={v.key} className={`card flex items-center justify-between gap-2 ${bad(v.state) ? 'border-l-4 border-l-amber' : ''}`}>
+            <span className="font-semibold">{SVC[v.key] ? t(SVC[v.key]) : v.key}</span>
+            <span className={`badge ${bad(v.state) ? 'badge-warn' : ''}`}>{bad(v.state) && <Icon name="warn" className="size-4" />}{t(SVC_STATE[v.state])}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 const ORDER: HealthItem['level'][] = ['critical', 'warn', 'info']
 const NAME = {
   ok: { en: 'OK', ms: 'OK', zh: '正常', ta: 'சரி' },
@@ -124,8 +173,9 @@ export function StatusView() {
   return (
     <>
       <PageHeader title={t({ en: 'System status', ms: 'Status sistem', zh: '系统状态', ta: 'கணினி நிலை' })} description={t({ en: 'Checks that LARIS is set up and working, and what to do about anything that is not.', ms: 'Semakan bahawa LARIS telah disediakan dan berfungsi, serta apa yang perlu dilakukan jika tidak.', zh: '检查 LARIS 是否已设置好并正常运行，以及出现问题时该怎么做。', ta: 'LARIS அமைக்கப்பட்டு செயல்படுகிறதா என்பதையும், இல்லையெனில் என்ன செய்வது என்பதையும் சரிபார்க்கிறது.' })} />
-      <Async s={s} empty={!!h && !items.length} emptyText={t({ en: 'Everything is set up', ms: 'Semuanya telah disediakan', zh: '一切都已设置好', ta: 'அனைத்தும் அமைக்கப்பட்டுள்ளன' })} emptyHint={t({ en: 'Nothing needs your attention right now.', ms: 'Tiada apa yang memerlukan perhatian anda sekarang.', zh: '目前没有需要您处理的事项。', ta: 'இப்போது உங்கள் கவனம் தேவைப்படுவது எதுவும் இல்லை.' })} rows={3}>
+      <Async s={s} empty={!!h && !items.length && !h.services?.length} emptyText={t({ en: 'Everything is set up', ms: 'Semuanya telah disediakan', zh: '一切都已设置好', ta: 'அனைத்தும் அமைக்கப்பட்டுள்ளன' })} emptyHint={t({ en: 'Nothing needs your attention right now.', ms: 'Tiada apa yang memerlukan perhatian anda sekarang.', zh: '目前没有需要您处理的事项。', ta: 'இப்போது உங்கள் கவனம் தேவைப்படுவது எதுவும் இல்லை.' })} rows={3}>
         {h && <>
+          {h.services && h.services.length > 0 && <Services list={h.services} />}
           <p role="status" data-guide="sys-overall" className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold">{t({ en: 'Overall:', ms: 'Keseluruhan:', zh: '总体：', ta: 'ஒட்டுமொத்தம்:' })} <LevelBadge level={h.level} /> <span className="text-sm font-normal text-muted">{itemsOf(items.length)}</span></p>
           {ORDER.map(l => {
             const g = items.filter(i => i.level === l)

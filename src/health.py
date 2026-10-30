@@ -154,6 +154,62 @@ CHECKS = (email_off, email_sandbox, rls_bypass, demo_mode, scheduler_off, schedu
           whatsapp_not_set, telegram_not_set, telegram_helper_not_set, ocr_missing, public_url_unset, secret_key_unset, proxy_not_trusted, no_owner_email, privacy_dpo_missing, breach_overdue, privacy_requests_waiting, ai_not_reviewed)
 
 
+def _svc(key, state):
+    return {"key": key, "state": state}
+
+
+def services(ctx) -> list[dict]:
+    """Every part LARIS depends on, one row each: ok = checked just now and working; set = configured but not tested live (we never call
+    Telegram, ILMU and the rest from here); warn = working with a problem; down = broken; off = not set up or switched off."""
+    from .api.assistant import rag_on  # lazy: the api package imports this module
+    out = []
+
+    def add(key, fn):
+        try:
+            out.append(_svc(key, fn()))
+        except Exception as e:  # a broken probe shows as down, the type only is logged
+            log.warning("service probe %s failed: %s", key, type(e).__name__)
+            out.append(_svc(key, "down"))
+
+    def database():
+        ctx.conn.execute("select 1").fetchone()
+        return "warn" if db.rls_status(ctx.conn)[0] else "ok"
+
+    def licence_state():
+        s = lic.status(ctx.conn, ctx.tenant_id)
+        return "off" if not s["enforced"] else {"active": "ok", "expiring": "warn"}.get(s["status"], "down")
+
+    def clock_state():
+        s = lic.status(ctx.conn, ctx.tenant_id)
+        return "off" if not s["enforced"] else "ok" if s["clock"] and s["clock"]["source"] == "ntp" else "warn"
+
+    def scheduler_state():
+        st = scheduler.status()
+        return "off" if os.environ.get("SCHEDULER") != "1" else "warn" if st["errors"] or st["ok"] is False else "ok"
+
+    ai = ctx.conn.execute("select * from tenant_ai where tenant_id=%s", (ctx.tenant_id,)).fetchone()
+    rag = rag_on(ai)
+
+    def mcp_state():
+        keys = ctx.conn.execute("select 1 from api_keys where tenant_id=%s and role_id is not null and revoked_at is null limit 1", (ctx.tenant_id,)).fetchone()
+        return "off" if not keys else "set" if rag else "warn"  # keys exist but the owner has not agreed to record reading: every call is refused
+
+    add("database", database)
+    add("licence", licence_state)
+    add("clock", clock_state)
+    add("scheduler", scheduler_state)
+    add("rag", lambda: "set" if rag else "off")
+    add("mcp", mcp_state)
+    add("ilmu", lambda: "set" if _set("ILMU_API_KEY") else "off")
+    add("vision", lambda: "off" if vision.missing_env() else "set")
+    add("ocr", lambda: "ok" if shutil.which("tesseract") or os.path.isdir(ocr.TESS_DIR) else "off")
+    add("email", lambda: "off" if not mailer.enabled() else "warn" if _set("MAILTRAP_INBOX_ID") else "set")
+    add("telegram", lambda: "set" if _set("TELEGRAM_BOT_TOKEN") or _own_bot(ctx) else "off")
+    add("telegram_helper", lambda: "set" if _set("LARIS_HELPER_BOT_TOKEN") and _set("LARIS_HELPER_WEBHOOK_SECRET") else "off")
+    add("whatsapp", lambda: "set" if _set("WHATSAPP_TOKEN") and _set("WHATSAPP_PHONE_NUMBER_ID") else "off")
+    return out
+
+
 def report(ctx) -> dict:
     items = []
     for chk in CHECKS:
@@ -163,4 +219,4 @@ def report(ctx) -> dict:
         except Exception as e:  # one broken check yields no item; the type only, the text could carry a URL or a secret
             log.warning("health check %s failed: %s", chk.__name__, type(e).__name__)
     items.sort(key=lambda i: -RANK[i["level"]])
-    return {"level": items[0]["level"] if items else "ok", "items": items}
+    return {"level": items[0]["level"] if items else "ok", "items": items, "services": services(ctx)}

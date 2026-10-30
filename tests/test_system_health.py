@@ -23,7 +23,7 @@ def test_owner_shape_and_ordering(env, monkeypatch):
     r = get(env)
     assert r.status_code == 200
     j = r.json()
-    assert set(j) == {"level", "items"} and j["items"]
+    assert set(j) == {"level", "items", "services"} and j["items"]
     for i in j["items"]:
         assert set(i) == {"level", "code", "message", "fix"} and i["level"] in ("info", "warn", "critical") and i["message"] and i["fix"]
     ranks = [health.RANK[i["level"]] for i in j["items"]]
@@ -78,3 +78,17 @@ def test_no_secret_value_in_response(env, monkeypatch, caplog):
     monkeypatch.setenv("REPL_DEPLOYMENT", "1")
     r = get(env)
     assert r.status_code == 200 and "sekret" not in r.text and "sekret" not in caplog.text
+
+
+def test_services_list_shape_and_states(env, monkeypatch):
+    for k in ("TELEGRAM_BOT_TOKEN", "WHATSAPP_TOKEN", "ILMU_API_KEY", "MAILTRAP_API_TOKEN", "SCHEDULER"):
+        monkeypatch.delenv(k, raising=False)
+    sv = {s["key"]: s["state"] for s in get(env).json()["services"]}
+    assert set(sv) == {"database", "licence", "clock", "scheduler", "rag", "mcp", "ilmu", "vision", "ocr", "email", "telegram", "telegram_helper", "whatsapp"}
+    assert set(sv.values()) <= {"ok", "set", "warn", "down", "off"}
+    assert sv["database"] in ("ok", "warn") and sv["ilmu"] == "off" and sv["whatsapp"] == "off" and sv["scheduler"] == "off" and sv["mcp"] == "off"
+    monkeypatch.setenv("ILMU_API_KEY", "sekret-ilmu")
+    monkeypatch.setenv("SCHEDULER", "1")
+    sv = {s["key"]: s["state"] for s in get(env).json()["services"]}
+    assert sv["ilmu"] == "set" and sv["scheduler"] in ("ok", "warn")
+    assert "sekret-ilmu" not in get(env).text

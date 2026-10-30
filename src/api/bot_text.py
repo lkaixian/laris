@@ -1,4 +1,5 @@
 """The customer bot's fixed texts (English and Malay), the owner's bot settings and the reply type. Re-exported by webhooks.py."""
+import os
 import re
 
 HELP = ("Hi! Send what you need in a message or a voice note, for example \"50 kg PLA, how much?\", and we will send you a quote.\n"
@@ -12,11 +13,14 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
             "thanks": "Thanks, we received your enquiry ({doc}). We will send your quote shortly.",
             "clarify": "Sorry, we could not tell what you need or how many. We quote for: {names}. Please reply with the item and quantity.",
             "after": "We are closed right now. We will reply when we open.",
-            "notice": "Privacy notice: we keep the messages you send us and the quotes we prepare for you, so we can serve you. Voice notes are transcribed "
-                      "and the audio is not kept. The business and its team can see this, and the services that run our chat and AI reading process it for us.{dpo}\n"
-                      "By continuing to message us you accept this. Send /privacy to read this again, /mydata to get a copy of your data, "
-                      "or /forget to ask us to erase it.",
+            "notice": "Privacy notice: to answer your enquiry and prepare your quote we collect your name, your chat number or ID, the messages and voice notes you send, "
+                      "and the quotes we prepare for you. Giving us this is voluntary, but we cannot quote without it. Chat text is kept for {days} days; quotes are kept as business records. "
+                      "Voice notes are transcribed and the audio is not kept by us. The business and its team can see your data. The services that run our chat, "
+                      "AI reading, email and hosting process it for us, and some of them are outside Malaysia.{dpo}\n"
+                      "Your choices: send /mydata for a copy of your data, /forget to ask us to erase it, or tell us here to correct it or to limit how we use it. "
+                      "Send /privacy to read this again.",
             "dpo": " For questions, contact our data protection contact: {who}.",
+            "agree": "To continue, reply YES.", "agreed": "Thank you. Please send your request.",
             "forget": "We received your request. The business will confirm after checking quotes it must keep.",
             "erased": "Your data has been erased.",
             "kept": "The business could not erase your data because it must keep some records.{dpo}",
@@ -31,12 +35,15 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
             "thanks": "Terima kasih, pertanyaan anda ({doc}) telah kami terima. Kami akan hantar sebut harga tidak lama lagi.",
             "clarify": "Maaf, kami tidak pasti apa yang anda perlukan atau berapa banyak. Kami beri sebut harga untuk: {names}. Sila balas dengan item dan kuantiti.",
             "after": "Kami sudah tutup sekarang. Kami akan balas apabila kedai dibuka semula.",
-            "notice": "Notis privasi: kami menyimpan mesej yang anda hantar dan sebut harga yang kami sediakan untuk anda, supaya kami dapat melayan anda. "
-                      "Nota suara ditranskripsi dan audio tidak disimpan. Perniagaan ini dan pasukannya boleh melihatnya, dan perkhidmatan yang menjalankan "
-                      "sembang dan bacaan AI kami memprosesnya bagi pihak kami.{dpo}\n"
-                      "Dengan terus menghantar mesej kepada kami, anda bersetuju. Hantar /privacy untuk baca semula, /mydata untuk salinan data anda, "
-                      "atau /forget untuk meminta kami memadamnya.",
+            "notice": "Notis privasi: untuk menjawab pertanyaan anda dan menyediakan sebut harga, kami mengumpul nama anda, nombor atau ID sembang anda, mesej dan nota suara "
+                      "yang anda hantar, serta sebut harga yang kami sediakan untuk anda. Memberi maklumat ini adalah sukarela, tetapi kami tidak dapat memberi sebut harga tanpanya. "
+                      "Teks sembang disimpan selama {days} hari; sebut harga disimpan sebagai rekod perniagaan. Nota suara ditranskripsi dan audio tidak disimpan oleh kami. "
+                      "Perniagaan ini dan pasukannya boleh melihat data anda. Perkhidmatan yang menjalankan sembang, bacaan AI, e-mel dan pengehosan kami memprosesnya "
+                      "bagi pihak kami, dan sebahagiannya berada di luar Malaysia.{dpo}\n"
+                      "Pilihan anda: hantar /mydata untuk salinan data anda, /forget untuk meminta kami memadamnya, atau beritahu kami di sini untuk membetulkannya "
+                      "atau menghadkan cara kami menggunakannya. Hantar /privacy untuk baca semula.",
             "dpo": " Untuk pertanyaan, hubungi pegawai perlindungan data kami: {who}.",
+            "agree": "Untuk meneruskan, balas YA.", "agreed": "Terima kasih. Sila hantar permintaan anda.",
             "forget": "Kami telah menerima permintaan anda. Perniagaan akan mengesahkan selepas menyemak sebut harga yang mesti disimpan.",
             "erased": "Data anda telah dipadam.",
             "kept": "Perniagaan tidak dapat memadam data anda kerana ada rekod yang mesti disimpan.{dpo}",
@@ -73,3 +80,9 @@ def dpo_line(conn, tid, lang) -> str:
     row = conn.execute("select dpo_name, dpo_email, dpo_phone from tenant_privacy where tenant_id=%s", (tid,)).fetchone()
     who = ", ".join(x for x in (row or {}).values() if x)
     return T[lang]["dpo"].format(who=who) if who else ""
+
+
+def notice_text(conn, tid) -> str:
+    """The privacy notice in both national languages at once (Act 709 s.7(3): Malay and English), English first."""
+    days = os.environ.get("RETENTION_DAYS", "180")
+    return "\n\n".join(T[l]["notice"].format(dpo=dpo_line(conn, tid, l), days=days) for l in ("en", "ms"))

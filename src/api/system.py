@@ -18,7 +18,8 @@ def scheduler_status(ctx: Ctx = Depends(read_ctx)):
 
 
 @r.get("/system/health")
-def health_status(ctx: Ctx = Depends(read_ctx)):
-    """Owner-only list of things that need attention (setup gaps, risks), worst first."""
+def health_status(live: bool = False, force: bool = False, ctx: Ctx = Depends(read_ctx)):
+    """Owner-only list of things that need attention (setup gaps, risks), worst first, and the state of every service.
+    live=1 also calls the outside services (Telegram, WhatsApp, ILMU, RunPod, Mailtrap); force=1 asks for a fresh check (at most one per 10 s)."""
     require_owner(ctx)
-    return reply(ctx, health.report(ctx))
+    return reply(ctx, health.report(ctx, live, force))

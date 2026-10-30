@@ -8,8 +8,8 @@ import type { Text } from './i18n'
 export type Level = 'ok' | 'info' | 'warn' | 'critical'
 export interface HealthItem { level: Exclude<Level, 'ok'>; code: string; message: string; fix: string }
 export type SvcState = 'ok' | 'set' | 'warn' | 'down' | 'off'
-export interface Service { key: string; state: SvcState }
-export interface Health { level: Level; items: HealthItem[]; services?: Service[] }
+export interface Service { key: string; state: SvcState; why?: string; ms?: number }
+export interface Health { level: Level; items: HealthItem[]; services?: Service[]; checked_at?: string }
 
 // Server health text, translated here by code ([message, fix]; {n} = the first number in the server message, {v} = the setting names in a "Set ... in Secrets" fix).
 // English and any unknown code show the server's own text. demo_mode and licence_expiring read differently per level, so those are keyed code:level.
@@ -121,21 +121,42 @@ const SVC_STATE: Record<SvcState, Text> = {
 }
 const SVC_ORDER: SvcState[] = ['down', 'warn', 'off', 'set', 'ok']
 const svcTitle = { en: 'Services', ms: 'Perkhidmatan', zh: '服务', ta: 'சேவைகள்' } satisfies Text
-const svcNote = { en: '"Working" was checked just now. "Set up" means the key or token is in place; LARIS does not call the outside service to test it.', ms: '"Berfungsi" disemak sebentar tadi. "Disediakan" bermakna kunci atau token ada; LARIS tidak memanggil perkhidmatan luar untuk mengujinya.', zh: '“正常”表示刚刚检查过。“已设置”表示密钥或令牌已就位；LARIS 不会调用外部服务来测试。', ta: '"செயல்படுகிறது" என்பது இப்போதே சரிபார்க்கப்பட்டது. "அமைக்கப்பட்டது" என்றால் சாவி அல்லது டோக்கன் உள்ளது; வெளிச் சேவையை LARIS அழைத்துச் சோதிக்காது.' } satisfies Text
+const svcNote = { en: '"Working" was checked. "Set up" means the key or token is in place but not tested yet: press Check now to call each outside service (nothing about your customers is sent).', ms: '"Berfungsi" telah disemak. "Disediakan" bermakna kunci atau token ada tetapi belum diuji: tekan Semak sekarang untuk memanggil setiap perkhidmatan luar (tiada maklumat pelanggan dihantar).', zh: '“正常”表示已检查。“已设置”表示密钥或令牌已就位但尚未测试：点击“立即检查”会调用每个外部服务（不会发送任何客户信息）。', ta: '"செயல்படுகிறது" என்பது சரிபார்க்கப்பட்டது. "அமைக்கப்பட்டது" என்றால் சாவி அல்லது டோக்கன் உள்ளது ஆனால் இன்னும் சோதிக்கப்படவில்லை: ஒவ்வொரு வெளிச் சேவையையும் அழைக்க இப்போதே சரிபார் என்பதை அழுத்தவும் (வாடிக்கையாளர் தகவல் எதுவும் அனுப்பப்படாது).' } satisfies Text
+const checkNow = { en: 'Check now', ms: 'Semak sekarang', zh: '立即检查', ta: 'இப்போதே சரிபார்' } satisfies Text
+const checking = { en: 'Checking…', ms: 'Menyemak…', zh: '检查中…', ta: 'சரிபார்க்கிறது…' } satisfies Text
+const lastChecked = { en: 'Last checked', ms: 'Disemak pada', zh: '上次检查', ta: 'கடைசியாகச் சரிபார்த்தது' } satisfies Text
+// Why a live check failed (the fixed codes in src/probe.py WHY).
+const WHY: Record<string, Text> = {
+  timeout: { en: 'no answer in time', ms: 'tiada jawapan tepat pada masanya', zh: '超时未响应', ta: 'நேரத்துக்குள் பதில் இல்லை' },
+  unreachable: { en: 'cannot be reached', ms: 'tidak dapat dihubungi', zh: '无法连接', ta: 'அடைய முடியவில்லை' },
+  key_rejected: { en: 'key rejected', ms: 'kunci ditolak', zh: '密钥被拒绝', ta: 'சாவி நிராகரிக்கப்பட்டது' },
+  http_error: { en: 'service error', ms: 'ralat perkhidmatan', zh: '服务出错', ta: 'சேவைப் பிழை' },
+  not_found: { en: 'address not found', ms: 'alamat tidak ditemui', zh: '找不到地址', ta: 'முகவரி கிடைக்கவில்லை' },
+  webhook_missing: { en: 'webhook not registered', ms: 'webhook belum didaftarkan', zh: 'webhook 未注册', ta: 'webhook பதிவு செய்யப்படவில்லை' },
+  webhook_error: { en: 'webhook failing', ms: 'webhook gagal', zh: 'webhook 出错', ta: 'webhook தோல்வி' },
+  rag_failed: { en: 'search failed', ms: 'carian gagal', zh: '检索失败', ta: 'தேடல் தோல்வி' },
+  no_consent: { en: 'record reading not agreed', ms: 'bacaan rekod belum dipersetujui', zh: '尚未同意读取记录', ta: 'பதிவு வாசிப்புக்கு ஒப்புதல் இல்லை' },
+}
+const when = (iso: string) => new Date(iso).toLocaleTimeString(getLang() === 'en' ? 'en-MY' : getLang(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-function Services({ list }: { list: Service[] }) {
+function Services({ list, at, busy, onCheck }: { list: Service[]; at?: string; busy: boolean; onCheck: () => void }) {
   useLang()
   const sorted = [...list].sort((a, b) => SVC_ORDER.indexOf(a.state) - SVC_ORDER.indexOf(b.state))
   const bad = (x: SvcState) => x === 'down' || x === 'warn'
   return (
     <section aria-labelledby="st-services" className="mb-6" data-guide="sys-services">
-      <h2 id="st-services" className="mb-1 text-lg font-semibold">{t(svcTitle)} <span className="text-sm font-normal text-muted">({list.length})</span></h2>
+      <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 id="st-services" className="text-lg font-semibold">{t(svcTitle)} <span className="text-sm font-normal text-muted">({list.length})</span></h2>
+        <button type="button" className="btn btn-sm" disabled={busy} aria-busy={busy} onClick={onCheck}>{t(busy ? checking : checkNow)}</button>
+        {at && <span className="text-sm text-muted">{t(lastChecked)} {when(at)}</span>}
+      </div>
       <p className="mb-2 text-sm text-muted">{t(svcNote)}</p>
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map(v => (
           <li key={v.key} className={`card flex items-center justify-between gap-2 ${bad(v.state) ? 'border-l-4 border-l-amber' : ''}`}>
             <span className="font-semibold">{SVC[v.key] ? t(SVC[v.key]) : v.key}</span>
-            <span className={`badge ${bad(v.state) ? 'badge-warn' : ''}`}>{bad(v.state) && <Icon name="warn" className="size-4" />}{t(SVC_STATE[v.state])}</span>
+            <span className={`badge ${bad(v.state) ? 'badge-warn' : ''}`}>{bad(v.state) && <Icon name="warn" className="size-4" />}
+              {t(SVC_STATE[v.state])}{v.why && WHY[v.why] ? `: ${t(WHY[v.why])}` : v.ms !== undefined ? ` · ${v.ms} ms` : ''}</span>
           </li>
         ))}
       </ul>
@@ -167,7 +188,8 @@ function LevelBadge({ level }: { level: Level }) {
 // #/status (owner only): what is not set up or not working, worst first, each with how to fix it.
 export function StatusView() {
   useLang()
-  const s = useFetch<Health>('/system/health')
+  const [checks, setChecks] = useState(0)  // each press of Check now is a new live request; force=1 asks for a fresh one (the server still waits 10 s between them)
+  const s = useFetch<Health>(checks ? `/system/health?live=1&force=1&n=${checks}` : '/system/health')
   const h = s.data
   const items = h?.items ?? []
   return (
@@ -175,7 +197,7 @@ export function StatusView() {
       <PageHeader title={t({ en: 'System status', ms: 'Status sistem', zh: '系统状态', ta: 'கணினி நிலை' })} description={t({ en: 'Checks that LARIS is set up and working, and what to do about anything that is not.', ms: 'Semakan bahawa LARIS telah disediakan dan berfungsi, serta apa yang perlu dilakukan jika tidak.', zh: '检查 LARIS 是否已设置好并正常运行，以及出现问题时该怎么做。', ta: 'LARIS அமைக்கப்பட்டு செயல்படுகிறதா என்பதையும், இல்லையெனில் என்ன செய்வது என்பதையும் சரிபார்க்கிறது.' })} />
       <Async s={s} empty={!!h && !items.length && !h.services?.length} emptyText={t({ en: 'Everything is set up', ms: 'Semuanya telah disediakan', zh: '一切都已设置好', ta: 'அனைத்தும் அமைக்கப்பட்டுள்ளன' })} emptyHint={t({ en: 'Nothing needs your attention right now.', ms: 'Tiada apa yang memerlukan perhatian anda sekarang.', zh: '目前没有需要您处理的事项。', ta: 'இப்போது உங்கள் கவனம் தேவைப்படுவது எதுவும் இல்லை.' })} rows={3}>
         {h && <>
-          {h.services && h.services.length > 0 && <Services list={h.services} />}
+          {h.services && h.services.length > 0 && <Services list={h.services} at={h.checked_at} busy={s.loading && checks > 0} onCheck={() => setChecks(n => n + 1)} />}
           <p role="status" data-guide="sys-overall" className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold">{t({ en: 'Overall:', ms: 'Keseluruhan:', zh: '总体：', ta: 'ஒட்டுமொத்தம்:' })} <LevelBadge level={h.level} /> <span className="text-sm font-normal text-muted">{itemsOf(items.length)}</span></p>
           {ORDER.map(l => {
             const g = items.filter(i => i.level === l)

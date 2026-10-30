@@ -11,7 +11,8 @@ Related: [[e-invoice-myinvois]], [[sst-and-quotation-docs]], [[adr-ilmu-api]], [
 ## Effective dates (DFDL)
 - 1 Jan 2025: e-service of notices (admin).
 - 1 Apr 2025: "data user" becomes "data controller"; biometric data = sensitive; processors directly bound by the Security Principle; max fine RM300,000 -> RM1,000,000, jail 2 -> 3 years; cross-border whitelist removed.
-- 1 Jun 2025: mandatory DPO (controllers AND processors), mandatory breach notification, data portability.
+- 1 Jun 2025: mandatory DPO (controllers AND processors), mandatory breach notification, data portability. Verified from Gazette P.U.(B) 522 on 2026-10-30.
+- Breach: 72 hours to the Commissioner, 7 days after that to affected people (Circular 2/2025, Breach Guideline); DPO thresholds 20,000 / 10,000 sensitive / regular and systematic monitoring (DPO Guideline 4.2). Both are Commissioner instruments, not in the Act itself; whether they bind is open. See `docs/lawyer-review-brief.md`.
 
 ## Breach notification (Guideline issued 25 Feb 2025; CMS / DLA Piper / Securiti summaries)
 - Notify Commissioner as soon as practicable, no later than 72 hours; late = written explanation + evidence. Firms disagree whether the clock starts at occurrence or awareness.

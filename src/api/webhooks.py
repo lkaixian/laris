@@ -26,7 +26,7 @@ from ..tabular import sniff
 from ..templates import load_template
 from ..vision import VisionError
 from . import listings, privacy
-from .bot_text import HELP, NO_ROW, SORRY, SORRYS, T, VOICE_SORRY, Reply, _lang, bot_settings, dpo_line  # noqa: F401  (re-exported)
+from .bot_text import HELP, NO_ROW, SORRY, SORRYS, T, VOICE_SORRY, Reply, _lang, bot_settings, dpo_line, notice_text  # noqa: F401  (re-exported)
 from .deps import JR, hit, throttle
 
 log = logging.getLogger("laris")
@@ -40,6 +40,7 @@ CATALOG = re.compile(r"\s*/?catalog\b", re.I)
 HELP_CMD = re.compile(r"\s*/(start|help)(@\w+)?\s*$", re.I)
 RIGHTS_CMD = re.compile(r"\s*/(privacy|mydata|forget)(@\w+)?\s*$", re.I)  # a customer's PDPA commands
 RIGHTS_LIMIT = 5  # rights commands per (business, sender) per 10 minutes
+YES = re.compile(r"\s*(yes|y|ya|ok|okay|setuju|agree)[.!]?\s*$", re.I)  # the reply that agrees to the notice when the owner requires it
 
 
 
@@ -61,9 +62,16 @@ def _rights(conn, tid, pid, m, cfg, digits):
     first = conn.execute("""insert into customer_consent(tenant_id, party_id, channel, notice_version)
                             values (%s, %s, %s, coalesce((select notice_version from tenant_privacy where tenant_id=%s), 1)) on conflict do nothing returning party_id""",
                          (tid, pid, m.channel, tid)).fetchone() is not None
-    notice = T[lang]["notice"].format(dpo=dpo_line(conn, tid, lang))
+    notice = notice_text(conn, tid)
     cmd = RIGHTS_CMD.match(m.text) if m.text and not m.media_kind else None
     cmd = cmd and cmd.group(1).lower()
+    row = conn.execute("""select p.require_optin, c.agreed_at from customer_consent c left join tenant_privacy p on p.tenant_id = c.tenant_id
+                          where c.party_id=%s""", (pid,)).fetchone()
+    if row and row["require_optin"] and not row["agreed_at"] and not cmd:  # the owner wants a recorded YES before anything is read
+        if m.text and not m.media_kind and YES.match(m.text):
+            conn.execute("update customer_consent set agreed_at=now(), basis='agreed_in_chat' where party_id=%s", (pid,))
+            return T[lang]["agreed"]
+        return f"{notice}\n\n{T['en']['agree']} / {T['ms']['agree']}"
     if first and cmd != "privacy":  # /privacy below answers with the notice itself
         m.notice = notice
     if not cmd:

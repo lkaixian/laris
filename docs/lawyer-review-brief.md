@@ -33,19 +33,19 @@ Official English Guidelines (v1.0, 25 Feb 2025): https://www.pdp.gov.my/wp-conte
 
 ## 3. Questions we narrowed to
 
-Each has the conservative default we propose to follow until you say otherwise. Not all of them are built yet; the repo still behaves as described in section 5.
+Each has the conservative default we now follow in the repo (changed 2026-10-30) until you say otherwise.
 
 | # | Question | Why it is open | Our default |
 |---|---|---|---|
-| 1 | Is the 72-hour clock from occurrence or from awareness? | Guideline 6.1 says "selepas berlakunya" (after occurrence); the 6.2 examples run it from being told or confirming. Circular 4(4) says "daripada pelanggaran" | Start at the earliest of occurrence, detection and the vendor telling us |
+| 1 | Is the 72-hour clock from occurrence or from awareness? | Guideline 6.1 says "selepas berlakunya" (after occurrence); the 6.2 examples run it from being told or confirming. Circular 4(4) says "daripada pelanggaran" | Built: the register counts from the earlier of when it happened and when we detected it |
 | 2 | Are the Commissioner's thresholds legally binding, given s.12A is unconditional? | Guideline is issued under s.48(g); neither it nor the Circular says binding or best practice | Treat as binding; record reasons for not appointing a DPO; name a contact anyway |
 | 3 | Does a multi-tenant processor count data subjects across all customers? | No aggregation rule in any text | Count across all customers; re-check as users grow |
-| 4 | Is a transcribed-and-discarded voice note, or a photo used for OCR, "biometric data"? | No source says either way | Audio is already not stored; keep transcript only; proposed: avoid face photos |
-| 5 | Is "by continuing to message us you accept this" valid consent for ordinary data? Does s.6(2)(b) cover a customer's own quote request? | JPDP says notice is not a consent vehicle; no chat guidance; Regulations 2013 not readable as text | Proposed: a recorded opt-in on first contact (not built) |
+| 4 | Is a transcribed-and-discarded voice note, or a photo used for OCR, "biometric data"? | No source says either way | Audio is not stored; transcript only; avoid face photos |
+| 5 | Is "by continuing to message us you accept this" valid consent for ordinary data? Does s.6(2)(b) cover a customer's own quote request? | JPDP says notice is not a consent vehicle; no chat guidance; Regulations 2013 not readable as text | Built: the notice is shown once, in both languages, and no longer says continuing means agreement; an owner switch holds the first enquiry until the customer replies YES or YA, and records it (off by default) |
 | 6 | Register retention: 2 years from the breach (Circular 4(7)) or from the Commissioner notice (Guideline 14.1)? | Texts conflict | Keep from the later of the two |
 | 7 | Which s.129 basis covers each overseas vendor (consent after notice naming the recipient class, contract clauses, other)? | See section 4: most vendors process outside Malaysia | Consent in the notice plus vendor DPAs |
-| 8 | Which Malaysian record-keeping law lets us keep quotes after a customer says `/forget`, and for how long? | We call them "financial records" with no cited law | Keep, and say so plainly |
-| 9 | Who answers access, correction, withdrawal and s.43A portability: LARIS or the SME? Is a chat command acceptable as "written notice by electronic means"? | Role and format open | Proposed: SME owner decides; relabel our JSON export "access" (not done) |
+| 8 | Which Malaysian record-keeping law lets us keep quotes after a customer says `/forget`, and for how long? | Wording changed from "financial records" to "business records"; no law is cited yet | Keep, and say so plainly |
+| 9 | Who answers access, correction, withdrawal and s.43A portability: LARIS or the SME? Is a chat command acceptable as "written notice by electronic means"? | Role and format open | The SME owner decides; our JSON export is relabelled an access answer, not portability |
 | 10 | Does Circular 1/2026 (registration of data controllers) apply to LARIS or its SME customers? | Scanned image, not read | None |
 | 11 | Penalty for failing to appoint or register a DPO? | No offence subsection found in s.12A | None |
 
@@ -62,15 +62,15 @@ The research tool summarised these pages, so treat quotes as pointers. Full tabl
 | Telegram | Chat messages | Not stated for Malaysian users | Telegram calls bots "independent from us" and is controller of its users' data | No DPA for bot developers |
 | Meta WhatsApp | Chat (not live) | Country not stated | Up to 30 days | Business Data Processing Terms |
 
-Our own docs are out of date against this: they say ILMU residency and no-training terms are unconfirmed, list Telegram as a processor, omit Mailtrap from the declaration, and say "audio discarded" without noting RunPod's 1 to 30 minute result window. These docs are not yet corrected.
+Our own docs are out of date against this: they say ILMU residency and no-training terms are unconfirmed, list Telegram as a processor, omit Mailtrap from the declaration, and say "audio discarded" without noting RunPod's 1 to 30 minute result window. These docs were corrected on 2026-10-30.
 
 ## 5. Repo text for you to read
 
-1. Customer notice: `src/api/bot_text.py:9-43` (English, Malay; WhatsApp English only; omits right to correct, obligatory or voluntary supply, overseas processing, named contact).
+1. Customer notice: `src/api/bot_text.py` (`notice_text`: Malay and English together on every channel, with collection, voluntary supply, 180-day retention, overseas processing, contact and choices).
 2. Runbook: `docs/privacy-and-breach-runbook.md` (breach steps, retention 180 and 90 days, erase versus keep).
-3. Breach register and clocks: `src/api/privacy.py:73-108`; owner screens `web/src/Privacy.tsx`.
+3. Breach register and clocks: `src/api/privacy.py` (`_view`: 72 hours from the earlier of `occurred_at` and `detected_at`; harm factors from the Guideline); owner screens `web/src/Privacy.tsx`.
 4. AI notices (v1 and v2): `src/api/ai_guide.py:27-41`.
-5. Retention and erase wording: `web/src/Privacy.tsx:244-245,299-300`.
+5. Retention and erase wording: `web/src/Privacy.tsx` (erase dialogs), `docs/privacy-and-breach-runbook.md`.
 
 ## 6. What we do not know
 

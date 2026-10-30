@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS tenant_privacy (
   notice_version int NOT NULL DEFAULT 1 CHECK (notice_version >= 1),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- Owner switch: a customer must reply YES before their first enquiry is read (off = the notice is shown and the enquiry goes ahead).
+ALTER TABLE tenant_privacy ADD COLUMN IF NOT EXISTS require_optin boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS breach_incidents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,6 +26,9 @@ CREATE TABLE IF NOT EXISTS breach_incidents (
   created_by uuid REFERENCES users,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- occurred_at: when the breach happened if known (the 72 hours run from the earlier of this and detected_at); harm_factors: why it counts as significant harm.
+ALTER TABLE breach_incidents ADD COLUMN IF NOT EXISTS occurred_at timestamptz;
+ALTER TABLE breach_incidents ADD COLUMN IF NOT EXISTS harm_factors text[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS breach_incidents_tenant ON breach_incidents (tenant_id, detected_at DESC);
 
 -- The register must be kept for at least 2 years: no role deletes a row, the owner role included.

@@ -17,9 +17,10 @@ log = logging.getLogger("laris")
 
 r = APIRouter(prefix="/api")
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-RULE_NOTE = ("Deadlines are 72 hours to the Commissioner and 7 days to the people affected, as we understand the Commissioner's guideline; "
-             "confirm the current rule at pdp.gov.my before relying on them.")
-SCALE = 1000  # people affected above this also count as notifiable (vault note, unverified)
+RULE_NOTE = ("Deadlines are 72 hours to the Commissioner and 7 days after that to the people affected (Commissioner's Circular 2/2025 and Breach Guideline). "
+             "The 72 hours are counted from the earlier of when the breach happened and when you detected it. A lawyer has not yet confirmed when the clock starts.")
+SCALE = 1000  # more than this many people affected makes a breach notifiable to the Commissioner (Guideline 5); it never decides notifying people
+HARM = ("financial_loss", "misuse", "sensitive_data", "identity_fraud", "physical_harm")  # the Guideline's significant-harm factors
 CAP = 5000  # export: most rows of each kind
 
 
@@ -33,6 +34,7 @@ class PrivacyIn(BaseModel, extra="forbid"):
     dpo_email: str | None = Field(None, max_length=254)
     dpo_phone: str | None = Field(None, max_length=40)
     notice_version: int | None = Field(None, ge=1, le=10000)  # bumped by the owner when the privacy notice text changes
+    require_optin: bool | None = None  # customers must reply YES before their first enquiry is read
 
     @field_validator("dpo_email")
     @classmethod
@@ -43,8 +45,8 @@ class PrivacyIn(BaseModel, extra="forbid"):
 
 
 def _privacy(ctx: Ctx) -> dict:
-    row = ctx.conn.execute("select dpo_name, dpo_email, dpo_phone, notice_version from tenant_privacy where tenant_id=%s", (ctx.tenant_id,)).fetchone() \
-        or {"dpo_name": None, "dpo_email": None, "dpo_phone": None, "notice_version": 1}
+    row = ctx.conn.execute("select dpo_name, dpo_email, dpo_phone, notice_version, require_optin from tenant_privacy where tenant_id=%s", (ctx.tenant_id,)).fetchone() \
+        or {"dpo_name": None, "dpo_email": None, "dpo_phone": None, "notice_version": 1, "require_optin": False}
     return {**row, "configured": bool(row["dpo_name"] and (row["dpo_email"] or row["dpo_phone"]))}
 
 
@@ -60,10 +62,11 @@ def set_privacy(body: PrivacyIn, ctx: Ctx = Depends(write_ctx)):
     d = {k: (v.strip() or None) if isinstance(v, str) else v for k, v in body.model_dump().items()}
     with guarded():
         ctx.conn.execute(
-            """insert into tenant_privacy(tenant_id, dpo_name, dpo_email, dpo_phone, notice_version)
-               values (%(t)s, %(dpo_name)s, %(dpo_email)s, %(dpo_phone)s, coalesce(%(notice_version)s, 1))
+            """insert into tenant_privacy(tenant_id, dpo_name, dpo_email, dpo_phone, notice_version, require_optin)
+               values (%(t)s, %(dpo_name)s, %(dpo_email)s, %(dpo_phone)s, coalesce(%(notice_version)s, 1), coalesce(%(require_optin)s, false))
                on conflict (tenant_id) do update set dpo_name=excluded.dpo_name, dpo_email=excluded.dpo_email, dpo_phone=excluded.dpo_phone,
-                 notice_version=coalesce(%(notice_version)s, tenant_privacy.notice_version), updated_at=now()""",
+                 notice_version=coalesce(%(notice_version)s, tenant_privacy.notice_version),
+                 require_optin=coalesce(%(require_optin)s, tenant_privacy.require_optin), updated_at=now()""",
             {**d, "t": ctx.tenant_id})
     audit(ctx, "tenant_privacy", ctx.tenant_id, "dpo contact changed")  # the contact is personal data: the event names no value
     return reply(ctx, _privacy(ctx))
@@ -72,20 +75,29 @@ def set_privacy(body: PrivacyIn, ctx: Ctx = Depends(write_ctx)):
 # ---- breach register ---------------------------------------------------------------------------------------------
 class BreachIn(BaseModel, extra="forbid"):
     detected_at: datetime
+    occurred_at: datetime | None = None  # when it happened, if known
     summary: str = Field(min_length=1, max_length=1000)  # no names, numbers or message text
     data_types: list[str] = Field(default_factory=list, max_length=20)
     people_affected: int | None = Field(None, ge=0, le=100000000)
     significant_harm: bool = False
+    harm_factors: list[str] = Field(default_factory=list, max_length=len(HARM))  # any of HARM; one of them means significant harm
     commissioner_notified_at: datetime | None = None
     subjects_notified_at: datetime | None = None
     notes: str | None = Field(None, max_length=2000)
 
-    @field_validator("detected_at", "commissioner_notified_at", "subjects_notified_at")
+    @field_validator("detected_at", "occurred_at", "commissioner_notified_at", "subjects_notified_at")
     @classmethod
     def _tz(cls, v):
         if v is not None and v.tzinfo is None:
             raise ValueError("include a time zone, for example +08:00")
         return v
+
+    @field_validator("harm_factors")
+    @classmethod
+    def _factors(cls, v):
+        if any(x not in HARM for x in v):
+            raise ValueError("harm factors are: " + ", ".join(HARM))
+        return sorted(set(v))
 
     @field_validator("data_types")
     @classmethod
@@ -103,9 +115,10 @@ class BreachEdit(BreachIn):
 
 def _view(b: dict) -> dict:
     t = now()
-    notifiable = b["significant_harm"] or (b["people_affected"] or 0) > SCALE
-    c_due = b["detected_at"] + timedelta(hours=72)
-    s_due = b["commissioner_notified_at"] + timedelta(days=7) if b["significant_harm"] and b["commissioner_notified_at"] else None
+    harm = b["significant_harm"] or bool(b["harm_factors"])
+    notifiable = harm or (b["people_affected"] or 0) > SCALE
+    c_due = min(b["detected_at"], b["occurred_at"] or b["detected_at"]) + timedelta(hours=72)
+    s_due = b["commissioner_notified_at"] + timedelta(days=7) if harm and b["commissioner_notified_at"] else None
     c_wait = notifiable and not b["commissioner_notified_at"] and b["status"] == "open"
     s_wait = bool(s_due) and not b["subjects_notified_at"] and b["status"] == "open"
     due = c_due if c_wait else s_due if s_wait else None
@@ -114,7 +127,7 @@ def _view(b: dict) -> dict:
             "hours_left": round((due - t).total_seconds() / 3600, 1) if due else None, "rule_note": RULE_NOTE}
 
 
-COLS = "id, detected_at, summary, data_types, people_affected, significant_harm, commissioner_notified_at, subjects_notified_at, status, notes, created_at"
+COLS = "id, detected_at, occurred_at, summary, data_types, people_affected, significant_harm, harm_factors, commissioner_notified_at, subjects_notified_at, status, notes, created_at"
 
 
 @r.get("/privacy/breaches")
@@ -129,9 +142,9 @@ def add_breach(body: BreachIn, ctx: Ctx = Depends(write_ctx)):
     require_owner(ctx)
     with guarded():
         b = ctx.conn.execute(
-            f"""insert into breach_incidents(tenant_id, detected_at, summary, data_types, people_affected, significant_harm,
+            f"""insert into breach_incidents(tenant_id, detected_at, occurred_at, summary, data_types, people_affected, significant_harm, harm_factors,
                   commissioner_notified_at, subjects_notified_at, notes, created_by)
-                values (%(t)s, %(detected_at)s, %(summary)s, %(data_types)s, %(people_affected)s, %(significant_harm)s,
+                values (%(t)s, %(detected_at)s, %(occurred_at)s, %(summary)s, %(data_types)s, %(people_affected)s, %(significant_harm)s, %(harm_factors)s,
                   %(commissioner_notified_at)s, %(subjects_notified_at)s, %(notes)s, %(u)s) returning {COLS}""",
             {**body.model_dump(), "t": ctx.tenant_id, "u": ctx.user_id}).fetchone()
     audit(ctx, "breach_incidents", b["id"], "breach recorded", None, {"detected_at": b["detected_at"], "significant_harm": b["significant_harm"], "people_affected": b["people_affected"]})
@@ -144,7 +157,7 @@ def edit_breach(bid: UUID, body: BreachEdit, ctx: Ctx = Depends(write_ctx)):
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
-    if any(sets[k] is None for k in sets.keys() & {"detected_at", "summary", "data_types", "significant_harm", "status"}):
+    if any(sets[k] is None for k in sets.keys() & {"detected_at", "summary", "data_types", "significant_harm", "harm_factors", "status"}):
         raise ApiError(422, "bad_value", "that field cannot be cleared")
     old = ctx.conn.execute(f"select {COLS} from breach_incidents where id=%s and tenant_id=%s for update", (bid, ctx.tenant_id)).fetchone()
     if not old:
@@ -182,7 +195,7 @@ def export_data(c, t, pid: UUID) -> dict:
 
 @r.get("/parties/{pid}/export")
 def export_party(pid: UUID, ctx: Ctx = Depends(read_ctx)):
-    """Access / portability for the owner."""
+    """An access answer for the owner (Act 709 s.30). It is not a s.43A portability transfer, which sends data to another controller on request."""
     require_owner(ctx)
     out = export_data(ctx.conn, ctx.tenant_id, pid)
     audit(ctx, "parties", pid, "personal data exported", None, {"enquiries": len(out["enquiries"]), "messages": len(out["messages"]), "documents": len(out["quotes"]), "replies": len(out["replies"])})

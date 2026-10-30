@@ -6,9 +6,10 @@ CREATE TABLE IF NOT EXISTS customer_consent (
   channel text,
   notice_version int NOT NULL DEFAULT 1,
   notice_shown_at timestamptz NOT NULL DEFAULT now(),
-  basis text NOT NULL DEFAULT 'implied_by_continuing',
+  basis text NOT NULL DEFAULT 'notice_shown',  -- notice_shown | agreed_in_chat (older rows: implied_by_continuing)
   withdrawn_at timestamptz
 );
+ALTER TABLE customer_consent ADD COLUMN IF NOT EXISTS agreed_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS data_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

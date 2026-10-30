@@ -382,9 +382,13 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     ]
     const rank = ['info', 'warn', 'critical']
     const items = k === 'ok' ? [] : all.filter(i => rank.indexOf(i.level) <= rank.indexOf(k))
-    const services = [['database', 'ok'], ['licence', 'ok'], ['clock', 'warn'], ['scheduler', 'ok'], ['rag', 'off'], ['mcp', 'off'], ['ilmu', 'set'], ['vision', 'set'], ['ocr', 'ok'],
-      ['email', 'down'], ['telegram', 'set'], ['telegram_helper', 'off'], ['whatsapp', 'off']].map(([key, state]) => ({ key, state }))
-    return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services }
+    const base = [['database', 'ok'], ['licence', 'ok'], ['clock', 'warn'], ['scheduler', 'ok'], ['rag', 'off'], ['mcp', 'off'], ['ilmu', 'set'], ['vision', 'set'], ['ocr', 'ok'],
+      ['email', 'set'], ['telegram', 'set'], ['telegram_helper', 'off'], ['whatsapp', 'off']]
+    const isLive = new URLSearchParams(q).get('live') === '1'  // ?live=1: the services that were only "set" are called now (plausible answers; nothing is sent anywhere)
+    const found: Record<string, object> = { ilmu: { state: 'ok', ms: 212 }, vision: { state: 'down', why: 'timeout', ms: 4000 }, telegram: { state: 'down', why: 'webhook_missing', ms: 340 },
+      email: { state: 'down', why: 'key_rejected', ms: 180 } }
+    const services = base.map(([key, state]) => ({ key, state, ...(isLive ? found[key] : {}) }))
+    return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services, ...(isLive ? { checked_at: new Date().toISOString() } : {}) }
   }
   { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)

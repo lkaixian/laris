@@ -34,7 +34,7 @@ def test_owner_only_and_validation(env):
     for m, u, kw in (("get", "/api/settings/privacy", {}), ("post", "/api/settings/privacy", {"json": {}}), ("get", "/api/privacy/breaches", {}),
                      ("post", "/api/privacy/breaches", {"json": BREACH})):
         assert getattr(e.c, m)(u, headers=e.S, **kw).status_code == 403
-    assert e.c.get("/api/settings/privacy", headers=e.O).json() == {"dpo_name": None, "dpo_email": None, "dpo_phone": None, "notice_version": 1, "configured": False}
+    assert e.c.get("/api/settings/privacy", headers=e.O).json() == {"dpo_name": None, "dpo_email": None, "dpo_phone": None, "notice_version": 1, "require_optin": False, "configured": False}
     assert e.c.post("/api/settings/privacy", json={"dpo_name": "A", "dpo_email": "nope"}, headers=e.O).status_code == 422
     r = e.c.post("/api/settings/privacy", json={"dpo_name": "Aida", "dpo_email": "dpo@example.com"}, headers=e.O)
     assert r.status_code == 200 and r.json()["configured"] is True and r.json()["notice_version"] == 1
@@ -55,7 +55,7 @@ def test_deadline_math(env, monkeypatch):
     row = lambda: e.c.get("/api/privacy/breaches", headers=e.O).json()["incidents"][0]
     r = row()
     assert at(r["commissioner_due"]) == T0 + timedelta(hours=72) and r["hours_left"] == 62.0 and not r["commissioner_overdue"] and r["subjects_due"] is None
-    assert "pdp.gov.my" in r["rule_note"] and "pdp.gov.my" in e.c.get("/api/privacy/breaches", headers=e.O).json()["rule_note"]
+    assert "Circular 2/2025" in r["rule_note"] and "Circular 2/2025" in e.c.get("/api/privacy/breaches", headers=e.O).json()["rule_note"]
     state["t"] = T0 + timedelta(hours=73)
     assert row()["commissioner_overdue"] is True and row()["hours_left"] == -1.0
     sent = T0 + timedelta(hours=80)
@@ -139,3 +139,21 @@ def test_request_photo_purged_after_90_days(env):
         e.sql("insert into rfq_items(tenant_id, description, note, image, image_mime, created_at) values (%s,'d','n','\\x01','image/png', now() - %s * interval '1 day')", (tid, age))
     scheduler.run_once()
     assert e.sql("select length(image) l from rfq_items order by created_at desc") == [{"l": 1}, {"l": 0}]
+
+
+def test_commissioner_clock_runs_from_the_earlier_of_occurred_and_detected(env):
+    e = env
+    occ = T0 - timedelta(hours=30)
+    r = e.c.post("/api/privacy/breaches", json=dict(BREACH, occurred_at=occ.isoformat()), headers=e.O).json()
+    assert datetime.fromisoformat(r["commissioner_due"]) == occ + timedelta(hours=72)
+    late = e.c.post("/api/privacy/breaches", json=dict(BREACH, occurred_at=(T0 + timedelta(hours=5)).isoformat()), headers=e.O).json()
+    assert datetime.fromisoformat(late["commissioner_due"]) == T0 + timedelta(hours=72)  # a later "occurred" never pushes the clock out
+
+
+def test_harm_factors_make_harm_significant_and_start_the_people_clock(env):
+    e = env
+    r = e.c.post("/api/privacy/breaches", json=dict(BREACH, significant_harm=False, harm_factors=["identity_fraud"], commissioner_notified_at=T0.isoformat()), headers=e.O).json()
+    assert r["notifiable"] and datetime.fromisoformat(r["subjects_due"]) == T0 + timedelta(days=7)
+    assert e.c.post("/api/privacy/breaches", json=dict(BREACH, harm_factors=["nonsense"]), headers=e.O).status_code == 422
+    big = e.c.post("/api/privacy/breaches", json=dict(BREACH, significant_harm=False, people_affected=5000, commissioner_notified_at=T0.isoformat()), headers=e.O).json()
+    assert big["notifiable"] and big["subjects_due"] is None  # more than 1,000 people: tell the Commissioner, not necessarily the people

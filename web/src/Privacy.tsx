@@ -6,9 +6,9 @@ import { relTime } from './Timeline'
 import { t, useLang, locale } from './i18n'
 import type { Text } from './i18n'
 
-interface Dpo { dpo_name: string | null; dpo_email: string | null; dpo_phone: string | null; configured: boolean }
+interface Dpo { dpo_name: string | null; dpo_email: string | null; dpo_phone: string | null; require_optin: boolean; configured: boolean }
 interface Incident {
-  id: string; detected_at: string; summary: string; data_types: string[]; people_affected: number | null; significant_harm: boolean
+  id: string; detected_at: string; occurred_at: string | null; harm_factors: string[]; summary: string; data_types: string[]; people_affected: number | null; significant_harm: boolean
   commissioner_notified_at: string | null; subjects_notified_at: string | null; status: 'open' | 'closed'; notes: string | null
   notifiable: boolean; commissioner_due: string; subjects_due: string | null; commissioner_overdue: boolean; subjects_overdue: boolean; hours_left: number | null
 }
@@ -22,26 +22,36 @@ const CONFIRM_KEY = 'laris.confirm.incidents'  // per-viewer convenience: "0" me
 const readConfirm = () => { try { return localStorage.getItem(CONFIRM_KEY) !== '0' } catch { return true } }
 const writeConfirm = (on: boolean) => { try { localStorage.setItem(CONFIRM_KEY, on ? '1' : '0') } catch { /* private window: the choice lasts until reload */ } }
 
+// The Commissioner's Breach Guideline lists these as signs of significant harm; any one means the affected people must be told too.
+const HARM: [string, Text][] = [
+  ['financial_loss', { en: 'Money could be lost, or a credit record damaged', ms: 'Wang boleh hilang, atau rekod kredit rosak', zh: '可能造成金钱损失或信用记录受损', ta: 'பணம் இழக்கப்படலாம் அல்லது கடன் பதிவு பாதிக்கப்படலாம்' }],
+  ['misuse', { en: 'The data could be used for something illegal', ms: 'Data boleh disalahgunakan untuk perkara yang menyalahi undang-undang', zh: '数据可能被用于非法用途', ta: 'தரவு சட்டவிரோதமான ஒன்றுக்குப் பயன்படுத்தப்படலாம்' }],
+  ['sensitive_data', { en: 'It includes sensitive data (health, religion, biometrics, financial)', ms: 'Ia termasuk data sensitif (kesihatan, agama, biometrik, kewangan)', zh: '涉及敏感数据（健康、宗教、生物特征、财务）', ta: 'இதில் உணர்திறன் தரவு உள்ளது (உடல்நலம், மதம், உயிரியல் அளவீடு, நிதி)' }],
+  ['identity_fraud', { en: 'Combined with other details it could be used to pretend to be someone', ms: 'Digabungkan dengan butiran lain, ia boleh digunakan untuk menyamar sebagai seseorang', zh: '与其他信息结合后可能被用来冒充他人', ta: 'மற்ற விவரங்களுடன் சேர்த்து ஒருவரைப் போல நடிக்கப் பயன்படுத்தப்படலாம்' }],
+  ['physical_harm', { en: 'Someone could be physically harmed or their property lost', ms: 'Seseorang boleh cedera, atau hartanya hilang', zh: '可能导致人身伤害或财产损失', ta: 'ஒருவர் உடல்ரீதியாகப் பாதிக்கப்படலாம் அல்லது சொத்து இழக்கப்படலாம்' }],
+]
+
 function DpoCard() {
   useLang()
   const s = useFetch<Dpo>('/settings/privacy')
-  const [f, setF] = useState({ dpo_name: '', dpo_email: '', dpo_phone: '' })
+  const [f, setF] = useState({ dpo_name: '', dpo_email: '', dpo_phone: '', require_optin: false })
   const a = useAction()
   const toast = useToast()
-  useEffect(() => { if (s.data) setF({ dpo_name: s.data.dpo_name ?? '', dpo_email: s.data.dpo_email ?? '', dpo_phone: s.data.dpo_phone ?? '' }) }, [s.data])
+  useEffect(() => { if (s.data) setF({ dpo_name: s.data.dpo_name ?? '', dpo_email: s.data.dpo_email ?? '', dpo_phone: s.data.dpo_phone ?? '', require_optin: s.data.require_optin }) }, [s.data])
   const save = () => a.run(async () => { await api('POST', '/settings/privacy', f); toast(t({ en: 'Contact saved.', ms: 'Hubungan disimpan.', zh: '联系人已保存。', ta: 'தொடர்பு சேமிக்கப்பட்டது.' })); s.reload() })
-  const field = (k: keyof typeof f, name: string, type = 'text') => (
+  const field = (k: 'dpo_name' | 'dpo_email' | 'dpo_phone', name: string, type = 'text') => (
     <label className="flex flex-col gap-1 text-sm font-semibold">{name}
       <input className="input font-normal" type={type} maxLength={k === 'dpo_email' ? 254 : 120} value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} /></label>
   )
   return (
     <section className="card mb-6" aria-labelledby="dpo" data-guide="pv-dpo">
       <h2 id="dpo" className="text-lg font-semibold">{t({ en: 'Who customers contact about their data', ms: 'Siapa yang dihubungi pelanggan tentang data mereka', zh: '客户就其数据应联系谁', ta: 'வாடிக்கையாளர்கள் தங்கள் தரவு பற்றி யாரைத் தொடர்பு கொள்வார்கள்' })}</h2>
-      <p className="mt-1 text-sm text-muted">{t({ en: 'Malaysian privacy law (PDPA) asks a business to publish a contact person for questions about personal data. Customers use it to ask what you hold about them.', ms: 'Undang-undang privasi Malaysia (PDPA) meminta perniagaan menyiarkan seorang orang untuk dihubungi bagi soalan tentang data peribadi. Pelanggan menggunakannya untuk bertanya apa yang anda simpan tentang mereka.', zh: '马来西亚隐私法（PDPA）要求企业公布一位个人数据咨询联系人。客户可通过他询问您持有哪些关于他们的数据。', ta: 'மலேசிய தனியுரிமைச் சட்டம் (PDPA), தனிப்பட்ட தரவு குறித்த கேள்விகளுக்கு ஒரு தொடர்பு நபரை வெளியிடுமாறு வணிகத்தைக் கோருகிறது. உங்களிடம் தங்களைப் பற்றி என்ன உள்ளது என்று கேட்க வாடிக்கையாளர்கள் இதைப் பயன்படுத்துகின்றனர்.' })}</p>
+      <p className="mt-1 text-sm text-muted">{t({ en: 'Customers need someone to ask about their data. Malaysia\'s PDPA requires a Data Protection Officer once a business handles personal data of more than 20,000 people (10,000 if it includes sensitive or financial data) or monitors people regularly; below that, a named contact is still good practice. If you do appoint a DPO, register them at daftar.pdp.gov.my within 21 days. This is not legal advice.', ms: 'Pelanggan memerlukan seseorang untuk ditanya tentang data mereka. PDPA Malaysia mewajibkan Pegawai Perlindungan Data apabila perniagaan mengendalikan data peribadi lebih daripada 20,000 orang (10,000 jika termasuk data sensitif atau kewangan) atau memantau orang secara tetap; di bawah itu, seorang yang dinamakan masih amalan baik. Jika anda melantik DPO, daftarkan di daftar.pdp.gov.my dalam masa 21 hari. Ini bukan nasihat undang-undang.', zh: '客户需要有人可以询问其数据。马来西亚 PDPA 规定，企业处理超过 20,000 人的个人数据（若含敏感或财务数据则为 10,000 人）或定期监控他人时，必须设立数据保护官；低于此标准，指定一位联系人仍是良好做法。如果您任命了数据保护官，请在 21 天内到 daftar.pdp.gov.my 登记。这不是法律意见。', ta: 'வாடிக்கையாளர்கள் தங்கள் தரவு பற்றி கேட்க ஒருவர் தேவை. 20,000 பேருக்கு மேற்பட்டவர்களின் (உணர்திறன் அல்லது நிதித் தரவு இருந்தால் 10,000) தனிப்பட்ட தரவைக் கையாளும்போது அல்லது மக்களைத் தொடர்ந்து கண்காணிக்கும்போது மலேசிய PDPA தரவுப் பாதுகாப்பு அதிகாரியைக் கோருகிறது; அதற்குக் கீழும் பெயரிடப்பட்ட தொடர்பு நல்ல நடைமுறை. DPO ஐ நியமித்தால் 21 நாட்களுக்குள் daftar.pdp.gov.my இல் பதிவு செய்யுங்கள். இது சட்ட ஆலோசனை அல்ல.' })}</p>
       <Async s={s} empty={false} rows={2}>
         {s.data && !s.data.configured && <p className="mt-2 font-semibold">{t({ en: 'Not set yet. Add a name and an email or phone number.', ms: 'Belum ditetapkan. Tambah nama dan e-mel atau nombor telefon.', zh: '尚未设置。请添加姓名以及邮箱或电话号码。', ta: 'இன்னும் அமைக்கப்படவில்லை. ஒரு பெயரையும் மின்னஞ்சல் அல்லது தொலைபேசி எண்ணையும் சேர்க்கவும்.' })}</p>}
         <form className="mt-3 grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
           {field('dpo_name', t({ en: 'Name', ms: 'Nama', zh: '姓名', ta: 'பெயர்' }))}{field('dpo_email', t({ en: 'Email', ms: 'E-mel', zh: '邮箱', ta: 'மின்னஞ்சல்' }), 'email')}{field('dpo_phone', t({ en: 'Phone', ms: 'Telefon', zh: '电话', ta: 'தொலைபேசி' }))}
+          <label className="flex min-h-11 items-start gap-2 text-sm font-semibold"><input type="checkbox" className="mt-1" checked={f.require_optin} onChange={e => setF({ ...f, require_optin: e.target.checked })} /><span>{t({ en: 'Ask new customers to reply YES before their first enquiry is read', ms: 'Minta pelanggan baharu membalas YA sebelum pertanyaan pertama mereka dibaca', zh: '要求新客户先回复 YES，才读取其第一条咨询', ta: 'புதிய வாடிக்கையாளர்கள் முதல் விசாரணை படிக்கப்படும் முன் YES என்று பதிலளிக்கக் கேள்' })}<span className="block font-normal text-muted">{t({ en: 'Off: the privacy notice is shown once and the enquiry goes ahead. On: the enquiry waits until they agree, and the agreement is recorded.', ms: 'Mati: notis privasi ditunjukkan sekali dan pertanyaan diteruskan. Hidup: pertanyaan menunggu sehingga mereka bersetuju, dan persetujuan direkodkan.', zh: '关闭：隐私声明只显示一次，咨询照常处理。开启：咨询要等客户同意后才处理，并记录其同意。', ta: 'அணை: தனியுரிமை அறிவிப்பு ஒருமுறை காட்டப்பட்டு விசாரணை தொடரும். இயக்கு: அவர்கள் ஒப்புக்கொள்ளும் வரை விசாரணை காத்திருக்கும், ஒப்புதல் பதிவு செய்யப்படும்.' })}</span></span></label>
           <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t({ en: 'Saving...', ms: 'Menyimpan...', zh: '正在保存...', ta: 'சேமிக்கிறது...' }) : t({ en: 'Save contact', ms: 'Simpan hubungan', zh: '保存联系人', ta: 'தொடர்பைச் சேமி' })}</button></div>
         </form>
         <ActionError err={a.err} onRetry={save} label={t({ en: 'Retry saving', ms: 'Cuba simpan semula', zh: '重试保存', ta: 'சேமிப்பை மீண்டும் முயற்சி' })} />
@@ -52,7 +62,7 @@ function DpoCard() {
 
 function AddIncident({ onDone }: { onDone: () => void }) {
   useLang()
-  const [f, setF] = useState({ detected_at: localNow(), summary: '', types: '', people: '', harm: false })
+  const [f, setF] = useState({ detected_at: localNow(), occurred_at: '', summary: '', types: '', people: '', harm: false, factors: [] as string[] })
   const [err, setErr] = useState('')
   const a = useAction()
   const toast = useToast()
@@ -61,9 +71,9 @@ function AddIncident({ onDone }: { onDone: () => void }) {
     if (!f.detected_at) return setErr(t({ en: 'Enter when you found out.', ms: 'Masukkan bila anda mengetahuinya.', zh: '请输入您发现的时间。', ta: 'நீங்கள் எப்போது அறிந்தீர்கள் என்பதை உள்ளிடவும்.' }))
     setErr('')
     a.run(async () => {
-      await api('POST', '/privacy/breaches', { detected_at: new Date(f.detected_at).toISOString(), summary: f.summary.trim(), significant_harm: f.harm,
+      await api('POST', '/privacy/breaches', { detected_at: new Date(f.detected_at).toISOString(), occurred_at: f.occurred_at ? new Date(f.occurred_at).toISOString() : null, harm_factors: f.factors, summary: f.summary.trim(), significant_harm: f.harm || f.factors.length > 0,
         data_types: f.types.split(',').map(x => x.trim()).filter(Boolean), people_affected: f.people === '' ? null : Math.max(0, Math.floor(Number(f.people))) })
-      toast(t({ en: 'Incident recorded.', ms: 'Insiden direkodkan.', zh: '事件已记录。', ta: 'சம்பவம் பதிவு செய்யப்பட்டது.' })); setF({ detected_at: localNow(), summary: '', types: '', people: '', harm: false }); onDone()
+      toast(t({ en: 'Incident recorded.', ms: 'Insiden direkodkan.', zh: '事件已记录。', ta: 'சம்பவம் பதிவு செய்யப்பட்டது.' })); setF({ detected_at: localNow(), occurred_at: '', summary: '', types: '', people: '', harm: false, factors: [] }); onDone()
     })
   }
   return (
@@ -72,6 +82,9 @@ function AddIncident({ onDone }: { onDone: () => void }) {
       <form className="mt-2 grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'When did you find out?', ms: 'Bila anda mengetahuinya?', zh: '您是何时发现的？', ta: 'நீங்கள் எப்போது அறிந்தீர்கள்?' })}
           <input type="datetime-local" className="input font-normal" value={f.detected_at} onChange={e => setF({ ...f, detected_at: e.target.value })} /></label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'When did it happen? (if you know)', ms: 'Bila ia berlaku? (jika anda tahu)', zh: '事件发生于何时？（如果知道）', ta: 'இது எப்போது நடந்தது? (தெரிந்தால்)' })}
+          <input type="datetime-local" className="input font-normal" aria-describedby="b-occ" value={f.occurred_at} onChange={e => setF({ ...f, occurred_at: e.target.value })} />
+          <Hint id="b-occ">{t({ en: 'The 72 hours to tell the Commissioner count from the earlier of this and when you found out.', ms: '72 jam untuk memaklumkan Pesuruhjaya dikira dari yang lebih awal antara ini dan bila anda mengetahuinya.', zh: '通知专员的 72 小时，从此时间与您发现的时间中较早者起算。', ta: 'ஆணையருக்குத் தெரிவிக்கும் 72 மணி நேரம், இதிலும் நீங்கள் அறிந்த நேரத்திலும் முந்தியதிலிருந்து கணக்கிடப்படும்.' })}</Hint></label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'What happened (short summary)', ms: 'Apa yang berlaku (ringkasan pendek)', zh: '发生了什么（简要说明）', ta: 'என்ன நடந்தது (சுருக்கம்)' })}
           <textarea className="input min-h-20 py-2 font-normal" maxLength={1000} aria-describedby="b-sum" value={f.summary} onChange={e => setF({ ...f, summary: e.target.value })} />
           <Hint id="b-sum">{t({ en: 'Do not write names, phone numbers or message text here.', ms: 'Jangan tulis nama, nombor telefon atau teks mesej di sini.', zh: '请勿在此填写姓名、电话号码或消息内容。', ta: 'பெயர்கள், தொலைபேசி எண்கள் அல்லது செய்தி உரையை இங்கே எழுத வேண்டாம்.' })}</Hint></label>
@@ -79,8 +92,15 @@ function AddIncident({ onDone }: { onDone: () => void }) {
           <input className="input font-normal" placeholder={t({ en: 'name, phone number, address', ms: 'nama, nombor telefon, alamat', zh: '姓名、电话号码、地址', ta: 'பெயர், தொலைபேசி எண், முகவரி' })} value={f.types} onChange={e => setF({ ...f, types: e.target.value })} /></label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t({ en: 'How many people are affected', ms: 'Berapa orang terjejas', zh: '受影响的人数', ta: 'எத்தனை பேர் பாதிக்கப்பட்டனர்' })}
           <input className="input w-40 font-normal" type="number" min="0" inputMode="numeric" value={f.people} onChange={e => setF({ ...f, people: e.target.value })} /></label>
+        <fieldset className="grid gap-1">
+          <legend className="text-sm font-semibold">{t({ en: 'Could this cause serious harm? Tick all that apply.', ms: 'Adakah ini boleh menyebabkan kemudaratan serius? Tandakan semua yang berkenaan.', zh: '这是否可能造成严重伤害？请勾选所有适用项。', ta: 'இது கடுமையான தீங்கை ஏற்படுத்துமா? பொருந்துவன அனைத்தையும் குறிக்கவும்.' })}</legend>
+          {HARM.map(([k, label]) => (
+            <label key={k} className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.factors.includes(k)} onChange={e => setF({ ...f, factors: e.target.checked ? [...f.factors, k] : f.factors.filter(x => x !== k) })} /> {t(label)}</label>
+          ))}
+        </fieldset>
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
-          <input type="checkbox" checked={f.harm} onChange={e => setF({ ...f, harm: e.target.checked })} /> {t({ en: 'This could cause serious harm to the people affected', ms: 'Ini boleh menyebabkan kemudaratan serius kepada orang yang terjejas', zh: '这可能对受影响的人造成严重伤害', ta: 'இது பாதிக்கப்பட்டவர்களுக்கு கடுமையான தீங்கை ஏற்படுத்தக்கூடும்' })}</label>
+          <input type="checkbox" checked={f.harm} onChange={e => setF({ ...f, harm: e.target.checked })} /> {t({ en: 'Another kind of serious harm to the people affected', ms: 'Jenis kemudaratan serius lain kepada orang yang terjejas', zh: '对受影响的人造成的其他严重伤害', ta: 'பாதிக்கப்பட்டவர்களுக்கு மற்றொரு வகையான கடுமையான தீங்கு' })}</label>
         {err && <p role="alert" className="text-sm text-warn">{err}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t({ en: 'Saving...', ms: 'Menyimpan...', zh: '正在保存...', ta: 'சேமிக்கிறது...' }) : t({ en: 'Add incident', ms: 'Tambah insiden', zh: '添加事件', ta: 'சம்பவத்தைச் சேர்' })}</button></div>
       </form>
@@ -127,7 +147,7 @@ function IncidentCard({ i, onDone, confirmOn }: { i: Incident; onDone: () => voi
               : i.subjects_overdue ? t({ en: `Overdue: tell the affected people. The deadline was ${when(i.subjects_due)}.`, ms: `Lewat: maklumkan orang yang terjejas. Tarikh akhir ialah ${when(i.subjects_due)}.`, zh: `已逾期：请通知受影响的人。截止时间为 ${when(i.subjects_due)}。`, ta: `தாமதம்: பாதிக்கப்பட்டவர்களுக்குத் தெரிவிக்கவும். கடைசி நேரம் ${when(i.subjects_due)}.` })
               : t({ en: `Tell affected people by ${when(i.subjects_due)}${sWait && !cWait ? left(i.hours_left) : ''}.`, ms: `Maklumkan orang yang terjejas sebelum ${when(i.subjects_due)}${sWait && !cWait ? left(i.hours_left) : ''}.`, zh: `请在 ${when(i.subjects_due)} 前通知受影响的人${sWait && !cWait ? left(i.hours_left) : ''}。`, ta: `${when(i.subjects_due)} க்குள் பாதிக்கப்பட்டவர்களுக்குத் தெரிவிக்கவும்${sWait && !cWait ? left(i.hours_left) : ''}.` })}
           </li>}
-          {!i.subjects_due && i.significant_harm && <li>{t({ en: 'The date to tell affected people appears once the Commissioner is told.', ms: 'Tarikh untuk memaklumkan orang yang terjejas akan muncul selepas Pesuruhjaya dimaklumkan.', zh: '通知专员后，将显示通知受影响人员的日期。', ta: 'ஆணையரிடம் தெரிவித்த பிறகு, பாதிக்கப்பட்டவர்களுக்குத் தெரிவிக்க வேண்டிய தேதி தோன்றும்.' })}</li>}
+          {!i.subjects_due && (i.significant_harm || i.harm_factors.length > 0) && <li>{t({ en: 'The date to tell affected people appears once the Commissioner is told.', ms: 'Tarikh untuk memaklumkan orang yang terjejas akan muncul selepas Pesuruhjaya dimaklumkan.', zh: '通知专员后，将显示通知受影响人员的日期。', ta: 'ஆணையரிடம் தெரிவித்த பிறகு, பாதிக்கப்பட்டவர்களுக்குத் தெரிவிக்க வேண்டிய தேதி தோன்றும்.' })}</li>}
         </ul>
       )}
       <details className="mt-3">
@@ -242,7 +262,7 @@ function DataRequests() {
                   {ask.action === 'erase' ? <>
                     <p className="font-semibold">{t({ en: `Erase the personal data of ${r.party_name}? This cannot be undone.`, ms: `Padam data peribadi ${r.party_name}? Ini tidak boleh dibatalkan.`, zh: `删除 ${r.party_name} 的个人数据？此操作无法撤销。`, ta: `${r.party_name} இன் தனிப்பட்ட தரவை அழிக்கவா? இதைத் திரும்பப் பெற முடியாது.` })}</p>
                     <p><strong>{t({ en: 'Erased:', ms: 'Dipadam:', zh: '将删除：', ta: 'அழிக்கப்படுபவை:' })}</strong> {t({ en: 'name, contact, email, address, notes and the text of every message with this person.', ms: 'nama, hubungan, e-mel, alamat, nota dan teks setiap mesej dengan orang ini.', zh: '姓名、联系方式、邮箱、地址、备注以及与此人的所有消息内容。', ta: 'பெயர், தொடர்பு, மின்னஞ்சல், முகவரி, குறிப்புகள் மற்றும் இவருடனான ஒவ்வொரு செய்தியின் உரை.' })}</p>
-                    <p><strong>{t({ en: 'Kept:', ms: 'Disimpan:', zh: '将保留：', ta: 'வைக்கப்படுபவை:' })}</strong> {t({ en: 'quotes and prices, as financial records. Earlier entries in the audit log stay.', ms: 'sebut harga dan harga, sebagai rekod kewangan. Entri terdahulu dalam log audit kekal.', zh: '报价和价格（作为财务记录）。审计日志中的早期记录会保留。', ta: 'நிதிப் பதிவுகளாக மேற்கோள்களும் விலைகளும். தணிக்கைப் பதிவில் உள்ள முந்தைய உள்ளீடுகள் அப்படியே இருக்கும்.' })}</p>
+                    <p><strong>{t({ en: 'Kept:', ms: 'Disimpan:', zh: '将保留：', ta: 'வைக்கப்படுபவை:' })}</strong> {t({ en: 'quotes and prices, kept as business records. Earlier entries in the audit log stay.', ms: 'sebut harga dan harga, disimpan sebagai rekod perniagaan. Entri terdahulu dalam log audit kekal.', zh: '报价和价格（作为业务记录保留）。审计日志中的早期记录会保留。', ta: 'வணிகப் பதிவுகளாக மேற்கோள்களும் விலைகளும். தணிக்கைப் பதிவில் உள்ள முந்தைய உள்ளீடுகள் அப்படியே இருக்கும்.' })}</p>
                     <p>{t({ en: `The customer is told on the same channel (${ch(r)}).`, ms: `Pelanggan dimaklumkan melalui saluran yang sama (${ch(r)}).`, zh: `客户会在同一渠道（${ch(r)}）收到通知。`, ta: `வாடிக்கையாளருக்கு அதே சேனலில் (${ch(r)}) தெரிவிக்கப்படும்.` })}</p>
                   </> : <>
                     <p className="font-semibold">{t({ en: `Dismiss this request from ${r.party_name}?`, ms: `Tolak permintaan ini daripada ${r.party_name}?`, zh: `驳回 ${r.party_name} 的这个请求？`, ta: `${r.party_name} இன் இந்தக் கோரிக்கையை நிராகரிக்கவா?` })}</p>
@@ -297,7 +317,7 @@ export function PersonData({ id, name, customer, onDone }: { id: string; name: s
         <div role="group" aria-label={t({ en: 'Confirm erasing personal data', ms: 'Sahkan pemadaman data peribadi', zh: '确认删除个人数据', ta: 'தனிப்பட்ட தரவை அழிப்பதை உறுதிப்படுத்து' })} className="mt-3 grid gap-2 rounded-ui border border-warn p-3 text-sm">
           <p className="font-semibold">{t({ en: `Erase the personal data of ${name}? This cannot be undone.`, ms: `Padam data peribadi ${name}? Ini tidak boleh dibatalkan.`, zh: `删除 ${name} 的个人数据？此操作无法撤销。`, ta: `${name} இன் தனிப்பட்ட தரவை அழிக்கவா? இதைத் திரும்பப் பெற முடியாது.` })}</p>
           <p><strong>{t({ en: 'Erased:', ms: 'Dipadam:', zh: '将删除：', ta: 'அழிக்கப்படுபவை:' })}</strong> {t({ en: 'name, phone or chat number, email, address, notes, and the text of every message with this person.', ms: 'nama, nombor telefon atau sembang, e-mel, alamat, nota, dan teks setiap mesej dengan orang ini.', zh: '姓名、电话或聊天号码、邮箱、地址、备注以及与此人的所有消息内容。', ta: 'பெயர், தொலைபேசி அல்லது அரட்டை எண், மின்னஞ்சல், முகவரி, குறிப்புகள் மற்றும் இவருடனான ஒவ்வொரு செய்தியின் உரை.' })}</p>
-          <p><strong>{t({ en: 'Kept:', ms: 'Disimpan:', zh: '将保留：', ta: 'வைக்கப்படுபவை:' })}</strong> {t({ en: 'the quotes, their lines, dates and prices, as financial records. Earlier entries in the activity log cannot be removed. Telegram, Meta and the AI providers keep their own copies.', ms: 'sebut harga, baris, tarikh dan harganya, sebagai rekod kewangan. Entri terdahulu dalam log aktiviti tidak boleh dibuang. Telegram, Meta dan penyedia AI menyimpan salinan mereka sendiri.', zh: '报价及其明细行、日期和价格（作为财务记录）。活动日志中的早期记录无法移除。Telegram、Meta 和 AI 服务提供商会保留各自的副本。', ta: 'நிதிப் பதிவுகளாக மேற்கோள்கள், அவற்றின் வரிகள், தேதிகள் மற்றும் விலைகள். செயல்பாட்டுப் பதிவில் உள்ள முந்தைய உள்ளீடுகளை நீக்க முடியாது. Telegram, Meta மற்றும் AI வழங்குநர்கள் தங்கள் சொந்த நகல்களை வைத்திருப்பர்.' })}</p>
+          <p><strong>{t({ en: 'Kept:', ms: 'Disimpan:', zh: '将保留：', ta: 'வைக்கப்படுபவை:' })}</strong> {t({ en: 'the quotes, their lines, dates and prices, kept as business records. Earlier entries in the activity log cannot be removed. Telegram, Meta and the AI providers keep their own copies.', ms: 'sebut harga, baris, tarikh dan harganya, disimpan sebagai rekod perniagaan. Entri terdahulu dalam log aktiviti tidak boleh dibuang. Telegram, Meta dan penyedia AI menyimpan salinan mereka sendiri.', zh: '报价及其明细行、日期和价格（作为业务记录保留）。活动日志中的早期记录无法移除。Telegram、Meta 和 AI 服务提供商会保留各自的副本。', ta: 'வணிகப் பதிவுகளாக மேற்கோள்கள், அவற்றின் வரிகள், தேதிகள் மற்றும் விலைகள். செயல்பாட்டுப் பதிவில் உள்ள முந்தைய உள்ளீடுகளை நீக்க முடியாது. Telegram, Meta மற்றும் AI வழங்குநர்கள் தங்கள் சொந்த நகல்களை வைத்திருப்பர்.' })}</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn btn-danger" autoFocus aria-disabled={a.busy || undefined} onClick={erase}>{a.busy ? t({ en: 'Erasing...', ms: 'Memadam...', zh: '正在删除...', ta: 'அழிக்கிறது...' }) : t({ en: 'Yes, erase it', ms: 'Ya, padamkan', zh: '是，删除', ta: 'ஆம், அழி' })}</button>
             <button type="button" className="btn" onClick={() => setAsk(false)}>{t({ en: 'Cancel', ms: 'Batal', zh: '取消', ta: 'ரத்து செய்' })}</button>

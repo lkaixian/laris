@@ -47,7 +47,7 @@ def test_notice_is_sent_once_before_the_reply_and_the_message_is_still_processed
     assert tg_b(e, key, "10 small parts", sec, chat=CHAT).status_code == 200
     assert [x[2][:14] for x in e.svc.sent] == [NOTICE, "Thanks, we rec"]  # the notice is its own message, then the normal reply
     n = e.sql("select notice_version, basis, notice_shown_at is not null as shown, channel, withdrawn_at from customer_consent")
-    assert n == [{"notice_version": 1, "basis": "implied_by_continuing", "shown": True, "channel": "telegram", "withdrawn_at": None}]
+    assert n == [{"notice_version": 1, "basis": "notice_shown", "shown": True, "channel": "telegram", "withdrawn_at": None}]
     assert e.sql("select count(*) n from enquiries")[0]["n"] == 1 and e.sql("select count(*) n from documents where direction='out'")[0]["n"] >= 1
     body = e.svc.sent[0][2]
     assert "voice notes are transcribed" in body.lower() and "/privacy" in body and "/mydata" in body and "/forget" in body and "not kept" in body
@@ -60,7 +60,7 @@ def test_notice_language_dpo_and_version(tge):
     key, sec = setup(e, "ms")
     assert e.c.post("/api/settings/privacy", json={"dpo_name": "Aida", "dpo_email": "dpo@example.com", "notice_version": 3}, headers=e.O).status_code == 200
     tg_b(e, key, "10 small parts", sec, chat=CHAT)
-    assert e.svc.sent[0][2].startswith("Notis privasi") and "Aida, dpo@example.com" in e.svc.sent[0][2] and "/forget" in e.svc.sent[0][2]
+    assert e.svc.sent[0][2].startswith(NOTICE) and "Notis privasi" in e.svc.sent[0][2] and "Aida, dpo@example.com" in e.svc.sent[0][2] and "/forget" in e.svc.sent[0][2]
     assert e.sql("select notice_version v from customer_consent")[0]["v"] == 3
     put(e, {"language": "en"})
     tg_b(e, key, "/privacy", sec, chat=CHAT + 1)
@@ -218,3 +218,31 @@ def test_no_personal_data_in_logs(tge, caplog, monkeypatch):
     e.svc.send = lambda *a, **k: 1 / 0
     e.c.post(f"/api/privacy/requests/{requests(e)[0]['id']}", json={"action": "erase"}, headers=e.O)
     assert str(CHAT) not in caplog.text and "small parts" not in caplog.text
+
+
+def test_notice_is_bilingual_and_covers_the_s7_items(tge):
+    e = tge
+    key, sec = setup(e)
+    tg_b(e, key, "/privacy", sec, chat=CHAT)
+    n = e.svc.sent[-1][2]
+    assert n.startswith(NOTICE) and "Notis privasi" in n  # both national languages in one message, English first
+    for word in ("voluntary", "sukarela", "180 days", "outside Malaysia", "luar Malaysia", "correct", "membetulkan", "limit", "menghadkan"):
+        assert word in n
+    assert "you accept" not in n and "bersetuju" not in n  # no claim that continuing is agreement
+
+
+def test_require_optin_holds_the_enquiry_until_yes(tge):
+    e = tge
+    key, sec = setup(e)
+    assert e.c.post("/api/settings/privacy", json={"require_optin": True}, headers=e.O).json()["require_optin"] is True
+    tg_b(e, key, "10 small parts", sec, chat=CHAT)
+    assert "reply YES" in e.svc.sent[-1][2] and "balas YA" in e.svc.sent[-1][2]
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 0  # not read yet
+    tg_b(e, key, "/privacy", sec, chat=CHAT, mid=2)  # the rights commands work before agreeing
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 0
+    tg_b(e, key, "yes", sec, chat=CHAT, mid=3)
+    assert "Please send your request" in e.svc.sent[-1][2]
+    r = e.sql("select basis, agreed_at is not null as agreed from customer_consent")
+    assert r == [{"basis": "agreed_in_chat", "agreed": True}]
+    tg_b(e, key, "10 small parts", sec, chat=CHAT, mid=4)
+    assert e.sql("select count(*) n from enquiries")[0]["n"] == 1

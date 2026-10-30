@@ -5,24 +5,24 @@ import { ApiError } from './api'
 const Q = new URLSearchParams(location.search)
 const H = 36e5
 const iso = (hoursAgo: number) => new Date(Date.now() - hoursAgo * H).toISOString()
-const RULE_NOTE = "Deadlines are 72 hours to the Commissioner and 7 days to the people affected, as we understand the Commissioner's guideline; confirm the current rule at pdp.gov.my before relying on them."
+const RULE_NOTE = "Deadlines are 72 hours to the Commissioner and 7 days after that to the people affected (Commissioner's Circular 2/2025 and Breach Guideline). The 72 hours are counted from the earlier of when the breach happened and when you detected it. A lawyer has not yet confirmed when the clock starts."
 
-interface B { id: string; detected_at: string; summary: string; data_types: string[]; people_affected: number | null; significant_harm: boolean
+interface B { id: string; detected_at: string; occurred_at: string | null; harm_factors: string[]; summary: string; data_types: string[]; people_affected: number | null; significant_harm: boolean
   commissioner_notified_at: string | null; subjects_notified_at: string | null; status: 'open' | 'closed'; notes: string | null; created_at: string }
-const mk = (id: string, hoursAgo: number, summary: string, extra: Partial<B> = {}): B => ({ id, detected_at: iso(hoursAgo), summary, data_types: ['name', 'phone number'], people_affected: 12, significant_harm: false,
+const mk = (id: string, hoursAgo: number, summary: string, extra: Partial<B> = {}): B => ({ id, detected_at: iso(hoursAgo), occurred_at: null, harm_factors: [], summary, data_types: ['name', 'phone number'], people_affected: 12, significant_harm: false,
   commissioner_notified_at: null, subjects_notified_at: null, status: 'open', notes: null, created_at: iso(hoursAgo), ...extra })
 const mode = Q.get('privacy')
 const incidents: B[] = mode === 'empty' ? [] : mode === 'overdue'
   ? [mk('b1', 100, 'A staff phone with customer chats was lost.', { significant_harm: true, people_affected: 40 })]
   : [mk('b1', 20, 'A quote PDF was emailed to the wrong customer.', { significant_harm: true, people_affected: 1 }),
      mk('b2', 24 * 30, 'A shared spreadsheet was open to anyone with the link for one day.', { status: 'closed', people_affected: 8, notes: 'Link switched off. No sign it was opened.' })]
-let dpo: { dpo_name: string | null; dpo_email: string | null; dpo_phone: string | null; notice_version: number } = mode === 'empty' ? { dpo_name: null, dpo_email: null, dpo_phone: null, notice_version: 1 }
-  : { dpo_name: 'SAMPLE Aisyah Rahman', dpo_email: 'privacy@sample.example', dpo_phone: null, notice_version: 1 }
+let dpo: { dpo_name: string | null; dpo_email: string | null; dpo_phone: string | null; notice_version: number; require_optin: boolean } = mode === 'empty' ? { dpo_name: null, dpo_email: null, dpo_phone: null, notice_version: 1, require_optin: false }
+  : { dpo_name: 'SAMPLE Aisyah Rahman', dpo_email: 'privacy@sample.example', dpo_phone: null, notice_version: 1, require_optin: false }
 
 const view = (b: B) => {
   const t = Date.now(), at = (s: string, ms: number) => new Date(new Date(s).getTime() + ms).toISOString()
-  const notifiable = b.significant_harm || (b.people_affected ?? 0) > 1000
-  const c_due = at(b.detected_at, 72 * H), s_due = b.significant_harm && b.commissioner_notified_at ? at(b.commissioner_notified_at, 7 * 24 * H) : null
+  const harm = b.significant_harm || b.harm_factors.length > 0, notifiable = harm || (b.people_affected ?? 0) > 1000
+  const c_due = at(b.occurred_at && b.occurred_at < b.detected_at ? b.occurred_at : b.detected_at, 72 * H), s_due = harm && b.commissioner_notified_at ? at(b.commissioner_notified_at, 7 * 24 * H) : null
   const cWait = notifiable && !b.commissioner_notified_at && b.status === 'open', sWait = !!s_due && !b.subjects_notified_at && b.status === 'open'
   const due = cWait ? c_due : sWait ? s_due : null
   return { ...b, notifiable, commissioner_due: c_due, subjects_due: s_due, commissioner_overdue: cWait && t > +new Date(c_due), subjects_overdue: sWait && t > +new Date(s_due!),
@@ -46,12 +46,12 @@ export function mockPrivacy(method: string, p: string, owner: boolean, body: any
   if (!/^\/(settings\/(privacy|api-keys)|privacy\/|usage|parties\/[^/]+\/(export|erase))/.test(p)) return undefined
   if (!owner) throw new ApiError(403, 'owner_only', 'owner role required')
   if (p === '/settings/privacy') {
-    if (method === 'POST') dpo = { ...dpo, dpo_name: body.dpo_name?.trim() || null, dpo_email: body.dpo_email?.trim() || null, dpo_phone: body.dpo_phone?.trim() || null }
+    if (method === 'POST') dpo = { ...dpo, dpo_name: body.dpo_name?.trim() || null, dpo_email: body.dpo_email?.trim() || null, dpo_phone: body.dpo_phone?.trim() || null, require_optin: body.require_optin ?? dpo.require_optin }
     return { ...dpo, configured: !!(dpo.dpo_name && (dpo.dpo_email || dpo.dpo_phone)) }
   }
   if (p === '/privacy/breaches' && method === 'GET') return { incidents: [...incidents].sort((a, b) => b.detected_at.localeCompare(a.detected_at)).map(view), rule_note: RULE_NOTE }
   if (p === '/privacy/breaches' && method === 'POST') {
-    const b = mk('b' + (incidents.length + 1), 0, body.summary, { detected_at: body.detected_at, data_types: body.data_types ?? [], people_affected: body.people_affected ?? null, significant_harm: !!body.significant_harm })
+    const b = mk('b' + (incidents.length + 1), 0, body.summary, { detected_at: body.detected_at, occurred_at: body.occurred_at ?? null, harm_factors: body.harm_factors ?? [], data_types: body.data_types ?? [], people_affected: body.people_affected ?? null, significant_harm: !!body.significant_harm })
     incidents.push(b); return view(b)
   }
   if ((m = p.match(/^\/privacy\/breaches\/([^/]+)$/)) && method === 'POST') {

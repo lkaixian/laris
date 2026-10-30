@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 
-from . import auth, db, mailer, ocr, scheduler, vision
+from . import auth, db, mailer, ocr, probe, scheduler, vision
 from . import license as lic
 
 log = logging.getLogger("laris")
@@ -158,7 +158,7 @@ def _svc(key, state):
     return {"key": key, "state": state}
 
 
-def services(ctx) -> list[dict]:
+def services(ctx, live: bool = False, force: bool = False) -> tuple[list[dict], str | None]:
     """Every part LARIS depends on, one row each: ok = checked just now and working; set = configured but not tested live (we never call
     Telegram, ILMU and the rest from here); warn = working with a problem; down = broken; off = not set up or switched off."""
     from .api.assistant import rag_on  # lazy: the api package imports this module
@@ -207,10 +207,13 @@ def services(ctx) -> list[dict]:
     add("telegram", lambda: "set" if _set("TELEGRAM_BOT_TOKEN") or _own_bot(ctx) else "off")
     add("telegram_helper", lambda: "set" if _set("LARIS_HELPER_BOT_TOKEN") and _set("LARIS_HELPER_WEBHOOK_SECRET") else "off")
     add("whatsapp", lambda: "set" if _set("WHATSAPP_TOKEN") and _set("WHATSAPP_PHONE_NUMBER_ID") else "off")
-    return out
+    if not live:
+        return out, None
+    found, at = probe.run(ctx, out, force)  # the only place this readout calls out to the network
+    return [{**v, **found.get(v["key"], {})} for v in out], at
 
 
-def report(ctx) -> dict:
+def report(ctx, live: bool = False, force: bool = False) -> dict:
     items = []
     for chk in CHECKS:
         try:
@@ -219,4 +222,5 @@ def report(ctx) -> dict:
         except Exception as e:  # one broken check yields no item; the type only, the text could carry a URL or a secret
             log.warning("health check %s failed: %s", chk.__name__, type(e).__name__)
     items.sort(key=lambda i: -RANK[i["level"]])
-    return {"level": items[0]["level"] if items else "ok", "items": items, "services": services(ctx)}
+    svc, at = services(ctx, live, force)
+    return {"level": items[0]["level"] if items else "ok", "items": items, "services": svc, **({"checked_at": at} if at else {})}

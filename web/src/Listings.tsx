@@ -472,15 +472,22 @@ function Gallery({ rows, current, onView }: { rows: ListingRow[]; current?: stri
 }
 
 // The photo and its products at a glance, from the list (View beside the date). The full review stays at #/catalog/<id>.
-function PhotoDialog({ id, showPrice, onClose }: { id: string; showPrice: boolean; onClose: () => void }) {
+// Always mounted (like ConfirmDialog): it is opened and closed in place by `id`, never removed from the page, because removing an open
+// modal <dialog> from under the photo detail left it on screen and Close did nothing.
+function PhotoDialog({ id, showPrice, onClose }: { id?: string; showPrice: boolean; onClose: () => void }) {
   useLang()
   const ref = useRef<HTMLDialogElement>(null)
-  const s = useFetch<Detail>(`/listings/${id}`)
-  useEffect(() => { const d = ref.current; if (d && !d.open) d.showModal() }, [])
+  const s = useFetch<Detail>(id ? `/listings/${id}` : null)
+  useEffect(() => {
+    const d = ref.current
+    if (!d) return
+    if (id && !d.open) d.showModal()
+    if (!id && d.open) d.close()
+  }, [id])
   const d = s.data
   const counts = d ? (['confirmed', 'needs_review', 'discarded'] as const).map(k => [k, d.items.filter(i => i.status === k).length] as const) : []
   return (
-    <dialog ref={ref} aria-labelledby="pd-title" onCancel={e => { e.preventDefault(); onClose() }} onClose={onClose}
+    <dialog ref={ref} aria-labelledby="pd-title" onCancel={e => { e.preventDefault(); onClose() }}
       className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-3xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline p-4">
         <div className="min-w-0">
@@ -541,7 +548,7 @@ export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: s
           <Gallery rows={list.data ?? []} current={id} onView={setViewing} />
         </Async>
       </section>
-      {viewing && <PhotoDialog key={viewing} id={viewing} showPrice={canSeePrice(me, owner)} onClose={() => setViewing(undefined)} />}
+      <PhotoDialog id={viewing} showPrice={canSeePrice(me, owner)} onClose={() => setViewing(undefined)} />
       {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}
     </>
   )

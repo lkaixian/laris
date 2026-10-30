@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { ReactNode } from 'react'
 import { api, resolveMe, getRole, setRole, MOCK, authConfig, getToken, getAccount, can, canOpen, ApiError } from './api'
 import type { License } from './api'
@@ -435,6 +436,7 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
 const safeDecode = (s = '') => { try { return decodeURIComponent(s) } catch { return '' } }
 const NOT_ENFORCED: License = { status: 'active', plan: null, seats: null, seats_used: 0, expires_at: null, days_left: null, enforced: false, read_only: false, clock: null }
 
+const AUTH_ORDER: Record<string, number> = { login: 0, register: 1, forgot: 1 }  // moving to a higher number slides forward
 const routeOf = (h: string) => (h.split('/')[1] || 'home').split('?')[0]
 
 // Put a list page back where the reader left it (after Back from a document). Waits for the content to be tall enough; stops if the reader scrolls.
@@ -467,8 +469,16 @@ function AppShell() {
     history.scrollRestoration = 'manual'
     const h = () => {
       seen.current.set(routeOf(prev.current.now), scrollY)  // read before React swaps the page
+      const was = routeOf(prev.current.now), to = routeOf(location.hash)
       prev.current = { from: prev.current.now, now: location.hash }
-      setHash(location.hash)
+      // Sign-in <-> register <-> forgot: the card slides the way you are going (view transition; see .auth-card in theme.css). Anything else just swaps.
+      const a = AUTH_ORDER[was], b = AUTH_ORDER[to]
+      if (a !== undefined && b !== undefined && was !== to && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const root = document.documentElement
+        root.dataset.authDir = b >= a ? 'fwd' : 'back'
+        const next = location.hash
+        document.startViewTransition(() => flushSync(() => setHash(next))).finished.finally(() => delete root.dataset.authDir)
+      } else setHash(location.hash)
     }
     addEventListener('hashchange', h); return () => removeEventListener('hashchange', h)
   }, [])

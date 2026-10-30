@@ -47,11 +47,11 @@ export function AuthPage({ dark, setDark, children, onBrand }: { dark: boolean; 
   useLang()
   return (
     <main id="main" className="mx-auto grid min-h-screen max-w-md content-center gap-6 px-4 py-8">
-      <div className="flex items-center justify-between gap-4">
+      <div className="auth-head flex items-center justify-between gap-4">
         <a href="#/login" aria-label={t(S.goSignIn)} onClick={onBrand} className="inline-flex min-h-11 items-center"><Brand dark={dark} /></a>
         <ThemeToggle dark={dark} setDark={setDark} />
       </div>
-      {children}
+      <div className="auth-card grid gap-6">{children}</div>
     </main>
   )
 }

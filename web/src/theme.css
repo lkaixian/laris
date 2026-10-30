@@ -173,6 +173,17 @@
   .toast { @apply flex w-full items-start gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink shadow-2; animation: page-in 150ms ease-out; }
   .toast-x { @apply -my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-ui text-muted hover:bg-tint hover:text-ink; }
   .page-in { animation: page-in 150ms ease-out; }
+  /* Sign-in <-> register <-> forgot (App.tsx starts a view transition and sets data-auth-dir). The logo row stays put; the card slides out and the
+     next one slides in from the side you are heading to, resizing smoothly between the two heights. Stops under reduced motion (App.tsx skips it). */
+  .auth-head { view-transition-name: auth-head; }
+  .auth-card { view-transition-name: auth-card; }
+  ::view-transition-group(auth-card) { animation-duration: 360ms; animation-timing-function: var(--ease-tile); }
+  ::view-transition-old(auth-card), ::view-transition-new(auth-card) { mix-blend-mode: normal; }
+  ::view-transition-old(auth-card) { animation: auth-out 200ms ease-in both; }
+  ::view-transition-new(auth-card) { animation: auth-in 360ms var(--ease-tile) 90ms both; }
+  html[data-auth-dir='back'] { --auth-out: 28px; --auth-in: -40px; }
+  @keyframes auth-out { to { opacity: 0; transform: translateX(var(--auth-out, -28px)) scale(0.98); } }
+  @keyframes auth-in { from { opacity: 0; transform: translateX(var(--auth-in, 40px)) scale(0.98); } }
   /* Ask Laris. The panel grows out of its button and stays mounted, so reopening is instant and the conversation is kept; closed, it is
      visibility:hidden once the exit ends (out of the tab order and the accessibility tree). The button folds to its icon while the panel is
      open. Every part stops under prefers-reduced-motion (the rule at the top of this file). */

@@ -20,6 +20,7 @@ const N = {
   replies: { en: 'customer replies to record', ms: 'balasan pelanggan untuk direkod', zh: '条客户回复待记录', ta: 'பதிவு செய்ய வேண்டிய வாடிக்கையாளர் பதில்கள்' },
   chase: { en: 'quotes waiting for a reply', ms: 'sebut harga menunggu balasan', zh: '份报价等待回复', ta: 'பதிலுக்காகக் காத்திருக்கும் விலைப்புள்ளிகள்' },
   late: { en: 'jobs are overdue', ms: 'kerja lewat tempoh', zh: '项工单已逾期', ta: 'வேலைகள் காலம் கடந்துள்ளன' },
+  orbit: { en: 'Trade Orbit', ms: 'Orbit Dagangan', zh: '贸易轨道', ta: 'வர்த்தக சுற்றுப்பாதை' },
   go: { en: 'Open', ms: 'Buka', zh: '打开', ta: 'திற' },
   clear: { en: 'All clear. Nothing needs you right now.', ms: 'Semua jelas. Tiada yang perlukan anda sekarang.', zh: '一切就绪，目前没有需要您处理的事项。', ta: 'எல்லாம் சரி. இப்போது எதுவும் தேவையில்லை.' },
 }
@@ -218,7 +219,7 @@ function HomeTiles({ d, owner, userId }: { d: Dash; owner: boolean; userId: stri
 function strip(d: Dash, owner: boolean): BentoTile[] {
   return [
     { id: 'needsyou', size: 'M', title: t(N.head), node: <NeedsYou d={d} /> },
-    ...(owner || (can('record_payments') && can('view_costs')) ? [{ id: 'orbit', size: 'XL' as const, title: 'Trade Orbit', node: <section className="glass-lite p-3" aria-label="Trade Orbit"><LiveOrbit /></section> }] : []),
+    ...(owner || (can('record_payments') && can('view_costs')) ? [{ id: 'orbit', size: 'XL' as const, title: t(N.orbit), node: <section className="glass-lite p-3" aria-label={t(N.orbit)}><LiveOrbit /></section> }] : []),
   ]
 }
 

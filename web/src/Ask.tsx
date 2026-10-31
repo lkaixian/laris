@@ -21,6 +21,12 @@ const S = {
   needDesc: { en: 'Describe the item in a few words.', ms: 'Terangkan item dalam beberapa perkataan.', zh: '请用几个字描述该物品。', ta: 'பொருளை சில சொற்களில் விவரிக்கவும்.' },
   needSup: { en: 'Choose at least one supplier to ask.', ms: 'Pilih sekurang-kurangnya seorang pembekal untuk ditanya.', zh: '请至少选择一位供应商询问。', ta: 'கேட்பதற்கு குறைந்தது ஒரு சப்ளையரைத் தேர்ந்தெடுக்கவும்.' },
   noPrep: { en: 'The photo could not be prepared for sending.', ms: 'Foto tidak dapat disediakan untuk dihantar.', zh: '无法准备要发送的照片。', ta: 'அனுப்புவதற்கான புகைப்படத்தைத் தயார் செய்ய முடியவில்லை.' },
+  findSup: { en: 'Search your supplier contacts', ms: 'Cari kenalan pembekal anda', zh: '搜索供应商联系人', ta: 'சப்ளையர் தொடர்புகளைத் தேடு' },
+  clearSel: { en: 'Clear', ms: 'Kosongkan', zh: '清除', ta: 'அழி' },
+  selected: { en: 'Selected suppliers', ms: 'Pembekal dipilih', zh: '已选供应商', ta: 'தேர்ந்த சப்ளையர்கள்' },
+  selectShown: { en: 'Select all shown', ms: 'Pilih semua yang dipaparkan', zh: '选择当前显示的全部', ta: 'காட்டப்பட்ட அனைத்தையும் தேர்ந்தெடு' },
+  noMatch: { en: 'No supplier contact matches.', ms: 'Tiada kenalan pembekal sepadan.', zh: '没有匹配的供应商联系人。', ta: 'பொருந்தும் சப்ளையர் தொடர்பு இல்லை.' },
+  number: { en: 'WhatsApp or Telegram number', ms: 'Nombor WhatsApp atau Telegram', zh: 'WhatsApp 或 Telegram 号码', ta: 'WhatsApp அல்லது Telegram எண்' },
   supplier: { en: 'Supplier', ms: 'Pembekal', zh: '供应商', ta: 'சப்ளையர்' },
   noNumber: { en: 'no WhatsApp number', ms: 'tiada nombor WhatsApp', zh: '没有 WhatsApp 号码', ta: 'WhatsApp எண் இல்லை' },
   saving: { en: 'Saving...', ms: 'Menyimpan...', zh: '正在保存...', ta: 'சேமிக்கிறது...' },
@@ -29,7 +35,12 @@ const S = {
 
 function AskForm({ onSent }: { onSent: () => void }) {
   useLang()
-  const sup = useFetch<Supplier[]>('/contacts?role=supplier')
+  const [typed, setTyped] = useState('')
+  const [q, setQ] = useState('')
+  useEffect(() => { const id = setTimeout(() => setQ(typed.trim()), 250); return () => clearTimeout(id) }, [typed])
+  const sup = useFetch<Supplier[]>(`/contacts?role=supplier${q ? `&q=${encodeURIComponent(q)}` : ''}`)
+  const known = useRef(new Map<string, Supplier>())  // every supplier seen so far, so a ticked one stays named when a new search hides it
+  sup.data?.forEach(s => known.current.set(s.id, s))
   const [img, setImg] = useState<HTMLImageElement>()
   const [desc, setDesc] = useState('')
   const [note, setNote] = useState(DEFAULT_NOTE)
@@ -54,6 +65,9 @@ function AskForm({ onSent }: { onSent: () => void }) {
   }
 
   const toggle = (id: string) => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))
+  const usable = (sup.data ?? []).filter(s => s.contact)  // a supplier with no number cannot be asked
+  const allShown = usable.length > 0 && usable.every(s => picked.includes(s.id))
+  const toggleAll = () => setPicked(p => (allShown ? p.filter(id => !usable.some(s => s.id === id)) : [...new Set([...p, ...usable.map(s => s.id)])]))
 
   const submit = () => {
     if (!img || !canvas.current) return setFormErr(t(S.needPhoto))
@@ -74,7 +88,7 @@ function AskForm({ onSent }: { onSent: () => void }) {
     })
   }
 
-  const nameOf = (id: string) => sup.data?.find(s => s.id === id)?.name ?? t(S.supplier)
+  const nameOf = (id: string) => known.current.get(id)?.name ?? t(S.supplier)
   return (
     <section aria-labelledby="ask-form">
       <h2 id="ask-form" className="mb-2 text-lg font-semibold">{t({ en: 'Ask for a price', ms: 'Tanya harga', zh: '询价', ta: 'விலை கேள்' })}</h2>
@@ -91,17 +105,27 @@ function AskForm({ onSent }: { onSent: () => void }) {
 
         <fieldset data-guide="ask-suppliers" className="min-w-0">
           <legend className="mb-1 text-sm font-semibold">{t({ en: 'Which suppliers to ask? (choose at least one)', ms: 'Pembekal mana untuk ditanya? (pilih sekurang-kurangnya satu)', zh: '要询问哪些供应商？（至少选择一位）', ta: 'எந்த சப்ளையர்களிடம் கேட்பது? (குறைந்தது ஒன்றைத் தேர்ந்தெடுக்கவும்)' })}</legend>
-          <Async s={sup} rows={3} empty={!sup.data?.length} emptyText={t({ en: 'No suppliers yet.', ms: 'Belum ada pembekal.', zh: '还没有供应商。', ta: 'இன்னும் சப்ளையர்கள் இல்லை.' })} emptyHint={t({ en: 'Add the suppliers you want to ask under Contacts first.', ms: 'Tambah pembekal yang mahu ditanya di bawah Kenalan dahulu.', zh: '请先在“联系人”中添加要询问的供应商。', ta: 'முதலில் தொடர்புகளில் நீங்கள் கேட்க விரும்பும் சப்ளையர்களைச் சேர்க்கவும்.' })} emptyAction={{ label: t({ en: 'Add a supplier', ms: 'Tambah pembekal', zh: '添加供应商', ta: 'சப்ளையரைச் சேர்' }), href: '#/contacts/new' }}>
-            <ul className="grid gap-1">
-              {sup.data?.map(s => (
-                <li key={s.id}>
-                  <label className="flex min-h-11 items-center gap-3 rounded-ui border border-soft bg-surface px-3 text-sm">
-                    <input type="checkbox" className="size-5 shrink-0" checked={picked.includes(s.id)} onChange={() => toggle(s.id)} />
-                    <span className="min-w-0 break-words"><span className="font-semibold">{s.name}</span> <span className="text-muted">{s.contact ?? t(S.noNumber)}</span></span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+          <input type="search" className="input w-full font-normal" value={typed} onChange={e => setTyped(e.target.value)} aria-label={t(S.findSup)} placeholder={t(S.findSup)} />
+          <p className="mt-1 text-sm text-muted" role="status">{t({ en: `${picked.length} selected`, ms: `${picked.length} dipilih`, zh: `已选 ${picked.length} 位` })}
+            {picked.length > 0 && <> · <button type="button" className="link" onClick={() => setPicked([])}>{t(S.clearSel)}</button></>}</p>
+          {picked.length > 0 && <ul className="mt-1 flex flex-wrap gap-1" aria-label={t(S.selected)}>{picked.map(id => <li key={id} className="badge">{nameOf(id)}</li>)}</ul>}
+          <Async s={sup} rows={3} empty={!sup.data?.length} emptyText={q ? t(S.noMatch) : t({ en: 'No suppliers yet.', ms: 'Belum ada pembekal.', zh: '还没有供应商。', ta: 'இன்னும் சப்ளையர்கள் இல்லை.' })}>
+            <div className="scroll-table mt-2" tabIndex={0} role="region" aria-label={t(S.supplier)}>
+              <table className="w-full text-left text-sm">
+                <thead><tr className="text-muted">
+                  <th scope="col" className="w-10 py-1 pr-2"><input type="checkbox" className="size-5" checked={allShown} disabled={!usable.length} onChange={toggleAll} aria-label={t(S.selectShown)} /></th>
+                  <th scope="col" className="py-1 pr-3 font-semibold">{t(S.supplier)}</th><th scope="col" className="py-1 pr-3 font-semibold">{t(S.number)}</th>
+                </tr></thead>
+                <tbody>
+                  {sup.data?.map(s => (
+                    <tr key={s.id} className="border-t border-soft align-middle">
+                      <td className="py-1.5 pr-2"><input type="checkbox" className="size-5" checked={picked.includes(s.id)} disabled={!s.contact} onChange={() => toggle(s.id)} aria-label={s.name} /></td>
+                      <td className="py-1.5 pr-3 font-semibold break-words">{s.name}</td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted">{s.contact ?? t(S.noNumber)}</td>
+                    </tr>))}
+                </tbody>
+              </table>
+            </div>
           </Async>
         </fieldset>
 

@@ -55,3 +55,16 @@ def test_usage_route_and_old_calls_do_not_count(env, monkeypatch):
     licensed(monkeypatch, "pro")
     r = e.c.get("/api/ai/usage", headers=e.O).json()
     assert r["limited"] and r["ai"]["used"] == 2 and r["ai"]["limit"] == lic.PLANS["pro"]["ai_month"] and r["photos"]["limit"] == lic.PLANS["pro"]["photos_month"]
+
+
+def test_mcp_search_stops_at_the_allowance(env, monkeypatch):
+    from test_mcp import call, mcp_key, opt_in, staff_role_id
+    e = env
+    opt_in(e)
+    key = mcp_key(e, str(staff_role_id(e)))["key"]
+    calls(e, lic.PLANS["starter"]["ai_month"])
+    licensed(monkeypatch, "starter")
+    r = call(e, key, "tools/call", {"name": "search", "arguments": {"query": "filament"}}).json()
+    assert r["error"]["code"] == -32000 and "allowance" in r["error"]["message"]
+    licensed(monkeypatch, "pro")  # the same usage is inside a higher plan
+    assert "result" in call(e, key, "tools/call", {"name": "search", "arguments": {"query": "filament"}}).json()

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { api } from './api'
 import { Async, PageHeader, msg, useAction, ActionError, useFetch } from './ui'
+import { UsageBars } from './AiActivity'
 import { useToast } from './Toast'
 import { locale, t, useLang } from './i18n'
 
@@ -125,6 +126,7 @@ export function ApiAccessView() {
     <>
       <PageHeader title={t({ en: 'API access', ms: 'Akses API', zh: 'API 访问', ta: 'API அணுகல்' })} description={t({ en: 'Let another program, such as your own system, ask LARIS for selling prices.', ms: 'Benarkan program lain, seperti sistem anda sendiri, meminta harga jualan daripada LARIS.', zh: '让其他程序（例如您自己的系统）向 LARIS 查询售价。', ta: 'உங்கள் சொந்த அமைப்பு போன்ற மற்றொரு நிரல் LARIS இடம் விற்பனை விலைகளைக் கேட்க அனுமதிக்கவும்.' })} />
       <UsageCard />
+      <div className="mb-6" data-guide="api-ai-usage"><UsageBars /></div>
       <Keys />
       <section className="card" aria-labelledby="how" data-guide="api-how">
         <h2 id="how" className="text-lg font-semibold">{t({ en: 'How to call it', ms: 'Cara memanggilnya', zh: '如何调用', ta: 'எப்படி அழைப்பது' })}</h2>

@@ -36,6 +36,7 @@ const MASK: Record<string, Text> = {
 }
 
 interface Usage { plan: string | null; limited: boolean; resets_at: string; ai: { used: number; limit: number | null }; photos: { used: number; limit: number | null } }
+const PLAN_NAME: Record<string, string> = { starter: 'LARIS Lite', standard: 'LARIS Standard', pro: 'LARIS Pro' }  // the names on the Pricing page
 const U = {
   h: { en: 'This month on your plan', ms: 'Bulan ini pada pelan anda', zh: '本月套餐用量', ta: 'இந்த மாதம் உங்கள் திட்டத்தில்' },
   ai: { en: 'AI messages', ms: 'Mesej AI', zh: 'AI 消息', ta: 'AI செய்திகள்' },
@@ -46,7 +47,7 @@ const U = {
 } satisfies Record<string, Text>
 
 // Weekly allowance bars (src/ai_quota.py). Nothing shows when no licence is enforced, because then nothing is limited.
-function UsageBars() {
+export function UsageBars() {
   const [lang] = useLang()
   const s = useFetch<Usage>('/ai/usage')
   const d = s.data
@@ -54,8 +55,8 @@ function UsageBars() {
   const rows = [[U.ai, d.ai], [U.photos, d.photos]] as const
   const full = rows.some(([, m]) => m.limit !== null && m.used >= m.limit)
   return (
-    <section className="card grid gap-3" aria-labelledby="ai-use-h">
-      <h3 id="ai-use-h" className="font-semibold">{t(U.h, lang)}</h3>
+    <section className="grid gap-3 rounded-ui bg-tint p-3" aria-labelledby="ai-use-h">
+      <h3 id="ai-use-h" className="flex flex-wrap items-center gap-2 font-semibold">{t(U.h, lang)}{d.plan && <span className="badge">{PLAN_NAME[d.plan] ?? d.plan}</span>}</h3>
       {rows.map(([label, m]) => m.limit === null ? null : (
         <div key={label.en}>
           <div className="flex justify-between text-sm"><span>{t(label, lang)}</span><span className="tabular-nums">{m.used.toLocaleString()} / {m.limit.toLocaleString()}</span></div>
@@ -72,7 +73,7 @@ export function AiActivity() {
   const hide = (m: Record<string, number>) => Object.entries(m).map(([k, n]) => `${n} ${k in MASK ? t(MASK[k], lang) : k.toLowerCase()}`).join(', ') || t(S.none, lang)
   const d = s.data
   return (
-    <section className="grid gap-3" aria-labelledby="ai-act-h">
+    <section className="card grid gap-3" aria-labelledby="ai-act-h">
       <div>
         <h2 id="ai-act-h" className="text-md font-semibold">{t(S.title, lang)}</h2>
         <p className="text-sm text-muted">{d ? t(d.scope === 'all' ? S.all : S.own, lang) : ''} {t(S.note, lang)}</p>
@@ -82,10 +83,10 @@ export function AiActivity() {
         {d && (<>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {([[S.calls, String(d.totals.calls)], [S.failed, String(d.totals.failed)], [S.median, `${d.totals.median_ms} ms`], [S.hidden, hide(d.totals.masked)]] as const).map(([k, v]) => (
-              <div key={k.en} className="card"><dt className="text-sm text-muted">{t(k, lang)}</dt><dd className="text-md font-semibold">{v}</dd></div>
+              <div key={k.en} className="rounded-ui bg-tint p-3"><dt className="text-sm text-muted">{t(k, lang)}</dt><dd className="text-md font-semibold">{v}</dd></div>
             ))}
           </dl>
-          <div className="overflow-x-auto">
+          <div className="scroll-table" tabIndex={0} role="region" aria-label={t(S.title, lang)}>
             <table className="w-full min-w-[34rem] text-left text-sm">
               <thead><tr className="text-muted">
                 <th scope="col" className="py-1 pr-3 font-semibold">{t(S.when, lang)}</th><th scope="col" className="py-1 pr-3 font-semibold">{t(S.what, lang)}</th>

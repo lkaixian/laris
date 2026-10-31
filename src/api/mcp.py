@@ -11,7 +11,7 @@ import time
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import Response
 
-from .. import ai_log, perms, rag
+from .. import ai_log, ai_quota, perms, rag
 from ..errors import ApiError
 from ..parse_util import Mask, contact_names
 from .ai_guide import ai_row
@@ -77,5 +77,9 @@ def mcp(msg: dict = Body(...), ctx: Ctx = Depends(mcp_ctx)):
         q = a.get("query") if isinstance(a, dict) else None
         if not isinstance(p, dict) or p.get("name") != "search" or not isinstance(q, str) or not 1 <= len(q.strip()) <= 200:
             return err(i, -32602, "call the search tool with a query of 1 to 200 characters")
+        try:
+            ai_quota.check(ctx.conn, ctx.tenant_id, "ai")
+        except ApiError as e:  # the monthly allowance for AI messages is used up
+            return err(i, -32000, e.message)
         return ok(i, search(ctx, q.strip()))
     return err(i, -32601, "method not found")

@@ -6,7 +6,7 @@ anyio==4.15.1
 certifi==2026.10.23
 idna==3.20
 pyyaml==6.0.2
-pypdf==6.21.2
+pypdf==6.21.4
 pillow==13.0.0
 pytesseract==0.3.13
 reportlab==5.0.1

@@ -43,6 +43,8 @@ def record(conn, tenant_id, user_id, kind: str) -> Counter:
 def logged(conn, tenant_id, user_id, kind: str, into: Counter | None = None):
     """Wrap the code that calls the model. ponytail: when the call fails and the route then raises, the request rolls back
     and so does the row; failures the route handles itself (assistant, availability, rfq reply) are kept."""
+    from . import ai_quota  # local: license imports db
+    ai_quota.check(conn, tenant_id, "ai")
     try:
         yield
     finally:

@@ -48,7 +48,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'tracker', label: 'Tracker', icon: 'tracker' },
     { key: 'track', label: 'Schedule', icon: 'pipeline' },
     { key: 'jobs', label: 'Jobs', icon: 'jobs' },
-    { key: 'deals', label: 'Deals', icon: 'tracker' },
+    { key: 'customers', label: 'Customers', icon: 'contacts' },
     { key: 'followups', label: 'Follow-ups', icon: 'clock' },
   ] },
   { label: 'Suppliers', items: [
@@ -56,6 +56,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'products', label: 'Compare prices', icon: 'pipeline' },
     { key: 'contracts', label: 'Contracts', icon: 'tracker' },
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
+    { key: 'buying', label: 'Supplier orders', icon: 'tracker' },
     { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
   ] },
@@ -72,6 +73,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'team', label: 'Team', icon: 'team' },
     { key: 'roles', label: 'Roles', icon: 'roles' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
+    { key: 'templates', label: 'Document templates', icon: 'upload' },
     { key: 'privacy', label: 'Privacy and data', icon: 'roles' },
     { key: 'api-access', label: 'API access', icon: 'key' },
     { key: 'ai-settings', label: 'AI settings', icon: 'ask' },
@@ -82,7 +84,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
 ]
 
 // Routes that are children of a nav item: the parent stays marked while you are on them.
-const PARENT: Record<string, string> = { supplier: 'suppliers', product: 'products', contract: 'contracts', doc: 'tracker', contact: 'contacts', purchase: 'licence' }
+const PARENT: Record<string, string> = { deals: 'customers', supplier: 'suppliers', product: 'products', contract: 'contracts', doc: 'tracker', contact: 'contacts', purchase: 'licence' }
 
 export const visibleNav = (me: Me | undefined, owner: boolean) =>
   NAV.map(g => ({ ...g, items: g.items.filter(i => canOpen(i.key, owner) && (i.when?.(me) ?? true)) })).filter(g => g.items.length)

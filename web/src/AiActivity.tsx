@@ -35,6 +35,37 @@ const MASK: Record<string, Text> = {
   CARD: { en: 'card', ms: 'kad', zh: '银行卡', ta: 'அட்டை' }, ACCT: { en: 'bank account', ms: 'akaun bank', zh: '银行账户', ta: 'வங்கிக் கணக்கு' }, NAME: { en: 'name', ms: 'nama', zh: '姓名', ta: 'பெயர்' },
 }
 
+interface Usage { plan: string | null; limited: boolean; resets_at: string; ai: { used: number; limit: number | null }; photos: { used: number; limit: number | null } }
+const U = {
+  h: { en: 'This week on your plan', ms: 'Minggu ini pada pelan anda', zh: '本周套餐用量', ta: 'இந்த வாரம் உங்கள் திட்டத்தில்' },
+  ai: { en: 'AI messages', ms: 'Mesej AI', zh: 'AI 消息', ta: 'AI செய்திகள்' },
+  photos: { en: 'Photo reads', ms: 'Bacaan foto', zh: '照片识别', ta: 'படம் வாசிப்பு' },
+  resets: { en: 'Resets on', ms: 'Ditetapkan semula pada', zh: '重置于', ta: 'மீட்டமைவு' },
+  full: { en: 'Used up for this week. A higher plan has a bigger allowance.', ms: 'Telah habis untuk minggu ini. Pelan yang lebih tinggi mempunyai had lebih besar.', zh: '本周额度已用完。更高的套餐额度更大。' },
+  more: { en: 'See plans', ms: 'Lihat pelan', zh: '查看套餐' },
+} satisfies Record<string, Text>
+
+// Weekly allowance bars (src/ai_quota.py). Nothing shows when no licence is enforced, because then nothing is limited.
+function UsageBars() {
+  const [lang] = useLang()
+  const s = useFetch<Usage>('/ai/usage')
+  const d = s.data
+  if (!d?.limited) return null
+  const rows = [[U.ai, d.ai], [U.photos, d.photos]] as const
+  const full = rows.some(([, m]) => m.limit !== null && m.used >= m.limit)
+  return (
+    <section className="card grid gap-3" aria-labelledby="ai-use-h">
+      <h3 id="ai-use-h" className="font-semibold">{t(U.h, lang)}</h3>
+      {rows.map(([label, m]) => m.limit === null ? null : (
+        <div key={label.en}>
+          <div className="flex justify-between text-sm"><span>{t(label, lang)}</span><span className="tabular-nums">{m.used.toLocaleString()} / {m.limit.toLocaleString()}</span></div>
+          <progress className="mt-1 h-2 w-full accent-(--accent)" value={Math.min(m.used, m.limit)} max={m.limit} aria-label={t(label, lang)} />
+        </div>))}
+      <p className="text-sm text-muted">{full ? <>{t(U.full, lang)} <a className="link" href="#/pricing">{t(U.more, lang)}</a>. </> : null}{t(U.resets, lang)} {new Date(d.resets_at).toLocaleDateString(locale(lang), { weekday: 'long', day: 'numeric', month: 'short' })}.</p>
+    </section>
+  )
+}
+
 export function AiActivity() {
   const [lang] = useLang()
   const s = useFetch<Activity>('/ai/activity')
@@ -46,6 +77,7 @@ export function AiActivity() {
         <h2 id="ai-act-h" className="text-md font-semibold">{t(S.title, lang)}</h2>
         <p className="text-sm text-muted">{d ? t(d.scope === 'all' ? S.all : S.own, lang) : ''} {t(S.note, lang)}</p>
       </div>
+      <UsageBars />
       <Async s={s} empty={d?.totals.calls === 0} emptyText={t(S.emptyT, lang)} emptyHint={t(S.emptyH, lang)} rows={3}>
         {d && (<>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">

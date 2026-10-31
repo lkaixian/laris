@@ -1,4 +1,4 @@
-import { DealsView } from './Deals'
+import { BuyingView, DealsView } from './Deals'
 import { ReportsView } from './Reports'
 import { HelloBanner } from './HelloBanner'
 import { useEffect, useRef, useState } from 'react'
@@ -30,6 +30,8 @@ import { AssistantView, AssistantWidget } from './Assistant'
 import { GuidePanel } from './Guide'
 import { HomeView } from './Home'
 import { RevenueView } from './Revenue'
+import { CustomersView } from './Customers'
+import { TemplatesView } from './Templates'
 import { TrackView } from './Track'
 import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
@@ -463,7 +465,10 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   search: { render: c => <SearchView q={safeDecode(c.arg)} /> },
   track: { render: () => <TrackView /> },
   jobs: { render: c => <JobsView me={c.me} /> },
+  customers: { render: c => <CustomersView owner={c.owner} arg={c.arg} /> },
+  buying: { render: () => <BuyingView /> },
   deals: { render: c => <DealsView owner={c.owner} arg={c.arg} /> },
+  templates: { render: c => <TemplatesView owner={c.owner} /> },
   settings: { render: c => <SettingsView owner={c.owner} setDark={c.setDark} /> },
   team: { render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   privacy: { render: () => <PrivacyView /> },

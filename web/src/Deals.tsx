@@ -1,15 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from './api'
-import type { Job } from './api'
 import { OrderPage } from './Order'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { Async, PageHeader, Status, msg, rm, useFetch } from './ui'
-import { DataTable, StatStrip, StatTile, Tabs } from './kit'
-import type { Col } from './kit'
+import { DataTable } from './kit'
+
 import { useToast } from './Toast'
 import { BuyLane } from './BuyLane'
-import { docName, PACKS, say, useSector } from './sectorPacks'
+import { docName, say, useSector } from './sectorPacks'
 import type { DocKind, SectorPack } from './sectorPacks'
 
 // Deals: orders (the money and paper of an order are on its own page, Order.tsx) plus the customer PO, sales order and supplier PO in the words of the chosen sector.
@@ -22,7 +21,6 @@ interface CDoc {
   lines: Ln[]; subtotal: string; discount: string; sst: string; rounding: string; total: string; note: string | null; created_at: string
 }
 interface Detail extends CDoc { trail: CDoc[]; history: { at: string; event: string; actor: string }[] }
-interface Recv { as_of: string; total: string; deposits_waiting: number; buckets: Record<string, { count: number; outstanding: string }> }
 
 const ORDER: DocKind[] = ['cpo', 'so', 'spo']
 const D = {
@@ -45,104 +43,45 @@ const NEEDS_REASON = ['void', 'cancelled', 'returned']
 
 export function DealsView({ owner, arg }: { owner: boolean; arg?: string }) {
   useLang()
-  const [pack, setPack] = useSector()
-  const [kind, setKind] = useState<'all' | DocKind>('all')
-  const [adding, setAdding] = useState(false)
-  const list = useFetch<CDoc[]>('/chain')
-  const recv = useFetch<Recv>('/chain/receivables')
-  const jobs = useFetch<Job[]>('/jobs?limit=100')
-  const rows = (list.data ?? []).filter(d => pack.docs.includes(d.kind) && (kind === 'all' || d.kind === kind))
-  const all = (list.data ?? []).filter(d => pack.docs.includes(d.kind))
-  const count = (f: (d: CDoc) => boolean) => all.filter(f).length
-  const kpi: Record<string, number | string> = {
-    open: count(d => d.kind === 'so' && d.status === 'confirmed'), deposits: recv.data?.deposits_waiting ?? 0,
-    approval: count(d => d.status === 'pending_approval'), owed: rm(recv.data?.total ?? '0'),
-  }
-  const cols: Col<CDoc>[] = [
-    { key: 'no', head: 'Document', mobile: 'title', cell: d => <a href={`#/deals/d:${d.id}`}>{d.doc_no}</a> },
-    { key: 'type', head: 'Type', mobile: 'sub', cell: d => docName(pack, d.kind) },
-    { key: 'who', head: say(pack.terms.customer), mobile: 'meta', cell: d => d.party ?? '' },
-    { key: 'st', head: 'Status', mobile: 'badge', cell: d => <Status v={d.status} /> },
-    { key: 'total', head: 'Total', num: true, mobile: 'meta', cell: d => rm(d.total) },
-  ]
-  if (arg?.startsWith('d:')) return <DealDetail id={arg.slice(2)} pack={pack} owner={owner} onChanged={() => { list.reload(); recv.reload() }} />
+  const [pack] = useSector()
+  useEffect(() => { if (!arg) location.replace('#/customers') }, [arg])  // the old Deals list lives on as Customers
+  if (arg?.startsWith('d:')) return <DealDetail id={arg.slice(2)} pack={pack} owner={owner} onChanged={() => undefined} />
   if (arg) return <OrderPage id={arg} owner={owner} />
+  return null
+}
+
+const B = {
+  title: { en: 'Supplier orders', ms: 'Pesanan pembekal', zh: '供应商订单', ta: 'சப்ளையர் ஆர்டர்கள்' },
+  desc: { en: 'What you ordered from suppliers, and what has arrived.', ms: 'Apa yang anda pesan daripada pembekal, dan apa yang telah tiba.', zh: '你向供应商订的货，以及已到的货。', ta: 'சப்ளையர்களிடம் நீங்கள் ஆர்டர் செய்தவை, வந்தவை.' },
+  none: { en: 'No supplier orders yet', ms: 'Belum ada pesanan pembekal', zh: '还没有供应商订单', ta: 'இன்னும் சப்ளையர் ஆர்டர்கள் இல்லை' },
+  add: { en: 'New supplier order', ms: 'Pesanan pembekal baharu', zh: '新建供应商订单', ta: 'புதிய சப்ளையர் ஆர்டர்' }, close: { en: 'Close', ms: 'Tutup', zh: '关闭', ta: 'மூடு' },
+} satisfies Record<string, Text>
+
+// Supplier POs (and the goods received against them). Customer documents are on the Customers page.
+export function BuyingView() {
+  useLang()
+  const [pack] = useSector()
+  const [adding, setAdding] = useState(false)
+  const list = useFetch<CDoc[]>('/chain?kind=spo')
+  const rows = list.data ?? []
   return (
     <>
-      <PageHeader title="Deals" description={say(pack.tagline)} actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? 'Close' : say(pack.quickActions[0].label)}</button>} />
-      <DemoSwitch pack={pack} onPick={setPack} />
-      {adding && <NewDoc pack={pack} onDone={() => { setAdding(false); list.reload(); recv.reload() }} />}
-      <div data-guide="deals-kpi"><StatStrip label="Deals at a glance">
-        {pack.kpis.map(k => <StatTile key={k.id} title={say(k.label)} value={kpi[k.id]} warn={k.id === 'approval' && Number(kpi.approval) > 0} />)}
-      </StatStrip></div>
-      <Workflow pack={pack} />
-      <section aria-label={t(D.orders)} className="mt-6">
-        <h2 className="mb-1 text-lg font-semibold">{t(D.orders)}</h2><p className="mb-2 text-sm text-muted">{t(D.ordersHint)}</p>
-        <Async s={jobs} empty={(jobs.data ?? []).length === 0} emptyText={t(D.noOrders)}>
-          <DataTable label={t(D.orders)} caption={t(D.orders)} rows={jobs.data ?? []} rowKey={j => j.id} cols={[
-            { key: 'no', head: t(D.order), mobile: 'title', cell: j => <a href={`#/deals/${j.id}`}>{j.label ?? j.quote_no ?? j.title ?? j.id}</a> },
-            { key: 'who', head: t(D.who), mobile: 'sub', cell: j => j.customer ?? '' },
-            { key: 'st', head: t(D.st), mobile: 'badge', cell: j => <Status v={j.status} /> },
-            { key: 'tot', head: t(D.total), num: true, mobile: 'meta', cell: j => rm(j.total) }]} />
-        </Async>
-      </section>
-      <div data-guide="deals-docs">
-      <h2 className="mt-6 mb-2 text-lg font-semibold">Documents</h2>
-      <Tabs label="Filter by document type" value={kind} onChange={v => setKind(v as 'all' | DocKind)}
-        options={[{ value: 'all', label: 'All', count: all.length }, ...pack.docs.map(k => ({ value: k, label: docName(pack, k), count: all.filter(d => d.kind === k).length }))]} />
-      <Async s={list} empty={rows.length === 0} emptyText="No documents yet" emptyHint={`Start with ${say(pack.quickActions[0].label).toLowerCase()}. Each next document is one click and copies the last.`}>
-        <DataTable label="Documents" caption="Quote-to-cash documents" rows={rows} rowKey={d => d.id} cols={cols} />
+      <PageHeader title={t(B.title)} description={t(B.desc)} actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? t(B.close) : t(B.add)}</button>} />
+      {adding && <NewDoc pack={pack} only={['spo']} onDone={() => { setAdding(false); list.reload() }} />}
+      <Async s={list} empty={rows.length === 0} emptyText={t(B.none)}>
+        <DataTable label={t(B.title)} caption={t(B.title)} rows={rows} rowKey={d => d.id} cols={[
+          { key: 'no', head: 'Document', mobile: 'title', cell: d => <a href={`#/deals/d:${d.id}`}>{d.doc_no}</a> },
+          { key: 'who', head: 'Supplier', mobile: 'sub', cell: d => d.party ?? '' },
+          { key: 'st', head: 'Status', mobile: 'badge', cell: d => <Status v={d.status} /> },
+          { key: 'total', head: 'Total', num: true, mobile: 'meta', cell: d => rm(d.total) }]} />
       </Async>
-      </div>
-      <Ageing data={recv.data} />
-      <p className="mt-6 text-sm text-muted">Demo / synthetic data. Preparation only: LARIS records payments, it never takes money, files an e-invoice or sends a document by itself.</p>
     </>
   )
 }
 
-function DemoSwitch({ pack, onPick }: { pack: SectorPack; onPick: (id: string) => void }) {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 glass-lite p-3" data-guide="deals-sector">
-      <span aria-hidden="true" className="size-3 rounded-full" style={{ background: pack.accent }} />
-      <label className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold">Demo mode: business type</span>
-        <select className="input" value={pack.id} onChange={e => onPick(e.target.value)}>{PACKS.map(p => <option key={p.id} value={p.id}>{say(p.name)}</option>)}</select>
-      </label>
-      <span className="text-sm text-muted">Words, documents and defaults change with the sector. Your data stays the same.</span>
-    </div>
-  )
-}
-
-function Workflow({ pack }: { pack: SectorPack }) {
-  const steps: [string, string][] = [['Trigger', say(pack.workflow.trigger)], ['Connected data', say(pack.workflow.data)], ['Decision logic', say(pack.workflow.rules)],
-    ['Human approval', say(pack.workflow.approval)], ['Visible outcome', say(pack.workflow.outcome)]]
-  return (
-    <details className="mt-4 glass-lite p-3" data-guide="deals-workflow">
-      <summary className="cursor-pointer font-semibold">How a {say(pack.terms.order).toLowerCase()} flows here</summary>
-      <ol className="mt-2 grid gap-2 md:grid-cols-5">
-        {steps.map(([h, t], i) => <li key={h} className="rounded-card border border-hairline p-2 text-sm"><span className="text-muted">{i + 1}. {h}</span><span className="block">{t}</span></li>)}
-      </ol>
-      <p className="mt-2 text-sm text-muted">Prices come from rules. AI only reads messages and drafts replies; a person approves.</p>
-    </details>
-  )
-}
-
-function Ageing({ data }: { data?: Recv }) {
-  if (!data) return null
-  return (
-    <section aria-label="Receivables ageing" className="mt-6" data-guide="deals-ageing">
-      <h2 className="mb-2 text-lg font-semibold">Who still owes you</h2>
-      <StatStrip label="Receivables ageing">
-        {Object.entries(data.buckets).map(([k, b]) => <StatTile key={k} title={k === 'current' ? 'Not yet due' : `${k} days late`} value={rm(b.outstanding)} hint={`${b.count} invoice${b.count === 1 ? '' : 's'}`} warn={k !== 'current' && b.count > 0} />)}
-      </StatStrip>
-      <p className="mt-1 text-sm text-muted">Reminder messages are drafts for you to send. LARIS sends nothing by itself.</p>
-    </section>
-  )
-}
-
-function NewDoc({ pack, onDone }: { pack: SectorPack; onDone: () => void }) {
+export function NewDoc({ pack, only, onDone }: { pack: SectorPack; only?: ('cpo' | 'so' | 'spo')[]; onDone: () => void }) {
   const toast = useToast()
-  const [kind, setKind] = useState<'cpo' | 'so' | 'spo'>((pack.quickActions[0].to as 'so') ?? 'so')
+  const [kind, setKind] = useState<'cpo' | 'so' | 'spo'>(only?.[0] ?? (pack.quickActions[0].to as 'so') ?? 'so')
   const role = kind === 'spo' ? 'supplier' : 'customer'
   const people = useFetch<{ id: string; name: string }[]>(`/contacts?role=${role}`)
   const [who, setWho] = useState('')
@@ -150,7 +89,7 @@ function NewDoc({ pack, onDone }: { pack: SectorPack; onDone: () => void }) {
   const [lines, setLines] = useState(() => pack.sampleLines.map(l => ({ ...l })))
   const [busy, setBusy] = useState(false)
   const upd = (i: number, k: 'description' | 'qty' | 'unit_price', v: string) => setLines(ls => ls.map((l, j) => (j === i ? { ...l, [k]: k === 'description' ? v : Number(v) } : l)))
-  const kinds = (['so', 'cpo', 'spo'] as const).filter(k => pack.docs.includes(k))
+  const kinds = only ?? (['so', 'cpo', 'spo'] as const).filter(k => pack.docs.includes(k))
   const sum = lines.reduce((a, l) => a + l.qty * l.unit_price, 0)
   const save = async () => {
     setBusy(true)
@@ -188,7 +127,7 @@ function NewDoc({ pack, onDone }: { pack: SectorPack; onDone: () => void }) {
 function Pipeline({ trail, current, pack }: { trail: CDoc[]; current: string; pack: SectorPack }) {
   const steps = ORDER.filter(k => pack.docs.includes(k) || trail.some(d => d.kind === k))
   return (
-    <nav aria-label="Document trail" className="relative mb-4 overflow-x-auto" data-guide="deals-pipeline">
+    <nav aria-label="Document trail" className="mb-4 overflow-x-auto" data-guide="deals-pipeline">
       <ol className="flex min-w-max items-center gap-1">
         {steps.map((k, i) => {
           const docs = trail.filter(d => d.kind === k)
@@ -228,7 +167,7 @@ function DealDetail({ id, pack, owner, onChanged }: { id: string; pack: SectorPa
   })
   return (
     <>
-      <PageHeader title={d ? `${docName(pack, d.kind)} ${d.doc_no}` : 'Deal'} back={{ href: '#/deals', label: 'Deals' }} />
+      <PageHeader title={d ? `${docName(pack, d.kind)} ${d.doc_no}` : 'Deal'} back={d?.kind === 'spo' ? { href: '#/buying', label: t(B.title) } : { href: '#/customers', label: 'Customers' }} />
       <Async s={s} empty={!d}>
         {d && <>
           <Pipeline trail={d.trail} current={d.id} pack={pack} />

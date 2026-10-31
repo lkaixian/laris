@@ -185,7 +185,7 @@ function GeneralTab({ setDark }: { setDark: (d: boolean) => void }) {
       </fieldset>
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
         <legend className="px-1 text-sm font-semibold">{t(S.appearance)}</legend>
-        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-3 gap-2 sm:max-w-md">
+        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-3 gap-2 sm:max-w-sm">
           {([[S.light, 'light'], [S.dark, 'dark'], [S.system, 'system']] as const).map(([n, p]) => <button key={p} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={pref === p}
             onClick={() => { setPref(p); setDark(setThemePref(p)) }}>{t(n)}</button>)}
         </div>
@@ -624,7 +624,7 @@ function AppShell() {
             )}
           </div>
         )}
-        {me && lic && <AssistantWidget hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
+        {me && lic && <AssistantWidget name={me.name} uid={me.id} hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
         {me && lic && <GuidePanel />}
       </Shell>
       {me && <TourHost me={me} owner={owner} />}

@@ -199,6 +199,7 @@ export const setAccessToken = (t: string) => setToken(t.trim())
 
 export async function logout(): Promise<void> {
   if (!MOCK && getToken()) await fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + getToken() } }).catch(() => undefined)
+  try { sessionStorage.removeItem('laris.bot.intro') } catch { /* private window */ }  // the robot introduces itself again at the next sign-in
   signedOut()
 }
 

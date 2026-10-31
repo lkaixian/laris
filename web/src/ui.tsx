@@ -8,6 +8,7 @@ import { hasGuide, openGuide } from './Guide'
 import { useShowTutorialButton } from './helpPrefs'
 import type { Me } from './api'
 import { Icon } from './icons'
+import { setThemePref } from './skin'
 import type { IconName } from './icons'
 
 const S = {
@@ -233,10 +234,7 @@ export function Hint({ id, children }: { id: string; children: ReactNode }) {
 export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark: (d: boolean) => void; compact?: boolean }) {
   useLang()
   const flip = () => {
-    const t = dark ? 'light' : 'dark'
-    document.documentElement.dataset.theme = t
-    try { localStorage.setItem('theme', t) } catch { /* storage blocked: choice lasts for this visit only */ }
-    setDark(!dark)
+    setDark(setThemePref(dark ? 'light' : 'dark'))
   }
   return compact
     ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label={t(S.dark)} title={t(S.dark)} onClick={flip}><Icon name="moon" /></button>

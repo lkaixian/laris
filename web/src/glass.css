@@ -228,3 +228,8 @@ header.bg-surface, aside.bg-surface { border-color: var(--glass-border); }
 @media (min-width: 640px) { .rev-form { grid-template-columns: repeat(3, minmax(0, 1fr)); } .rev-form > h3 { grid-column: 1 / -1; } }
 @keyframes rev-grow-x { from { transform: scaleX(0); } }
 @keyframes rev-grow-y { from { transform: scaleY(0); } }
+/* ---- Customer-facing public pages (quote accept, delivery sign: <main data-plain>): plain skin, opaque panels, no moving background, no blur. ---- */
+body:has([data-plain]) { background: var(--surface-solid); }
+body:has([data-plain])::before, body:has([data-plain])::after { display: none; }
+[data-plain] { --surface: var(--surface-solid); --glass-filter: none; --glass-highlight: none; --glass-fill-strong: var(--surface-solid); }
+[data-plain] input[type="checkbox"] { outline: 2px solid var(--line); outline-offset: 1px; }

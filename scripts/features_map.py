@@ -17,7 +17,7 @@ FEATURES = {
     "Chat channels": [("Telegram text", A), ("Voice note to text", A), ("Own bot per business", A), ("One-tap bot", A),
         ("Reactions, typing", A), ("Staff linking", A), ("/catalog photo import", A), ("WhatsApp", R)],
     "Help and assistant": [("Guided tour", A), ("Ctrl+K palette", A), ("17 help articles", G), ("AI guide", A),
-        ("Assistant lookups", A), ("Assistant actions", A), ("Floating Ask", A)],
+        ("Assistant lookups", A), ("Assistant actions", A), ("Floating Ask", A), ("Ask Laris robot", A)],
     "Supplier work": [("XLSX / CSV prices", G), ("DOCX prices", G), ("PDF prices", G), ("Photo prices (OCR)", A),
         ("Ask suppliers", A), ("Marked-up photo", A), ("Reply comparison", G)],
     "Languages and UI": [("English", G), ("Malay", A), ("Chinese", A), ("Tamil", A), ("All pages translated", G), ("UI polish 2-4", A), ("Mock mode", G)],
@@ -25,6 +25,12 @@ FEATURES = {
         ("Breach register", G), ("DPO contact", G), ("Retention purge", G), ("Lawyer review", R)],
     "Catalog and stock": [("Photo to items", A), ("OCR cross-check", A), ("Availability reply", G), ("Stock count", G),
         ("Quote from chat", G), ("Owner review", G), ("Raw-material match", A)],
+    "Order chain": [("Proforma, deposit", A), ("Payments ledger", A), ("Payment slip reader (AI)", A), ("Deposit receipt", A), ("Delivery order", A),
+        ("Tap-to-sign delivery", A), ("Invoice", A), ("Balance receipt, PAID", A), ("Customer PO, sales order", A), ("Supplier PO", A),
+        ("Overdue rules", A), ("Per-type PDF layouts", A), ("Document language", A), ("Layout editor", R), ("Letterhead, chop upload", R),
+        ("Match my paper (AI)", R), ("One link for the whole deal", R), ("QR for delivery link", R), ("5-sen rounding, discount", R)],
+    "Look and Home": [("Dark mode", G), ("Glass skin", G), ("Bento Home", G), ("Trade Orbit", A), ("Needs-you strip", A)],
+    "3D printing": [("STL analysis", A), ("3D price engine", A), ("Wired into quotes", R)],
     "Integration": [("Recipes API", G), ("Price check API", G), ("Usage metering", G), ("Read-only MCP", G), ("Orbyte API", R)],
 }
 

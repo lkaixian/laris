@@ -11,7 +11,7 @@ import { mockListings } from './mockListings'
 import { mockPrivacy } from './mockPrivacy'
 import { mockAi, mockAiOn } from './mockAi'
 import { mockAccept } from './mockAccept'
-import { mockChain } from './mockChain'
+import { mockChain, mockDelivery } from './mockChain'
 import { mockTrack, jobStats, dashTrack, extraMembers, heatOf, mockJobMove } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
@@ -392,6 +392,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services, ...(isLive ? { checked_at: new Date().toISOString() } : {}) }
   }
   { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
+  { const r = mockDelivery(method, p, body); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)
   { const r = mockPrivacy(method, p, owner, body); if (r !== undefined) return r }
   { const r = mockAi(method, p, owner, body); if (r !== undefined) return r }

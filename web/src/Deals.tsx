@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { api } from './api'
+import type { Job } from './api'
+import { OrderPage } from './Order'
+import { t, useLang } from './i18n'
+import type { Text } from './i18n'
 import { Async, PageHeader, Status, msg, rm, useFetch } from './ui'
 import { DataTable, StatStrip, StatTile, Tabs } from './kit'
 import type { Col } from './kit'
@@ -8,52 +12,61 @@ import { BuyLane } from './BuyLane'
 import { docName, PACKS, say, useSector } from './sectorPacks'
 import type { DocKind, SectorPack } from './sectorPacks'
 
-// Deals: the quote-to-cash chain (customer PO, order, proforma, delivery order, invoice, receipt, supplier PO) in the words of the chosen sector.
+// Deals: orders (the money and paper of an order are on its own page, Order.tsx) plus the customer PO, sales order and supplier PO in the words of the chosen sector.
 // Preparation only. Payments are recorded, never taken; nothing here is filed with an authority or sent to a customer.
 // The server enforces every rule (src/chain.py); the buttons below only offer what the rules allow. Demo / synthetic data only.
+// #/deals/<job id> is an order; #/deals/d:<id> is one customer PO, sales order or supplier PO.
 interface Ln { description: string; qty: string; uom: string; unit_price: string }
 interface CDoc {
-  id: string; kind: DocKind; doc_no: string; status: string; status_effective: string; deal_id: string; parent_id: string | null; party?: string | null; ref: string | null
-  lines: Ln[]; subtotal: string; discount: string; sst: string; rounding: string; total: string; paid: string; balance: string | null; deposit_pct: string | null
-  due_on: string | null; days_overdue: number; ageing: string | null; note: string | null; created_at: string
+  id: string; kind: DocKind; doc_no: string; status: string; deal_id: string; parent_id: string | null; job_id: string | null; party?: string | null; ref: string | null
+  lines: Ln[]; subtotal: string; discount: string; sst: string; rounding: string; total: string; note: string | null; created_at: string
 }
 interface Detail extends CDoc { trail: CDoc[]; history: { at: string; event: string; actor: string }[] }
-interface Recv { as_of: string; total: string; buckets: Record<string, { count: number; outstanding: string }> }
+interface Recv { as_of: string; total: string; deposits_waiting: number; buckets: Record<string, { count: number; outstanding: string }> }
 
-const ORDER: DocKind[] = ['cpo', 'so', 'pf', 'do', 'inv', 'rcp']
+const ORDER: DocKind[] = ['cpo', 'so', 'spo']
+const D = {
+  orders: { en: 'Orders', ms: 'Pesanan', zh: '订单', ta: 'ஆர்டர்கள்' },
+  ordersHint: { en: 'Each order has its own page: proforma, deposit, delivery, invoice and receipts.', ms: 'Setiap pesanan ada halamannya: proforma, deposit, penghantaran, invois dan resit.', zh: '每个订单都有自己的页面：形式发票、订金、送货、发票和收据。', ta: 'ஒவ்வொரு ஆர்டருக்கும் தனிப் பக்கம் உண்டு: புரோஃபார்மா, முன்பணம், டெலிவரி, இன்வாய்ஸ், ரசீதுகள்.' },
+  noOrders: { en: 'No orders yet', ms: 'Belum ada pesanan', zh: '还没有订单', ta: 'இன்னும் ஆர்டர்கள் இல்லை' },
+  order: { en: 'Order', ms: 'Pesanan', zh: '订单', ta: 'ஆர்டர்' }, who: { en: 'Customer', ms: 'Pelanggan', zh: '客户', ta: 'வாடிக்கையாளர்' },
+  st: { en: 'Status', ms: 'Status', zh: '状态', ta: 'நிலை' }, total: { en: 'Total', ms: 'Jumlah', zh: '总计', ta: 'மொத்தம்' },
+  open: { en: 'Open the order (money, delivery, invoice)', ms: 'Buka pesanan (wang, penghantaran, invois)', zh: '打开订单（收款、送货、发票）', ta: 'ஆர்டரைத் திற (பணம், டெலிவரி, இன்வாய்ஸ்)' },
+} satisfies Record<string, Text>
 const label = (s: string) => s.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 // What can be made from a document, and the moves a person can ask for by hand (the server has the final say).
-const MAKE: Partial<Record<DocKind, DocKind[]>> = { cpo: ['so'], so: ['pf', 'do', 'inv'], do: ['inv'] }
+const MAKE: Partial<Record<DocKind, DocKind[]>> = { cpo: ['so'] }
 const MOVES: Record<string, Record<string, string[]>> = {
-  cpo: { received: ['confirmed', 'cancelled'], confirmed: ['cancelled'] }, so: { confirmed: ['cancelled'], in_fulfilment: ['cancelled'] },
-  pf: { draft: ['sent', 'cancelled'], sent: ['cancelled'] }, do: { prepared: ['dispatched'], dispatched: ['delivered', 'returned'], delivered: ['returned'] },
-  inv: { draft: ['pending_approval', 'void'], pending_approval: ['issued', 'draft', 'void'], issued: ['void'], partially_paid: ['void'] },
-  rcp: { issued: ['void'] }, spo: { draft: ['pending_approval', 'cancelled'], pending_approval: ['sent', 'draft', 'cancelled'], sent: ['partially_received', 'received', 'cancelled'], partially_received: ['received', 'cancelled'] },
+  cpo: { received: ['confirmed', 'cancelled'], confirmed: ['cancelled'] }, so: { confirmed: ['cancelled'] },
+  spo: { draft: ['pending_approval', 'cancelled'], pending_approval: ['sent', 'draft', 'cancelled'], sent: ['partially_received', 'received', 'cancelled'], partially_received: ['received', 'cancelled'] },
 }
-const OWNER_MOVES = ['inv:issued', 'spo:sent', 'rcp:void', 'inv:void', 'so:cancelled', 'cpo:confirmed']
+const OWNER_MOVES = ['spo:sent', 'so:cancelled', 'cpo:confirmed']
 const NEEDS_REASON = ['void', 'cancelled', 'returned']
 
 export function DealsView({ owner, arg }: { owner: boolean; arg?: string }) {
+  useLang()
   const [pack, setPack] = useSector()
   const [kind, setKind] = useState<'all' | DocKind>('all')
   const [adding, setAdding] = useState(false)
   const list = useFetch<CDoc[]>('/chain')
   const recv = useFetch<Recv>('/chain/receivables')
+  const jobs = useFetch<Job[]>('/jobs?limit=100')
   const rows = (list.data ?? []).filter(d => pack.docs.includes(d.kind) && (kind === 'all' || d.kind === kind))
   const all = (list.data ?? []).filter(d => pack.docs.includes(d.kind))
   const count = (f: (d: CDoc) => boolean) => all.filter(f).length
   const kpi: Record<string, number | string> = {
-    open: count(d => d.kind === 'so' && ['confirmed', 'in_fulfilment'].includes(d.status)), deposits: count(d => d.kind === 'pf' && d.status === 'sent'),
+    open: count(d => d.kind === 'so' && d.status === 'confirmed'), deposits: recv.data?.deposits_waiting ?? 0,
     approval: count(d => d.status === 'pending_approval'), owed: rm(recv.data?.total ?? '0'),
   }
   const cols: Col<CDoc>[] = [
-    { key: 'no', head: 'Document', mobile: 'title', cell: d => <a href={`#/deals/${d.id}`}>{d.doc_no}</a> },
+    { key: 'no', head: 'Document', mobile: 'title', cell: d => <a href={`#/deals/d:${d.id}`}>{d.doc_no}</a> },
     { key: 'type', head: 'Type', mobile: 'sub', cell: d => docName(pack, d.kind) },
     { key: 'who', head: say(pack.terms.customer), mobile: 'meta', cell: d => d.party ?? '' },
-    { key: 'st', head: 'Status', mobile: 'badge', cell: d => <Status v={d.status_effective} /> },
+    { key: 'st', head: 'Status', mobile: 'badge', cell: d => <Status v={d.status} /> },
     { key: 'total', head: 'Total', num: true, mobile: 'meta', cell: d => rm(d.total) },
   ]
-  if (arg) return <DealDetail id={arg} pack={pack} owner={owner} onChanged={() => { list.reload(); recv.reload() }} />
+  if (arg?.startsWith('d:')) return <DealDetail id={arg.slice(2)} pack={pack} owner={owner} onChanged={() => { list.reload(); recv.reload() }} />
+  if (arg) return <OrderPage id={arg} owner={owner} />
   return (
     <>
       <PageHeader title="Deals" description={say(pack.tagline)} actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? 'Close' : `New: ${say(pack.quickActions[0].label)}`}</button>} />
@@ -63,6 +76,16 @@ export function DealsView({ owner, arg }: { owner: boolean; arg?: string }) {
         {pack.kpis.map(k => <StatTile key={k.id} title={say(k.label)} value={kpi[k.id]} warn={k.id === 'approval' && Number(kpi.approval) > 0} />)}
       </StatStrip></div>
       <Workflow pack={pack} />
+      <section aria-label={t(D.orders)} className="mt-6">
+        <h2 className="mb-1 text-lg font-semibold">{t(D.orders)}</h2><p className="mb-2 text-sm text-muted">{t(D.ordersHint)}</p>
+        <Async s={jobs} empty={(jobs.data ?? []).length === 0} emptyText={t(D.noOrders)}>
+          <DataTable label={t(D.orders)} caption={t(D.orders)} rows={jobs.data ?? []} rowKey={j => j.id} cols={[
+            { key: 'no', head: t(D.order), mobile: 'title', cell: j => <a href={`#/deals/${j.id}`}>{j.label ?? j.quote_no ?? j.title ?? j.id}</a> },
+            { key: 'who', head: t(D.who), mobile: 'sub', cell: j => j.customer ?? '' },
+            { key: 'st', head: t(D.st), mobile: 'badge', cell: j => <Status v={j.status} /> },
+            { key: 'tot', head: t(D.total), num: true, mobile: 'meta', cell: j => rm(j.total) }]} />
+        </Async>
+      </section>
       <div data-guide="deals-docs">
       <h2 className="mt-6 mb-2 text-lg font-semibold">Documents</h2>
       <Tabs label="Filter by document type" value={kind} onChange={v => setKind(v as 'all' | DocKind)}
@@ -173,7 +196,7 @@ function Pipeline({ trail, current, pack }: { trail: CDoc[]; current: string; pa
           return (
             <li key={k} className="flex items-center gap-1">
               {i > 0 && <span aria-hidden="true" className="text-muted">&rarr;</span>}
-              {first ? <a href={`#/deals/${first.id}`} aria-current={docs.some(d => d.id === current) ? 'step' : undefined}
+              {first ? <a href={`#/deals/d:${first.id}`} aria-current={docs.some(d => d.id === current) ? 'step' : undefined}
                 className={`chip ${docs.some(d => d.id === current) ? 'chip-accepted' : 'chip-approved'}`}>{docName(pack, k)}{docs.length > 1 ? ` x${docs.length}` : ''}</a>
                 : <span className="chip chip-draft">{docName(pack, k)}</span>}
             </li>
@@ -188,8 +211,6 @@ function DealDetail({ id, pack, owner, onChanged }: { id: string; pack: SectorPa
   const s = useFetch<Detail>(`/chain/${id}`)
   const toast = useToast()
   const [busy, setBusy] = useState(false)
-  const [deposit, setDeposit] = useState(String(pack.defaults.depositPct))
-  const [pay, setPay] = useState('')
   const d = s.data
   const run = async (fn: () => Promise<string>) => {
     setBusy(true)
@@ -201,11 +222,10 @@ function DealDetail({ id, pack, owner, onChanged }: { id: string; pack: SectorPa
     void run(async () => { const r = await api<CDoc>('POST', `/chain/${id}/transition`, { to, reason: why }); setAsking(undefined); setReason(''); return `${r.doc_no} is now ${label(r.status)}` })
   }
   const make = (to: DocKind) => run(async () => {
-    const r = await api<CDoc>('POST', `/chain/${id}/convert`, { to, deposit_pct: to === 'pf' ? Number(deposit) : undefined, due_in_days: pack.defaults.creditDays })
-    location.hash = `#/deals/${r.id}`
+    const r = await api<CDoc>('POST', `/chain/${id}/convert`, { to })
+    location.hash = `#/deals/d:${r.id}`
     return `${docName(pack, to)} ${r.doc_no} made from ${d?.doc_no}`
   })
-  const payable = !!d && ((d.kind === 'inv' && ['issued', 'partially_paid'].includes(d.status)) || (d.kind === 'pf' && d.status === 'sent'))
   return (
     <>
       <PageHeader title={d ? `${docName(pack, d.kind)} ${d.doc_no}` : 'Deal'} back={{ href: '#/deals', label: 'Deals' }} />
@@ -214,26 +234,21 @@ function DealDetail({ id, pack, owner, onChanged }: { id: string; pack: SectorPa
           <Pipeline trail={d.trail} current={d.id} pack={pack} />
           <BuyLane trail={d.trail} owner={owner} onChanged={() => { s.reload(); onChanged() }} />
           <section className="card mb-4 grid gap-1">
-            <p className="flex flex-wrap items-center gap-2"><Status v={d.status_effective} />{d.days_overdue > 0 && <span className="text-sm text-warn">{d.days_overdue} days late</span>}
-              {d.ref && <span className="text-sm text-muted">Their PO: {d.ref}</span>}{d.due_on && <span className="text-sm text-muted">Due {d.due_on}</span>}</p>
+            <p className="flex flex-wrap items-center gap-2"><Status v={d.status} />
+              {d.ref && <span className="text-sm text-muted">Their PO: {d.ref}</span>}{d.job_id && <a className="link text-sm" href={`#/deals/${d.job_id}`}>{t(D.open)}</a>}</p>
             <DataTable label="Lines" caption="Document lines" rows={d.lines} rowKey={(l) => l.description + l.qty} cols={[
               { key: 'd', head: 'Item', mobile: 'title', cell: l => l.description }, { key: 'q', head: 'Qty', num: true, mobile: 'meta', cell: l => `${l.qty} ${l.uom}` },
               { key: 'p', head: 'Unit price', num: true, mobile: 'meta', cell: l => rm(l.unit_price) }, { key: 't', head: 'Amount', num: true, mobile: 'badge', cell: l => rm(String(Number(l.qty) * Number(l.unit_price))) }]} />
             <p className="text-right text-lg font-semibold tabular-nums">Total {rm(d.total)}</p>
-            {d.balance != null && <p className="text-right tabular-nums text-muted">Paid {rm(d.paid)} &middot; Balance {rm(d.balance)}</p>}
           </section>
           <section aria-label="Next steps" className="card mb-4 grid gap-3" data-guide="deals-actions">
             <h2 className="text-lg font-semibold">Next step</h2>
             <div className="flex flex-wrap items-end gap-2">
               {(MAKE[d.kind] ?? []).filter(k => pack.docs.includes(k)).map(k => (
                 <span key={k} className="flex items-end gap-2">
-                  {k === 'pf' && <label className="grid gap-1 text-sm"><span>Deposit %</span><input className="input w-20" inputMode="decimal" value={deposit} onChange={e => setDeposit(e.target.value)} /></label>}
                   <button className="btn btn-primary" disabled={busy} onClick={() => void make(k)}>Make {docName(pack, k)}</button>
                 </span>
               ))}
-              {payable && <form className="flex items-end gap-2" onSubmit={e => { e.preventDefault(); void run(async () => { const r = await api<{ receipt: CDoc }>('POST', `/chain/${id}/payment`, { amount: Number(pay) }); setPay(''); return `Payment recorded, receipt ${r.receipt.doc_no}` }) }}>
-                <label className="grid gap-1 text-sm"><span>Payment received (RM)</span><input className="input w-32" inputMode="decimal" value={pay} onChange={e => setPay(e.target.value)} /></label>
-                <button className="btn btn-primary" disabled={busy || !Number(pay)}>Record payment</button></form>}
               {Object.keys(MOVES[d.kind] ?? {}).length > 0 && (MOVES[d.kind][d.status] ?? []).map(to => {
                 const locked = OWNER_MOVES.includes(`${d.kind}:${to}`) && !owner
                 return <button key={to} className={`btn ${NEEDS_REASON.includes(to) ? 'btn-danger' : ''}`} disabled={busy} aria-disabled={locked || undefined} data-locked={locked || undefined}
@@ -244,7 +259,6 @@ function DealDetail({ id, pack, owner, onChanged }: { id: string; pack: SectorPa
               <label className="grid gap-1 text-sm"><span>Reason to {asking}</span><input className="input" autoFocus maxLength={300} value={reason} onChange={e => setReason(e.target.value)} /></label>
               <button className="btn btn-danger" disabled={busy || !reason.trim()}>Confirm {asking}</button>
               <button type="button" className="btn btn-quiet" onClick={() => setAsking(undefined)}>Cancel</button></form>}
-            {d.kind === 'inv' && <p className="text-sm text-muted">E-invoice: preparation only. Buyer TIN, MSIC and classification fields are roadmap; LARIS never submits to MyInvois.</p>}
           </section>
           <section aria-label="This record's history" className="card">
             <h2 className="mb-2 text-lg font-semibold">History</h2>

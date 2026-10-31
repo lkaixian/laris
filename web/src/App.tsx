@@ -9,6 +9,7 @@ import Landing from './Landing'
 import { Register, Forgot } from './Signup'
 import AcceptInvite from './Invite'
 import Accept from './Accept'
+import DeliverySign from './DeliverySign'
 import { LicenseProvider, LicenceGate, LicenceBanner, LicenceView, PurchaseView, Frame, blocked, setLicenceOn } from './Licence'
 import { Shell } from './Shell'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -521,7 +522,7 @@ function AppShell() {
     })
     return () => { live = false }
   }, [gate, me?.id, licTries])  // eslint-disable-line react-hooks/exhaustive-deps
-  const pub = routeOf(hash) === 'q'  // the public customer page: no staff request of any kind is made for it
+  const pub = routeOf(hash) === 'q' || routeOf(hash) === 'd'  // the public customer pages (quote, delivery): no staff request of any kind is made for them
   useEffect(() => {
     if (gate !== 'ready' || pub) return
     let live = true
@@ -552,7 +553,7 @@ function AppShell() {
     return y ? restoreScroll(y) : undefined
   }, [hash])
   const onRole = (r: Role) => { setRole(r); setRoleState(r); toast(t({ en: `Viewing as ${r === 'owner' ? 'Owner' : 'Staff'}`, ms: `Melihat sebagai ${t(r === 'owner' ? S.owner : S.staff)}`, zh: `当前身份：${t(r === 'owner' ? S.owner : S.staff)}`, ta: `${t(r === 'owner' ? S.owner : S.staff)} ஆகப் பார்க்கிறீர்கள்` })) }
-  if (pub) return <Accept token={hash.split('/')[2]?.split('?')[0] ?? ''} />  // customer link: outside the shell, no sign-in
+  if (pub) { const tok = hash.split('/')[2]?.split('?')[0] ?? ''; return routeOf(hash) === 'd' ? <DeliverySign token={tok} /> : <Accept token={tok} /> }  // customer link: outside the shell, no sign-in
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
   // Public homepage: #/welcome, and the bare address for a visitor who is not signed in.

@@ -175,8 +175,8 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
   )
 }
 
-interface ListRow { kind: string; status: string; total: string; days_overdue?: number; status_effective?: string }
-interface Recv { total: string }
+interface ListRow { kind: string; status: string; total: string }
+interface Recv { total: string; buckets?: Record<string, { count: number }> }
 // Live version for Home: owed in (receivables), owed out and open counts (chain documents). Zeros when there is no data yet.
 export function LiveOrbit({ onGo }: { onGo?: (href: string) => void }) {
   const recv = useFetch<Recv>('/chain/receivables')
@@ -184,6 +184,6 @@ export function LiveOrbit({ onGo }: { onGo?: (href: string) => void }) {
   const rows = all.data ?? []
   const open = (k: string[]) => rows.filter(r => k.includes(r.kind) && !['paid', 'cancelled', 'void', 'fulfilled', 'received', 'delivered'].includes(r.status)).length
   const owedOut = rows.filter(r => r.kind === 'spo' && ['sent', 'partially_received'].includes(r.status)).reduce((a, r) => a + Number(r.total), 0)
-  const data: OrbitData = { owedIn: Number(recv.data?.total ?? 0), owedOut, openSell: open(['cpo', 'so', 'pf', 'do', 'inv']), openBuy: open(['spo']), late: rows.filter(r => r.status_effective === 'overdue').length }
+  const data: OrbitData = { owedIn: Number(recv.data?.total ?? 0), owedOut, openSell: open(['cpo', 'so']), openBuy: open(['spo']), late: Object.entries(recv.data?.buckets ?? {}).reduce((a, [k, b]) => a + (k === 'current' ? 0 : b.count), 0) }
   return <TradeOrbit data={data} onGo={onGo} />
 }

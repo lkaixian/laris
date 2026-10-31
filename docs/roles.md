@@ -22,6 +22,8 @@ Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEF
 | `manage_followups` | Quotes | no | Send or skip a follow-up |
 | `export_data` | Data | no | Contact book CSV (BOM and PO exports also need `view_costs`) |
 | `view_audit` | Activity | yes | The activity feed (cost entries in it also need `view_costs`) |
+| `record_payments` | Orders | no | Record a deposit or balance payment, read a payment slip, see an order's payments, receipts and balance |
+| `issue_delivery` | Orders | no | Create and send a delivery order (its PDF); no route yet |
 
 ## Owner only, not assignable
 
@@ -36,6 +38,8 @@ These are refused with 422 `not_assignable` when put in a role, and stay `requir
 | promote a supplier document or ask-supplier reply into the cost book (`/api/rfq/.../accept`) | same guard; it moves real cost |
 | erase a customer's personal data | PDPA action |
 | decide field proposals; clear `needs_review` on a quote line | owner decision |
+| issue a proforma (`POST /api/jobs/{id}/proforma`), later the invoice | owner; the deposit is money terms |
+| void a document, reverse a payment (`POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`) | owner; payments are append-only |
 
 Branding (display name, colour, logo) is readable by every signed-in role in `GET /api/me` `org`, writable by the owner only.
 
@@ -58,6 +62,9 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `GET /api/audit/export` | `view_audit` and `export_data` |
 | `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
+| `POST /api/jobs/{id}/payments`, `POST /api/payments/propose-from-slip`, `GET /api/jobs/{id}/chain` | `record_payments` |
+| `GET /api/deal-docs/{id}/pdf` | `record_payments` (a delivery order also `issue_delivery`) |
+| `POST /api/jobs/{id}/proforma`, `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`, `PUT/GET /api/settings/doc-layout/{kind}` | owner |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |

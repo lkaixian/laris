@@ -362,7 +362,8 @@ def cost_items(ctx: Ctx = Depends(read_ctx)):
 
 
 SETTINGS = ("min_margin_pct", "ssm_no", "address", "bank_details", "sst_registered", "sst_no", "display_name", "brand_color", "logo_data_url",
-            "quote_validity_days", "quote_payment_terms", "quote_terms_text", "quote_prefix", "issuer_email", "issuer_phone")
+            "quote_validity_days", "quote_payment_terms", "quote_terms_text", "quote_prefix", "issuer_email", "issuer_phone",
+            "doc_language", "proforma_prefix", "delivery_order_prefix", "invoice_prefix", "receipt_prefix")
 SEL = ", ".join("coalesce(display_name, name) as display_name" if k == "display_name" else k for k in SETTINGS)  # name = the fallback
 MAX_LOGO = 200_000  # decoded bytes
 
@@ -406,6 +407,11 @@ class SettingsEdit(BaseModel, extra="forbid"):
     quote_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # null = back to QT
     issuer_email: str | None = Field(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     issuer_phone: str | None = Field(None, max_length=40)
+    doc_language: Literal["en", "ms", "zh", "ta"] | None = None  # the one language of every customer document; null = en
+    proforma_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # null = back to PF; likewise the three below
+    delivery_order_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # DO
+    invoice_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # INV
+    receipt_prefix: str | None = Field(None, pattern=r"^[A-Z0-9-]{1,8}$")  # RC
 
 
 @r.post("/settings")
@@ -415,7 +421,8 @@ def edit_settings(body: SettingsEdit, ctx: Ctx = Depends(write_ctx)):
     sets = body.model_dump(exclude_unset=True)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
-    for k, v in (("quote_validity_days", 30), ("quote_prefix", "QT")):
+    for k, v in (("quote_validity_days", 30), ("quote_prefix", "QT"), ("doc_language", "en"), ("proforma_prefix", "PF"),
+                 ("delivery_order_prefix", "DO"), ("invoice_prefix", "INV"), ("receipt_prefix", "RC")):
         if k in sets and sets[k] is None:  # NOT NULL columns: null puts the default back
             sets[k] = v
     if sets.get("brand_color"):

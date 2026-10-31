@@ -125,9 +125,10 @@ def test_dark_theme_is_built_on_the_brand_green():
 
 def test_every_fallback_trigger_drops_the_blur():
     # user switch, OS setting and missing backdrop-filter must all swap to the solid surface and turn the filter off
-    assert CSS.count("--glass-filter: none") == 3
+    assert CSS.count("--glass-filter: none") == 4   # the three triggers plus [data-plain], the customer-facing public pages
     assert 'data-transparency="reduce"' in CSS and "prefers-reduced-transparency" in CSS and "@supports not" in CSS
-    assert CSS.count("--surface: var(--surface-solid)") == 3
+    assert CSS.count("--surface: var(--surface-solid)") == 4
+    assert "[data-plain] { --surface: var(--surface-solid)" in CSS   # public quote and delivery pages are plain: opaque and checked above as "on solid fallback"
 
 
 def test_blur_is_never_nested():

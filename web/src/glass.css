@@ -144,7 +144,7 @@ header.bg-surface, aside.bg-surface { border-color: var(--glass-border); }
 :root[data-theme] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-danger):hover { background-color: var(--surface); background-image: linear-gradient(var(--tint), var(--tint)); }
 :root[data-theme] .guide-panel { background: var(--surface-solid) !important; }
 :root[data-theme] .orb-node circle.orb-disc { fill: var(--surface-solid); }
-:root[data-theme] .bot-bubble { background: var(--surface-solid); }   /* the Ask Laris speech bubble floats over the page */
+:root[data-theme] .bot-bubble { background: var(--surface-solid); }
 
 /* ---- Revenue page (Revenue.tsx). Money in is solid accent; anything that costs money is striped, so colour is never the only signal. ---- */
 .rev-periods { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -22,6 +22,7 @@ logsetup.setup()  # before the modules below log anything
 
 from . import db, scheduler
 from .api import accept, ai_activity, ai_guide, assistant, audit, auth_routes, chain, deals, channel_settings, contacts, delivery, invites, jobs, license_pay, license_routes, listings, mcp, onboarding, privacy, public_api, rfq, roles, routes, signup, system, telegram_bots, track, webhooks
+from .api import customers as customers_routes
 from .api import revenue as revenue_routes
 from .api.deps import JR, Services
 from .errors import ApiError
@@ -83,6 +84,7 @@ app.include_router(chain.r)
 app.include_router(delivery.r)
 app.include_router(deals.r)
 app.include_router(revenue_routes.r)
+app.include_router(customers_routes.r)
 app.include_router(public_api.r)
 app.include_router(ai_guide.r)
 app.include_router(roles.r)

@@ -209,7 +209,7 @@ export function ContactDetail({ id, owner }: { id: string; owner: boolean }) {
           <section className="mt-6" aria-labelledby="docs">
             <h2 id="docs" className="mb-3 text-md font-semibold">{t(S.documents)}</h2>
             {c.recent_documents.length === 0 ? <EmptyState title={t({ en: `No documents with ${c.name} yet.`, ms: `Belum ada dokumen dengan ${c.name}.`, zh: `还没有与 ${c.name} 相关的文件。`, ta: `${c.name} உடன் இன்னும் ஆவணங்கள் இல்லை.` })} /> : (
-              <ul className="divide-y divide-hairline rounded-card border border-hairline bg-surface">
+              <ul className="divide-y divide-hairline glass-lite">
                 {c.recent_documents.map(d => (
                   <li key={d.id}><a className="row group" href={`#/doc/${d.id}`}>
                     <span className="flex flex-wrap items-baseline justify-between gap-x-3">

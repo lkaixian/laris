@@ -160,7 +160,7 @@ def write_ctx(request: Request):
 
 
 GENERIC = "the change conflicts with existing data"
-GUARD_MSGS = re.compile(r"illegal transition|audit_log is append-only|no inbound document|document \S+ is |\d+ line\(s\) need review")  # db/*.sql guards: safe to show
+GUARD_MSGS = re.compile(r"illegal transition|audit_log is append-only|no inbound document|document \S+ is |\d+ line\(s\) need review|payment: |deal_docs: |delivery: ")  # db/*.sql guards: safe to show
 
 
 @contextmanager

@@ -5,31 +5,44 @@ import { Brand, ThemeToggle } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { LANGS, setLang, t, useLang } from './i18n'
+import { TradeOrbit } from './TradeOrbit'
 import type { Text } from './i18n'
 
 // Public homepage for signed-out visitors (#/welcome, and the bare address). Same section order as the CLARION site: hero, flow, tour, modules, audiences, privacy, footer.
 // Tamil falls back to English where a string has no `ta`. Nothing here calls the staff API; the status strip reads the public /health only.
+const LOOP = {
+  h: { en: 'Run the whole trade loop in one place', ms: 'Urus seluruh kitaran perdagangan di satu tempat', zh: '在一个地方管理整个贸易流程', ta: 'முழு வர்த்தகச் சுழற்சியையும் ஓரிடத்தில் நடத்துங்கள்' },
+  p: { en: 'Customer, your business and your supplier. Quote, order, deliver, invoice and get paid, with every step recorded and every approval yours.', ms: 'Pelanggan, perniagaan anda dan pembekal anda. Sebut harga, pesan, hantar, invois dan terima bayaran, setiap langkah direkod dan setiap kelulusan milik anda.', zh: '客户、您的企业与供应商。报价、下单、送货、开票、收款，每一步都有记录，每次批准都由您决定。', ta: 'வாடிக்கையாளர், உங்கள் வணிகம், உங்கள் விநியோகஸ்தர். விலைப்புள்ளி, ஆர்டர், விநியோகம், விலைப்பட்டியல், பணம் பெறுதல் — ஒவ்வொரு படியும் பதிவாகும், ஒவ்வொரு அனுமதியும் உங்களுடையது.' },
+}
 const S = {
-  sections: { en: 'Sections', ms: 'Bahagian', zh: '页面导航', ta: 'பிரிவுகள்' },
   nHow: { en: 'How it works', ms: 'Cara ia berfungsi', zh: '运作方式' },
   nTour: { en: 'Product tour', ms: 'Lawatan produk', zh: '产品导览' },
   nMods: { en: 'Modules', ms: 'Modul', zh: '功能模块' },
   nWho: { en: 'Who it is for', ms: 'Untuk siapa', zh: '适用对象' },
   nPriv: { en: 'Privacy', ms: 'Privasi', zh: '隐私' },
+  nPrice: { en: 'Pricing', ms: 'Harga', zh: '价格' },
   signIn: { en: 'Sign in', ms: 'Log masuk', zh: '登录', ta: 'உள்நுழை' },
   create: { en: 'Create a business account', ms: 'Cipta akaun perniagaan', zh: '创建企业账户', ta: 'வணிகக் கணக்கை உருவாக்கு' },
   open: { en: 'Open LARIS', ms: 'Buka LARIS', zh: '打开 LARIS' },
-  kicker: { en: 'Quotation tracker for Malaysian SMEs', ms: 'Penjejak sebut harga untuk PKS Malaysia', zh: '马来西亚中小企业报价追踪' },
+  kicker: { en: 'Customer, business and supplier in one place', ms: 'Pelanggan, perniagaan dan pembekal di satu tempat', zh: '客户、企业与供应商，一站管理', ta: 'வாடிக்கையாளர், வணிகம், விநியோகஸ்தர் ஓரிடத்தில்' },
   h1: { en: 'Quote from the chat you already use. Price it by rules, not guesses.', ms: 'Beri sebut harga dari sembang yang anda sudah guna. Harga ikut peraturan, bukan agakan.', zh: '在您已经在用的聊天里报价。价格由规则决定，而不是凭猜。' },
   lead: { en: 'A customer asks on Telegram, text or voice note. LARIS reads the request, your cost book and margin floor set the price, you approve, and it chases the quotes nobody answered.', ms: 'Pelanggan bertanya di Telegram, melalui teks atau nota suara. LARIS membaca permintaan, buku kos dan lantai margin anda menetapkan harga, anda lulus, dan ia mengejar sebut harga yang tidak dijawab.', zh: '客户在 Telegram 上发文字或语音询价。LARIS 读取需求，由您的成本表和最低利润率定价，您审批，并跟进无人回复的报价。' },
   exTag: { en: 'Example enquiry', ms: 'Contoh pertanyaan', zh: '询价示例' },
   exMsg: { en: '“Boss, 3 pcs 4×2 ft acrylic signboard, white LED, need by Friday.”', ms: '“Boss, 3 keping papan tanda akrilik 4×2 kaki, LED putih, perlu hari Jumaat.”', zh: '“老板，3 块 4×2 尺亚克力招牌，白色 LED，周五要。”' },
+  exVoice: { en: '“Boss, nak 2 pcs banner 3×6 kaki, full colour, boleh siap Isnin ah?”', ms: '“Boss, nak 2 pcs banner 3×6 kaki, full colour, boleh siap Isnin ah?”', zh: '“Boss, nak 2 pcs banner 3×6 kaki, full colour, boleh siap Isnin ah?”' },
+  exTab: [{ en: 'Text message', ms: 'Mesej teks', zh: '文字消息' }, { en: 'Voice note', ms: 'Nota suara', zh: '语音消息' }] satisfies Text[],
+  exReading: { en: 'Reading the request…', ms: 'Membaca permintaan…', zh: '正在读取需求…' },
+  exTranscribing: { en: 'Transcribing the voice note…', ms: 'Menyalin nota suara…', zh: '正在转写语音…' },
+  exAuto: { en: 'Auto-transcribed', ms: 'Disalin automatik', zh: '自动转写' },
+  exLine2: { en: 'Vinyl banner 3×6 ft, full colour', ms: 'Banner vinil 3×6 kaki, warna penuh', zh: '乙烯基横幅 3×6 尺，全彩' },
+  exMargin2: { en: 'Margin 41%, above your 25% floor', ms: 'Margin 41%, melebihi lantai 25% anda', zh: '利润率 41%，高于您设定的 25% 下限' },
   exDraft: { en: 'Draft quote', ms: 'Draf sebut harga', zh: '报价草稿' },
   exLine: { en: 'Acrylic signboard, LED', ms: 'Papan tanda akrilik, LED', zh: '亚克力招牌，LED' },
   exMargin: { en: 'Margin 34%, above your 25% floor', ms: 'Margin 34%, melebihi lantai 25% anda', zh: '利润率 34%，高于您设定的 25% 下限' },
   exNote: { en: 'Illustration with made-up numbers, not a real quote.', ms: 'Ilustrasi dengan nombor rekaan, bukan sebut harga sebenar.', zh: '示意图，数字为虚构，并非真实报价。' },
   statusUp: { en: 'Service is up', ms: 'Perkhidmatan aktif', zh: '服务正常' },
   statusDown: { en: 'Service not reachable right now', ms: 'Perkhidmatan tidak dapat dicapai sekarang', zh: '服务暂时无法连接' },
+  statusPage: { en: 'Service status page', ms: 'Halaman status perkhidmatan', zh: '服务状态页' },
   statusWait: { en: 'Checking service…', ms: 'Menyemak perkhidmatan…', zh: '正在检查服务…' },
   howH: { en: 'From enquiry to accepted quote in four steps', ms: 'Dari pertanyaan ke sebut harga diterima dalam empat langkah', zh: '从询价到客户接受，四步完成' },
   how: [
@@ -42,10 +55,10 @@ const S = {
   tour: [
     { id: 'quote', tab: { en: 'Quote from chat', ms: 'Sebut harga dari sembang', zh: '聊天报价' }, h: { en: 'The chat becomes a draft you can edit', ms: 'Sembang menjadi draf yang boleh disunting', zh: '聊天变成可编辑的草稿' }, p: { en: 'Each line is matched to your cost book and priced by the rules engine. Export the quote as PDF, XLSX or CSV, or send it with a link the customer can accept.', ms: 'Setiap baris dipadankan dengan buku kos dan dihargakan oleh enjin peraturan. Eksport sebut harga sebagai PDF, XLSX atau CSV, atau hantar pautan yang boleh diterima pelanggan.', zh: '每一行都对应您的成本表，由规则引擎定价。可导出 PDF、XLSX 或 CSV，也可发送客户能直接接受的链接。' }, pts: [{ en: 'Quantity tiers and minimum order quantities', ms: 'Tahap kuantiti dan kuantiti pesanan minimum', zh: '数量阶梯价与最低订购量' }, { en: 'Customer accepts or declines from a link', ms: 'Pelanggan terima atau tolak melalui pautan', zh: '客户通过链接接受或拒绝' }] },
     { id: 'guard', tab: { en: 'Margin guard', ms: 'Pelindung margin', zh: '利润保护' }, h: { en: 'Know when a price moved before you quote', ms: 'Tahu bila harga berubah sebelum memberi sebut harga', zh: '报价前就知道成本变了' }, p: { en: 'Supplier price lists come in by PDF, photo, XLSX, DOCX or CSV. Stale costs and quotes under your margin floor are flagged for review.', ms: 'Senarai harga pembekal masuk melalui PDF, foto, XLSX, DOCX atau CSV. Kos lapuk dan sebut harga di bawah lantai margin ditandakan untuk semakan.', zh: '供应商价目表可用 PDF、照片、XLSX、DOCX 或 CSV 导入。过期成本和低于最低利润率的报价会被标出待审。' }, pts: [{ en: 'Stale-cost alerts', ms: 'Amaran kos lapuk', zh: '过期成本提醒' }, { en: 'Discount guard and margin report', ms: 'Pelindung diskaun dan laporan margin', zh: '折扣保护与利润报告' }] },
-    { id: 'track', tab: { en: 'Track and chase', ms: 'Jejak dan kejar', zh: '追踪催办' }, h: { en: 'No quote goes quiet', ms: 'Tiada sebut harga yang senyap', zh: '没有报价被遗忘' }, p: { en: 'Every quote has a timeline and an age colour. Follow-ups are sorted by longest wait, and accepted quotes become jobs on the board.', ms: 'Setiap sebut harga ada garis masa dan warna umur. Tindakan susulan disusun mengikut tempoh menunggu terlama, dan sebut harga diterima menjadi kerja di papan.', zh: '每张报价都有时间线和账龄颜色。跟进按等待最久排序，已接受的报价会成为看板上的工作。' }, pts: [{ en: 'Fresh, waiting, late and stale at a glance', ms: 'Segar, menunggu, lewat dan basi sekilas pandang', zh: '新鲜、等待、逾期、陈旧一目了然' }, { en: 'Job board from accepted quotes', ms: 'Papan kerja daripada sebut harga diterima', zh: '由已接受报价生成工作看板' }] },
+    { id: 'track', tab: { en: 'Schedule and chase', ms: 'Jadual dan kejar', zh: '日程催办' }, h: { en: 'No quote goes quiet', ms: 'Tiada sebut harga yang senyap', zh: '没有报价被遗忘' }, p: { en: 'Every quote has a timeline and an age colour. Follow-ups are sorted by longest wait, and accepted quotes become jobs on the board.', ms: 'Setiap sebut harga ada garis masa dan warna umur. Tindakan susulan disusun mengikut tempoh menunggu terlama, dan sebut harga diterima menjadi kerja di papan.', zh: '每张报价都有时间线和账龄颜色。跟进按等待最久排序，已接受的报价会成为看板上的工作。' }, pts: [{ en: 'Fresh, waiting, late and stale at a glance', ms: 'Segar, menunggu, lewat dan basi sekilas pandang', zh: '新鲜、等待、逾期、陈旧一目了然' }, { en: 'Job board from accepted quotes', ms: 'Papan kerja daripada sebut harga diterima', zh: '由已接受报价生成工作看板' }] },
   ] satisfies { id: string; tab: Text; h: Text; p: Text; pts: Text[] }[],
   modsH: { en: 'One system, not five spreadsheets', ms: 'Satu sistem, bukan lima hamparan', zh: '一套系统，取代五份表格' },
-  modsHint: { en: 'Pick a module to see what it does.', ms: 'Pilih modul untuk lihat fungsinya.', zh: '选择一个模块查看用途。' },
+  modsHint: { en: 'Pick a module to see what it does. The sample page uses made-up data.', ms: 'Pilih modul untuk lihat fungsinya. Halaman contoh menggunakan data rekaan.', zh: '选择一个模块查看用途。示例页面使用虚构数据。' },
   mods: [
     { id: 'home', n: { en: 'Home', ms: 'Utama', zh: '首页' }, d: { en: 'Speed to quote, quotes this week, margin and what needs you today.', ms: 'Kelajuan sebut harga, sebut harga minggu ini, margin dan perkara yang perlukan anda hari ini.', zh: '报价速度、本周报价、利润率，以及今天需要您处理的事。' } },
     { id: 'tracker', n: { en: 'Tracker', ms: 'Penjejak', zh: '追踪' }, d: { en: 'Every quote by stage, with overdue rules and age colours.', ms: 'Setiap sebut harga mengikut peringkat, dengan peraturan lewat dan warna umur.', zh: '按阶段列出所有报价，含逾期规则和账龄颜色。' } },
@@ -72,11 +85,23 @@ const S = {
     { h: { en: 'Every action is logged', ms: 'Setiap tindakan direkodkan', zh: '每个操作都有记录' }, p: { en: 'An activity log you can filter and download, plus sign-in with sessions and email invites.', ms: 'Log aktiviti yang boleh ditapis dan dimuat turun, serta log masuk dengan sesi dan jemputan e-mel.', zh: '可筛选、可下载的活动记录，另有会话登录与电邮邀请。' } },
   ] satisfies { h: Text; p: Text }[],
   ctaH: { en: 'Ready to quote faster?', ms: 'Sedia untuk beri sebut harga lebih pantas?', zh: '准备好更快报价了吗？' },
-  foot: { en: 'LARIS by SPARK SURGE · Built for the SDC 2026 hackathon, SDG 8', ms: 'LARIS oleh SPARK SURGE · Dibina untuk hackathon SDC 2026, SDG 8', zh: 'LARIS · SPARK SURGE 团队 · SDC 2026 黑客松作品，SDG 8' },
-  langL: { en: 'Language', ms: 'Bahasa', zh: '语言', ta: 'மொழி' },
 }
 
-const NAV = [['how', S.nHow], ['tour', S.nTour], ['modules', S.nMods], ['who', S.nWho], ['privacy', S.nPriv]] as const
+const SECTIONS = [['how', S.nHow], ['tour', S.nTour], ['modules', S.nMods], ['who', S.nWho], ['privacy', S.nPriv]] as const
+const NAV: NavItem[] = [...SECTIONS.map(([id, label]) => ({ id, label, href: '#' + id })), { id: 'pricing', label: S.nPrice, href: '#/pricing' }]
+
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// The section that crosses the upper third of the screen is the highlighted tab.
+function useSpy(): string {
+  const [on, setOn] = useState<string>(SECTIONS[0][0])
+  useEffect(() => {
+    const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && setOn(e.target.id)), { rootMargin: '-25% 0px -65% 0px' })
+    SECTIONS.forEach(([id]) => { const el = document.getElementById(id); if (el) io.observe(el) })
+    return () => io.disconnect()
+  }, [])
+  return on
+}
 
 function useHealth() {
   const [up, setUp] = useState<boolean>()
@@ -199,6 +224,12 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
             </div>
             <figcaption className="text-xs text-muted">{t(S.exNote)}</figcaption>
           </figure>
+        </section>
+
+        <section id="loop" className={sec} aria-labelledby="loop-h">
+          <h2 id="loop-h" className="text-2xl font-bold">{t(LOOP.h)}</h2>
+          <p className="mt-2 max-w-2xl text-muted">{t(LOOP.p)}</p>
+          <div className="glass-lite mt-6 p-4"><TradeOrbit story /></div>
         </section>
 
         <section id="how" className={sec} aria-labelledby="how-h">

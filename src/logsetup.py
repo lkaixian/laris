@@ -15,7 +15,7 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
-PUBLIC_TOKEN = re.compile(r"(/api/public/quote/)[^/?\s]+")  # the customer accept link carries its token in the path
+PUBLIC_TOKEN = re.compile(r"(/api/public/(?:quote|delivery)/)[^/?\s]+")  # the customer accept and delivery links carry their token in the path
 
 
 class MaskQuery(logging.Filter):

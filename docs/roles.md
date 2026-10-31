@@ -14,6 +14,8 @@ Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEF
 |---|---|---|---|
 | `view_costs` | Costs and prices | no | Supplier prices, cost items, margins, stale alerts, supplier chat text. Without it every response is scrubbed of them |
 | `view_reports` | Costs and prices | no | Margin report (cost and margin figures in it also need `view_costs`) |
+| `view_revenue` | Costs and prices | no | The Revenue page: money in and out, untung kasar and untung bersih (also needs `view_costs`: it shows costs) |
+| `record_expenses` | Costs and prices | no | Add rent, wages and bills (running costs) to the Revenue page; voiding one is the owner's |
 | `edit_supplier_contacts` | Contacts | no | Change a supplier's name or number |
 | `manage_contacts` | Contacts | yes | Create and edit contacts |
 | `upload_documents` | Documents | yes | Ingest a supplier file or text, key a document in |
@@ -22,6 +24,8 @@ Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEF
 | `manage_followups` | Quotes | no | Send or skip a follow-up |
 | `export_data` | Data | no | Contact book CSV (BOM and PO exports also need `view_costs`) |
 | `view_audit` | Activity | yes | The activity feed (cost entries in it also need `view_costs`) |
+| `record_payments` | Orders | no | Record a deposit or balance payment, read a payment slip, see an order's payments, receipts and balance |
+| `issue_delivery` | Orders | no | Create a delivery order, get its customer sign link, read its PDF (prices stay off unless the owner switched them on). Not the order's money: that needs `record_payments` |
 
 ## Owner only, not assignable
 
@@ -36,6 +40,8 @@ These are refused with 422 `not_assignable` when put in a role, and stay `requir
 | promote a supplier document or ask-supplier reply into the cost book (`/api/rfq/.../accept`) | same guard; it moves real cost |
 | erase a customer's personal data | PDPA action |
 | decide field proposals; clear `needs_review` on a quote line | owner decision |
+| issue a proforma (`POST /api/jobs/{id}/proforma`) or the invoice (`POST /api/jobs/{id}/invoice`) | owner; the deposit and the amount due are money terms. An invoice before any signed delivery order, and a delivery order before the deposit is recorded, need the owner's `override_reason` (stored on the document, audited) |
+| void a document, reverse a payment (`POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`) | owner; payments are append-only |
 
 Branding (display name, colour, logo) is readable by every signed-in role in `GET /api/me` `org`, writable by the owner only.
 
@@ -58,6 +64,14 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `GET /api/audit/export` | `view_audit` and `export_data` |
 | `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
+| `POST /api/jobs/{id}/payments`, `POST /api/payments/propose-from-slip`, `GET /api/jobs/{id}/chain`, `GET /api/chain/receivables` | `record_payments` |
+| `GET /api/deal-docs/{id}/pdf` | `record_payments` (a delivery order also `issue_delivery`) |
+| `POST /api/jobs/{id}/delivery-orders`, `POST /api/deal-docs/{id}/delivery-link` | `issue_delivery` (an `override_reason` on the first is owner only) |
+| `POST /api/jobs/{id}/proforma`, `POST /api/jobs/{id}/invoice`, `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`, `PUT/GET /api/settings/doc-layout/{kind}` | owner |
+| `POST /api/chain`, `POST /api/chain/from-quote/{id}`, `POST /api/chain/{id}/convert`, `POST /api/chain/{id}/transition`, `POST /api/chain/buy/*` | `manage_contacts` (customer PO, sales order, supplier PO only). Moves to `so:cancelled`, `cpo:confirmed` and `spo:sent` are owner only; cancelling an order that has payments is refused (409). These routes never touch money or delivery: proforma, delivery order, invoice, receipt and payments exist only on the routes above, so `record_payments` and `issue_delivery` cannot be bypassed through `/api/chain` |
+| `GET /api/revenue` | `view_revenue` and `view_costs` (403 `permission_required` without both) |
+| `POST /api/expenses` | `record_expenses` |
+| `POST /api/expenses/{id}/void` | owner |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |
@@ -66,7 +80,7 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/users`, `POST /api/users/{id}`, `POST/PATCH/DELETE /api/roles...`, `POST /api/invites`, `POST /api/invites/{id}/resend`, `DELETE /api/invites/{id}` | owner |
 | `POST /api/license`, `POST /api/license/request` | owner |
 
-`OPEN` (no permission needed): own account and public pages (`login`, `logout`, `signup`, `signup/verify`, `signup/resend`, `password/forgot`, `password/reset`, `invites/preview`, `invites/accept`, `me/password`, `me/sessions/revoke-others`, `me/sessions/{sid}`) and `POST /api/assistant`, which only answers questions with the caller's own scrubbed read access (its follow-up answer needs `manage_followups`, its cost and margin answers `view_costs`).
+`OPEN` (no permission needed): the customer's own links (`POST /api/public/quote/{token}/accept|decline`, `POST /api/public/delivery/{token}/sign`), own account and public pages (`login`, `logout`, `signup`, `signup/verify`, `signup/resend`, `password/forgot`, `password/reset`, `invites/preview`, `invites/accept`, `me/password`, `me/sessions/revoke-others`, `me/sessions/{sid}`) and `POST /api/assistant`, which only answers questions with the caller's own scrubbed read access (its follow-up answer needs `manage_followups`, its cost and margin answers `view_costs`).
 
 Reads: without `view_costs` every response is scrubbed (tracker, documents, contacts, dashboard, search, margin report, RFQ replies); `GET /api/followups` needs `manage_followups`.
 

@@ -2,7 +2,7 @@ import { getLang } from './i18n'
 import type { Lang } from './i18n'
 
 // Screen text in English, Bahasa Melayu, Chinese (simplified, as used in Malaysia) and Tamil.
-// Covers the shell (menu, user menu), status labels, age colours, filters, and the Jobs, Follow-ups, Track, Activity and Assistant screens.
+// Covers the shell (menu, user menu), status labels, age colours, filters, and the Jobs, Follow-ups, Schedule, Activity and Assistant screens.
 // Not reviewed by native speakers yet. Server messages (errors, assistant answers, overdue reasons not listed here) stay in English.
 type V = string | ((...a: never[]) => string)
 type E = Record<Lang, V>
@@ -19,8 +19,9 @@ const D = {
   'nav.group.Admin': { en: 'Admin', ms: 'Pentadbiran', zh: '管理', ta: 'நிர்வாகம்' },
   'nav.home': { en: 'Home', ms: 'Utama', zh: '首页', ta: 'முகப்பு' },
   'nav.tracker': { en: 'Tracker', ms: 'Penjejak', zh: '报价追踪', ta: 'மேற்கோள் கண்காணிப்பு' },
-  'nav.track': { en: 'Track', ms: 'Jejak', zh: '进度', ta: 'நிலை' },
+  'nav.track': { en: 'Schedule', ms: 'Jadual', zh: '日程', ta: 'அட்டவணை' },
   'nav.jobs': { en: 'Jobs', ms: 'Kerja', zh: '工单', ta: 'வேலைகள்' },
+  'nav.deals': { en: 'Deals', ms: 'Urusan', zh: '交易', ta: 'ஒப்பந்தங்கள்' },
   'nav.followups': { en: 'Follow-ups', ms: 'Susulan', zh: '跟进', ta: 'பின்தொடர்வுகள்' },
   'nav.contacts': { en: 'Contacts', ms: 'Kenalan', zh: '联系人', ta: 'தொடர்புகள்' },
   'nav.suppliers': { en: 'Supplier directory', ms: 'Direktori pembekal', zh: '供应商目录', ta: 'சப்ளையர் பட்டியல்' },
@@ -28,6 +29,7 @@ const D = {
   'nav.contracts': { en: 'Contracts', ms: 'Kontrak', zh: '合同', ta: 'ஒப்பந்தங்கள்' },
   'nav.ask': { en: 'Ask suppliers', ms: 'Tanya pembekal', zh: '询问供应商', ta: 'சப்ளையர்களிடம் கேள்' },
   'nav.catalog': { en: 'Catalog photos', ms: 'Foto katalog', zh: '目录照片', ta: 'பட்டியல் படங்கள்' },
+  'nav.revenue': { en: 'Revenue', ms: 'Hasil', zh: '收入', ta: 'வருவாய்' },
   'nav.alerts': { en: 'Stale costs', ms: 'Kos lapuk', zh: '过时成本', ta: 'பழைய செலவுகள்' },
   'nav.activity': { en: 'Audit log', ms: 'Log audit', zh: '审计日志', ta: 'தணிக்கைப் பதிவு' },
   'nav.assistant': { en: 'Assistant', ms: 'Pembantu', zh: '助手', ta: 'உதவியாளர்' },
@@ -94,6 +96,8 @@ const D = {
   'why.waiting for owner decision': { en: 'waiting for owner decision', ms: 'menunggu keputusan pemilik', zh: '等待老板决定', ta: 'உரிமையாளர் முடிவுக்காகக் காத்திருக்கிறது' },
   'why.supplier has not replied': { en: 'supplier has not replied', ms: 'pembekal belum membalas', zh: '供应商尚未回复', ta: 'சப்ளையர் இன்னும் பதிலளிக்கவில்லை' },
   'why.catalog item waiting for review': { en: 'catalog item waiting for review', ms: 'item katalog menunggu semakan', zh: '目录项目等待审核', ta: 'பட்டியல் பொருள் மதிப்பாய்வுக்காகக் காத்திருக்கிறது' },
+  'why.deposit not received': { en: 'deposit not received', ms: 'deposit belum diterima', zh: '尚未收到订金', ta: 'முன்பணம் இன்னும் பெறப்படவில்லை' },
+  'why.invoice unpaid past its due date': { en: 'invoice unpaid past its due date', ms: 'invois belum dibayar melepasi tarikh akhir', zh: '发票已过期未付', ta: 'இன்வாய்ஸ் செலுத்தும் தேதி கடந்தும் செலுத்தப்படவில்லை' },
 
   // ---- age colours
   'heat.fresh': { en: 'Fresh', ms: 'Baharu', zh: '新近', ta: 'புதிது' },
@@ -213,7 +217,7 @@ const D = {
   'fu.skippedToast': { en: (q: string) => `Follow-up for ${q} skipped.`, ms: (q: string) => `Susulan untuk ${q} dilangkau.`, zh: (q: string) => `已跳过 ${q} 的跟进。`, ta: (q: string) => `${q} க்கான பின்தொடர்வு தவிர்க்கப்பட்டது.` },
 
   // ---- track
-  'tr.title': { en: 'Track', ms: 'Jejak', zh: '进度', ta: 'நிலை' },
+  'tr.title': { en: 'Schedule', ms: 'Jadual', zh: '日程', ta: 'அட்டவணை' },
   'tr.lead': { en: 'Everything in flight, how long it has been in its stage, and what is overdue.', ms: 'Semua yang sedang berjalan, berapa lama di peringkat semasa, dan apa yang lewat tempoh.', zh: '所有进行中的事项、在当前阶段停留了多久，以及哪些已逾期。', ta: 'நடப்பில் உள்ள அனைத்தும், ஒவ்வொன்றும் அதன் கட்டத்தில் எவ்வளவு காலம் உள்ளது, எவை காலம் கடந்தவை.' },
   'tr.kind': { en: 'Kind', ms: 'Jenis', zh: '类型', ta: 'வகை' },
   'tr.kind.all': { en: 'All', ms: 'Semua', zh: '全部', ta: 'அனைத்தும்' },
@@ -254,7 +258,7 @@ const D = {
   'tr.nothingHint': { en: 'Quotes, supplier documents, asks and catalog items show here while they are in flight.', ms: 'Sebut harga, dokumen pembekal, pertanyaan dan item katalog dipaparkan di sini semasa berjalan.', zh: '进行中的报价、供应商文件、询价和目录项目会显示在这里。', ta: 'நடப்பில் உள்ள மேற்கோள்கள், சப்ளையர் ஆவணங்கள், கேள்விகள், பட்டியல் பொருட்கள் இங்கே தோன்றும்.' },
   'tr.tableLabel': { en: 'Tracked items', ms: 'Item dijejak', zh: '追踪事项', ta: 'கண்காணிக்கப்படும் உருப்படிகள்' },
   'tr.caption': { en: 'Items in flight, overdue first', ms: 'Item sedang berjalan, lewat tempoh dahulu', zh: '进行中的事项，逾期优先', ta: 'நடப்பில் உள்ள உருப்படிகள், காலம் கடந்தவை முதலில்' },
-  'tr.filters': { en: 'Track filters', ms: 'Penapis jejak', zh: '进度筛选', ta: 'நிலை வடிகட்டிகள்' },
+  'tr.filters': { en: 'Schedule filters', ms: 'Penapis jadual', zh: '日程筛选', ta: 'அட்டவணை வடிகட்டிகள்' },
   'tr.search': { en: 'Search customer, supplier or reference', ms: 'Cari pelanggan, pembekal atau rujukan', zh: '搜索客户、供应商或编号', ta: 'வாடிக்கையாளர், சப்ளையர் அல்லது குறிப்பு எண்ணைத் தேடு' },
   'tr.list': { en: 'List', ms: 'Senarai', zh: '列表', ta: 'பட்டியல்' },
   'tr.stage': { en: 'Stage', ms: 'Peringkat', zh: '阶段', ta: 'கட்டம்' },

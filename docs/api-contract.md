@@ -204,3 +204,50 @@ Health adds `ai_not_reviewed` (info) while no choice has been saved.
 | `POST /api/privacy/requests/{id}` | owner, audited. `{action: "erase"\|"dismiss"}` returns the updated row (same shape as above). `erase` runs `POST /api/parties/{id}/erase` for that customer, marks it `done`, then tells the customer "Your data has been erased." on the same channel (best effort: a failed send never fails the request). `dismiss` marks it `dismissed` and tells the customer the business could not erase it, with the data protection contact if set. 404 `not_found`, 409 `already_decided`, 409 `not_customer` (from the erase), 422 `bad_action` |
 
 Health adds `privacy_requests_waiting` (warn) when a request has been pending more than 3 days.
+
+
+## Orders, purchase orders and the order chain
+
+Preparation only: payments are recorded, never taken; nothing is filed or sent. An order is a `jobs` row. Its money and paper (proforma, delivery order, invoice, receipt, payments) are the order chain below; `/api/chain` holds only the customer PO, sales order and supplier PO, each linked to the order by `job_id`. Proforma, delivery order, invoice and receipt are no longer chain documents (the old `convert` targets `pf`, `do`, `inv` and `POST /api/chain/{id}/payment` are gone).
+
+### `/api/chain` (customer PO, sales order, supplier PO)
+
+Write routes need `manage_contacts`; some moves are owner-only (403 for staff).
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/chain` | Create a customer PO (`cpo`), sales order (`so`) or supplier PO (`spo`). Body: `kind`, `customer_id` (the supplier for `spo`), `lines[{description, qty, uom, unit_price}]`, optional `ref`, `discount_pct`, `sst_rate`, `round5`, `note`, `serves` (spo only: the order it is bought for). A `cpo` or `so` creates its order (a job holding the document total as one lot line); an `spo` with `serves` joins that order; 409 `duplicate_po` for a repeated customer PO number. |
+| `POST /api/chain/from-quote/{quote_id}` | Make a `cpo` or `so` from an accepted outgoing quote, joined to the order Accept made (`job_id`). 409 `quote_not_accepted`; 409 `no_order` if the quote has no order row; 409 `already_converted`. |
+| `POST /api/chain/{id}/convert` | `{to: "so"}` from a customer PO, same order and deal. 409 `illegal_conversion`. |
+| `POST /api/chain/{id}/transition` | `{to, reason?}` along the state machine in `src/chain.py`. 409 `illegal_transition`; 403 `owner_only`; 422 `reason_required`; 409 `has_payments` when cancelling an order that has payments. |
+| `GET /api/chain?kind=&status=` | List (`cpo`, `so`, `spo`), each with `job_id`. |
+| `GET /api/chain/receivables` | Ageing buckets (current, 1-30, 31-60, 60+) from the live invoices and payments of the order chain, plus `deposits_waiting` (proformas whose deposit is not recorded). Needs `record_payments`. |
+| `GET /api/chain/{id}` | The document, its Document Trail (`trail`) and its history. |
+| `POST /api/chain/buy/compare`, `POST /api/chain/buy/margin` | Stateless supplier quote ranking and deal margin (`src/buyside.py`). |
+
+### Order chain (`/api/jobs/{id}/...`, `/api/deal-docs/...`, `/api/payments/...`)
+
+| Route | What it does | Gate |
+| --- | --- | --- |
+| `GET /api/jobs/{id}/chain` | Documents, payments, totals, balance, delivery lines and the stage (`awaiting_deposit`, `in_production`, `delivered`, `awaiting_payment`, `paid`); `job.quote_deposit_pct` and `job.customer`. | `record_payments` |
+| `POST /api/jobs/{id}/proforma` | `{deposit_pct?}` (null = the quote's). | owner |
+| `POST /api/jobs/{id}/payments` | `{amount, method, reference?, paid_on, purpose, idempotency_key, extraction?}`; issues the receipt; the same key returns the first result; 409 on overpayment. | `record_payments` |
+| `POST /api/payments/propose-from-slip` | Multipart `image`; returns a proposal only. | `record_payments` |
+| `POST /api/jobs/{id}/delivery-orders` | `{lines?, override_reason?}`; 409 `deposit_missing`. | `issue_delivery` (override: owner) |
+| `POST /api/deal-docs/{id}/delivery-link` | `{url, expires_at}`, shown once. | `issue_delivery` |
+| `POST /api/jobs/{id}/invoice` | `{due_on?, override_reason?}`; 409 `not_delivered`. | owner |
+| `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse` | Void (reason), reversing payment row. | owner |
+| `GET /api/deal-docs/{id}/pdf` | The issued document as PDF in the business's document language. | `record_payments` (delivery order: `issue_delivery`) |
+| `GET /api/public/delivery/{token}`, `POST /api/public/delivery/{token}/sign` | The customer's page and `{name, agree, problems?, mark?}`; 404 generic, 409 `already_signed`, 429. No sign-in. | link |
+
+## Revenue and running costs (`src/revenue.py`, `src/api/revenue.py`, `db/revenue.sql`)
+
+Money in and out, untung kasar (gross profit) and untung bersih (net profit) for a period. The arithmetic and its definitions are in the docstring of `src/revenue.py` and are shown to the owner on the Revenue page. Tested against the real database in `tests/test_revenue_api.py` and the pure calculation in `tests/test_revenue.py`.
+
+| Route | Notes |
+|---|---|
+| `GET /api/revenue?from=YYYY-MM-DD&to=YYYY-MM-DD` | Needs `view_revenue` **and** `view_costs` (403 `permission_required` otherwise; the 403 carries no figures). Returns `sales`, `goods` (cost of goods), `gross` and `gross_pct`, `running` (running costs), `net` and `net_pct`, `money_in`, `money_out`, `left_over`, `to_collect`, `orders_counted`, `orders_without_cost`, `series` (one row per day, week or month: `granularity` is `day` up to 31 days, `week` up to 140, else `month`), `orders` and `expense_rows` (the rows behind the numbers, at most 100 each), `expenses_by_category`, `previous` (the period of the same length just before, with its own totals), `change_pct`, `categories`, `can_record`, `can_void`, `today`. Amounts are strings with two decimals. 422 `end_before_start`, `too_long` (more than 731 days), or a validation error for a missing or malformed date. |
+| `POST /api/expenses` | `record_expenses`. `{spent_on, category, amount, note?}`; category is `rent`, `wages`, `utilities`, `transport`, `marketing`, `tax` or `other`; amount above zero with at most two decimals; 422 `future_date` for a day that has not come; unknown fields are refused. Returns 201 with the row. |
+| `POST /api/expenses/{id}/void` | Owner only. `{reason}` (3 to 300 characters). The row stays, marked void; a voided cost is not counted. 404 `not_found` (also for another business's row), 409 `already_void`. |
+
+How the numbers are counted: **Sales** is the value of the orders won in the period without SST (a sale counts on the day the quote was accepted, Malaysia time). **Cost of goods** is the cost-book cost of those same orders (`v_quote_margin`, the basis of the margin report); an order with no cost (a job made by hand) or only some lines costed counts what is known and is counted in `orders_without_cost`. **Untung kasar** = Sales - Cost of goods. **Running costs** are the recorded, un-voided costs dated in the period. **Untung bersih** = Untung kasar - Running costs (income tax is not taken off unless recorded as a `tax` cost). **Money in** = payments received dated in the period, minus reversals. **Money out** = Cost of goods + Running costs. Profit counts what was SOLD, money in counts what was PAID; the difference is `to_collect`. A running cost cannot be edited or deleted (database triggers and revoked privileges); a mistake is voided and re-entered.

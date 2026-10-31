@@ -1,7 +1,7 @@
 // Run: node tests/roles_check.mjs  (db/roles.sql: the app role cannot weaken audit or guards)
 import {PGlite} from '@electric-sql/pglite';import fs from 'fs';
 const db=new PGlite(),rd=f=>fs.readFileSync(new URL('../db/'+f,import.meta.url),'utf8');
-for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','listings.sql','catalog_tiers.sql','rbac.sql','signup.sql','multi.sql','invites.sql','channels.sql','quotes.sql','jobs.sql','jobs_manual.sql','track.sql','accept.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
+for(const f of ['schema.sql','transitions.sql','functions.sql','views.sql','rls.sql','rfq.sql','listings.sql','catalog_tiers.sql','rbac.sql','signup.sql','multi.sql','invites.sql','channels.sql','quotes.sql','jobs.sql','jobs_manual.sql','track.sql','accept.sql','chain.sql','delivery.sql','deals.sql','revenue.sql','license.sql','seed_made_to_order.sql','roles.sql'])await db.exec(rd(f));
 let bad=0;const ok=(c,n)=>{console.log(c?'ok  ':'FAIL',n);if(!c)bad++};
 const refuses=async(n,s)=>{try{await db.exec(s);ok(false,n)}catch(e){ok(true,n+' -> '+e.message.slice(0,70))}};
 // a second tenant with one document and one cost, so isolation has something to hide

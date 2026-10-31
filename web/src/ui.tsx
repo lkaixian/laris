@@ -5,8 +5,11 @@ import { tx, txOr } from './strings'
 import { t, useLang, locale } from './i18n'
 import type { Text } from './i18n'
 import { hasGuide, openGuide } from './Guide'
+import { useShowTutorialButton } from './helpPrefs'
 import type { Me } from './api'
 import { Icon } from './icons'
+import { setThemePref } from './skin'
+import type { IconName } from './icons'
 
 const S = {
   notSet: { en: 'Not set', ms: 'Belum ditetapkan', zh: '未设置', ta: 'அமைக்கப்படவில்லை' },
@@ -143,10 +146,16 @@ export const OrgCtx = createContext('LARIS')
 export interface Crumb { href?: string; label: string }
 // "? How to" beside a page title: opens the step-by-step guide for this page, when it has one.
 function GuideButton() {
+  const show = useShowTutorialButton()   // Settings > Help can turn the button off
   const key = (location.hash.split('/')[1] || 'home').split('?')[0]
-  if (!hasGuide(key)) return null
+  if (!show || !hasGuide(key)) return null
   return <button type="button" className="btn min-h-8 gap-1 rounded-full px-3 text-sm" data-guide="how-to" onClick={() => openGuide(key)}><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-accent text-xs font-bold text-on-accent">?</span>{tx('guide.button')}</button>
 }
+
+const ROUTE_ICON: Record<string, IconName> = { home: 'home', revenue: 'revenue', tracker: 'tracker', track: 'pipeline', jobs: 'jobs', deals: 'tracker', followups: 'clock', contacts: 'contacts', contact: 'contacts',
+  ask: 'ask', catalog: 'camera', alerts: 'alerts', activity: 'activity', team: 'team', roles: 'roles', settings: 'settings', privacy: 'roles', 'api-access': 'key', 'ai-settings': 'ask',
+  status: 'warn', licence: 'key', issuer: 'key', purchase: 'key', doc: 'tracker', assistant: 'ask', account: 'team', help: 'ask', search: 'ask' }
+const routeNow = () => (location.hash.split('/')[1] || 'home').split('?')[0]
 
 export function PageHeader({ title, description, meta, actions, back, crumbs, status }: {
   title?: string; description?: ReactNode; meta?: ReactNode; actions?: ReactNode; back?: { href: string; label: string }; crumbs?: Crumb[]; status?: ReactNode
@@ -155,8 +164,9 @@ export function PageHeader({ title, description, meta, actions, back, crumbs, st
   const [lang] = useLang()
   useEffect(() => { document.title = `${title ?? t(S.loading)} · ${org}` }, [title, org, lang])
   const trail = crumbs ?? (back ? [back] : undefined)  // `back` is a single crumb with an arrow; `crumbs` ends with the current page
+  const icon = ROUTE_ICON[routeNow()]
   return (
-    <div className="mb-5">
+    <div className="glass-lite mb-4 p-4 md:p-5">
       {trail && (
         <nav aria-label={t(S.crumb)} className="mb-1 text-sm text-muted">
           <ol className="flex flex-wrap items-center">
@@ -175,14 +185,17 @@ export function PageHeader({ title, description, meta, actions, back, crumbs, st
         </nav>
       )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1 basis-72">
+        <div className="flex min-w-0 flex-1 basis-72 items-start gap-3">
+          {icon && <span aria-hidden="true" className="glass-icon"><Icon name={icon} /></span>}
+          <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {title !== undefined ? <h1 tabIndex={-1} className="break-words text-lg font-semibold">{title}</h1> : <div aria-hidden="true" className="skeleton h-7 w-56 max-w-full" />}
+            {title !== undefined ? <h1 tabIndex={-1} className="break-words text-xl font-semibold">{title}</h1> : <div aria-hidden="true" className="skeleton h-7 w-56 max-w-full" />}
             {status}
             {!trail && <GuideButton />}
           </div>
           {meta && <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{meta}</div>}
           {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
+          </div>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -206,7 +219,7 @@ export function TableRegion({ label, children, className = '' }: { label: string
   }, [])
   return (
     <div className="min-w-0 max-w-full">
-      <div ref={box} className={`relative max-w-full overflow-x-auto ${className} rounded-card border border-hairline bg-surface`} role="region" aria-label={label} tabIndex={0}>{children}</div>
+      <div ref={box} className={`relative max-w-full overflow-x-auto ${className} glass-lite`} role="region" aria-label={label} tabIndex={0}>{children}</div>
       {more && <p aria-hidden="true" className="mt-1 text-xs text-muted">{t(S.scroll)}</p>}
     </div>
   )
@@ -221,10 +234,7 @@ export function Hint({ id, children }: { id: string; children: ReactNode }) {
 export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark: (d: boolean) => void; compact?: boolean }) {
   useLang()
   const flip = () => {
-    const t = dark ? 'light' : 'dark'
-    document.documentElement.dataset.theme = t
-    try { localStorage.setItem('theme', t) } catch { /* storage blocked: choice lasts for this visit only */ }
-    setDark(!dark)
+    setDark(setThemePref(dark ? 'light' : 'dark'))
   }
   return compact
     ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label={t(S.dark)} title={t(S.dark)} onClick={flip}><Icon name="moon" /></button>

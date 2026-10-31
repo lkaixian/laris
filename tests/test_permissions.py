@@ -25,6 +25,7 @@ OPEN = {
     ("POST", "/api/me/onboarding"),  # a person's own tour progress, tests/test_onboarding.py
     ("POST", "/api/v1/quote-price"),  # no user session at all: an owner-issued API key (X-API-Key) is the credential; read-only pricing, tests/test_public_api.py
     ("POST", "/api/public/quote/{token}/accept"), ("POST", "/api/public/quote/{token}/decline"),  # the customer's own link, tests/test_accept.py
+    ("POST", "/api/public/delivery/{token}/sign"),  # the customer's own link, tests/test_chain_delivery.py
     ("POST", "/api/assistant/guide"),  # navigation help for any signed-in user; 403 ai_off unless the owner turned it on, tests/test_ai_guide.py
     ("POST", "/api/mcp"),  # no user session: an owner-issued MCP key bound to a staff role is the credential; read-only search, tests/test_mcp.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
@@ -41,8 +42,25 @@ REQ = {
     ("POST", "/api/documents/{doc_id}/lines/{line_id}"): {"json": {"qty": 1}},
     ("POST", "/api/settings"): {"json": {"brand_color": "#112233"}},
     ("POST", "/api/jobs"): {"json": {"title": "Fix the shop sign"}},
+    ("POST", "/api/chain"): {"json": {"kind": "so", "customer_id": ID, "lines": [{"description": "x", "qty": 1, "unit_price": 1}]}},
+    ("POST", "/api/chain/from-quote/{quote_id}"): {"json": {}},
+    ("POST", "/api/chain/{doc_id}/convert"): {"json": {"to": "so"}},
+    ("POST", "/api/chain/{doc_id}/transition"): {"json": {"to": "cancelled", "reason": "x"}},
+    ("POST", "/api/chain/buy/compare"): {"json": {"quotes": [{"supplier": "A", "total": 1}, {"supplier": "B", "total": 2}]}},
+    ("POST", "/api/chain/buy/margin"): {"json": {"sell_total": 2, "cost_total": 1}},
     ("POST", "/api/jobs/{job_id}"): {"json": {"status": "doing"}},
     ("POST", "/api/followups/{fid}"): {"json": {"action": "skip"}},
+    ("POST", "/api/jobs/{job_id}/proforma"): {"json": {}},
+    ("POST", "/api/jobs/{job_id}/payments"): {"json": {"amount": "1.00", "method": "cash", "paid_on": "2026-01-01", "purpose": "deposit", "idempotency_key": "k" * 12}},
+    ("POST", "/api/jobs/{job_id}/invoice"): {"json": {}},
+    ("POST", "/api/jobs/{job_id}/delivery-orders"): {"json": {}},
+    ("POST", "/api/deal-docs/{doc_id}/delivery-link"): {},
+    ("POST", "/api/payments/propose-from-slip"): {"files": {"image": ("s.jpg", JPEG, "image/jpeg")}},
+    ("POST", "/api/payments/{pid}/reverse"): {"json": {"reason": "wrong amount"}},
+    ("POST", "/api/deal-docs/{doc_id}/void"): {"json": {"reason": "wrong amount"}},
+    ("POST", "/api/expenses"): {"json": {"spent_on": "2026-01-01", "category": "rent", "amount": "1.00"}},
+    ("POST", "/api/expenses/{expense_id}/void"): {"json": {"reason": "typed twice"}},
+    ("PUT", "/api/settings/doc-layout/{kind}"): {"json": {}},
     ("POST", "/api/field-proposals/{pid}/decide"): {"json": {"decision": "ignore"}},
     ("POST", "/api/enquiries/simulate"): {"json": {"channel": "web", "text": "x"}},
     ("POST", "/api/documents/ingest"): {"data": {"text": "x"}},

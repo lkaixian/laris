@@ -82,6 +82,8 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 - **Supplier work**: price lists by PDF, photo, XLSX, DOCX and CSV; "Ask suppliers" with a marked-up photo over WhatsApp or Telegram and a price comparison of the replies.
 - **Quotes and tracking**: quote PDF, XLSX and CSV export; tracker with stage and overdue rules and age colours (fresh, waiting, late, stale by days waiting, with a filter), follow-ups sorted by longest wait, job board with jobs from accepted quotes or made by hand, "speed to quote" on Home.
 - **Customer accept link**: the customer opens a link, types a name and accepts or declines. This is a simulated e-signature, labelled so in the app, and creates the job.
+- **Order chain**: after a customer accepts, the order runs through proforma with a deposit, payments the owner records (append-only, a mistake is a reversing entry, a bank slip photo is read by AI into a proposal the owner confirms), a delivery order the customer signs by tapping a link, invoice (deposit deducted) and receipt. Each document has its own layout and uses one document language per business (English, Malay, Chinese or Tamil). Customer PO, sales order and supplier PO sit beside it. Built and tested on PGlite and CI Postgres; the screens have only been driven on mock data, not on a phone or the deployed app. Layout editor, letterhead upload, one link for the whole deal and a QR code are not built yet (plan: docs/order-chain-plan.md).
+- **Look and Home**: brand-green dark mode, glass skin with Reduce transparency and Lite visuals, reorderable Home, and a 3D-printing price engine (STL analysis, not yet wired into quotes).
 - **Owner control**: approval step, custom roles and permissions, activity log with filters (dates, person, module, action, words) and a CSV or PDF download of only the chosen entries, multi-business isolation with row-level security, sign-in with sessions and email invites, signed software licence.
 - **Privacy tools (PDPA)**: consent notice on first chat contact, bot commands `/privacy`, `/mydata` and `/forget`, per-person export and erase, breach register with deadline clocks, DPO contact, retention purge. Not reviewed by a lawyer.
 - **Help**: guided tour, Ctrl+K command palette, 17 help articles. An optional in-app AI guide is off by default and the owner opts in; it sees only a redacted question. A floating **Ask** button opens the Assistant on every page: it looks things up, and can move a job or skip a follow-up only after the person confirms (it never prices, approves, sends or deletes).
@@ -97,7 +99,9 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 | AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR (PaddleOCR optional) |
 | Channels | Telegram Bot API (demo bot live), WhatsApp Business Cloud API (built, not connected) |
 | Email | Mailtrap API (verification, reset, invites, quotes, licences; sandbox inbox while testing) |
-| Licence | Ed25519-signed keys, verified in the app; signing in the browser (WebCrypto) |
+| Documents | reportlab + uharfbuzz (quote and report PDFs, Tamil shaping), openpyxl (XLSX), pypdf, Pillow |
+| Licence | Ed25519-signed keys (`cryptography`), verified in the app; signing in the browser (WebCrypto) |
+| Payments | Stripe Checkout (one-time licence purchase); a signed webhook issues and emails the key |
 | Hosting / Dev | Replit |
 
 The full model and library list with licences is in `submission/SDC2026_SparkSurge_TechDeclaration.pdf` and `docs/tech-and-tools-declaration.md`.
@@ -170,7 +174,7 @@ python -m pytest -q
 npm ci && node tests/schema_check.mjs && node tests/db_check.mjs && node tests/roles_check.mjs
 ```
 
-The suite has 686 tests. GitHub Actions runs them on every push as parallel jobs: the backend tests in four file groups (a-c, d-l, m-r, s-z) on PGlite, the same four groups again against a real Postgres 16 service (`backend-pg`), a `checks` job (schema, db and roles checks, pip-audit) and the web build. Each group has its own runner, so no single process holds every test (one run of all of them was killed for memory). The result of this CI layout has not been read yet.
+The suite has 1066 tests (and 9 web unit tests run by `npm test`). GitHub Actions runs them on every push as parallel jobs: the backend tests in four file groups (a-c, d-l, m-r, s-z) on PGlite, the same four groups again against a real Postgres 16 service (`backend-pg`), a `checks` job (schema, db and roles checks, pip-audit) and the web build. Each group has its own runner, so no single process holds every test (one run of all of them was killed for memory). The web job runs on Node 24 (it runs the TypeScript unit tests); the backend jobs stay on Node 20. CI has been read and was green on master at the last merge (PR #5).
 
 ## How We Use Replit (Required)
 

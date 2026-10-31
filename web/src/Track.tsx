@@ -75,7 +75,7 @@ function Board({ items, counts, kind, more }: { items: Item[]; counts?: Partial<
             const list = quotes.filter(i => i.status === st)
             const total = counts?.outbound?.[st]
             return (
-              <section key={st} aria-labelledby={`board-${st}`} className="rounded-card bg-surface-2 p-2">
+              <section key={st} aria-labelledby={`board-${st}`} className="glass-lite p-2">
                 <h3 id={`board-${st}`} className="mb-2 flex items-center gap-2 text-sm font-semibold"><Status v={st} /><span className="font-normal text-muted">{total ?? list.length}{total != null && total !== list.length ? `, ${list.length} shown` : ''}</span></h3>
                 {list.length ? (
                   <ul className="grid gap-2">

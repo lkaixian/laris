@@ -8,6 +8,8 @@ import { useToast } from './Toast'
 import { Icon } from './icons'
 import { tx, txOr } from './strings'
 import { useLang } from './i18n'
+import { bot } from './botBus'
+import { Bot } from './Bot'
 
 // Look-up assistant. The server lets the model pick what to look up; the answer is built from your data. For two safe actions (move a job,
 // skip a follow-up) it only PROPOSES: this screen shows a confirm step, then calls the normal route, which checks the permission again.
@@ -15,6 +17,19 @@ import { useLang } from './i18n'
 type Action = { kind: 'job_move'; id: string; to: 'todo' | 'doing' | 'done'; label: string } | { kind: 'followup_skip'; id: string; label: string }
 interface Answer { reply: string; intent: string; items: { label: string; href: string }[]; actions?: Action[]; source: 'model' | 'keywords'; suggestions: string[]; hidden?: Record<string, number>; denied?: string[] }
 type Turn = { from: 'me'; text: string } | { from: 'bot'; a: Answer } | { from: 'err'; text: string } | { from: 'done'; text: string }
+
+// The newest answer is typed out letter by letter (the robot talks meanwhile). Screen readers get the whole text at once; reduced motion shows it at once.
+function Typed({ text, live }: { text: string; live: boolean }) {
+  const [n, setN] = useState(live && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : text.length)
+  useEffect(() => {
+    if (n >= text.length) { if (live) bot({ kind: 'state', s: 'idle' }); return }
+    if (n === 0) bot({ kind: 'state', s: 'talk' })
+    const step = Math.max(1, Math.ceil(text.length / 90)), id = setTimeout(() => setN(x => Math.min(text.length, x + step)), 16)
+    return () => clearTimeout(id)
+  }, [n, text, live])
+  useEffect(() => () => { if (live) bot({ kind: 'state', s: 'idle' }) }, [live])
+  return n >= text.length ? <>{text}</> : <><span className="sr-only">{text}</span><span aria-hidden="true" className="ask-typed">{text.slice(0, n)}</span></>
+}
 
 const ID = /^[A-Za-z0-9-]{1,64}$/
 // The request is built HERE from the action's kind; the server's answer never supplies a path or a body.
@@ -40,12 +55,12 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
   const ask = async (q: string) => {
     const t = q.trim()
     if (!t || busy) return
-    setBusy(true); setText('')
+    setBusy(true); setText(''); bot({ kind: 'state', s: 'think' })
     setTurns(x => [...x, { from: 'me', text: t }])
     try {
       const a = await api<Answer>('POST', '/assistant', { message: t })
       setTurns(x => [...x, { from: 'bot', a }])
-    } catch (e) { setTurns(x => [...x, { from: 'err', text: msg(e) }]) }
+    } catch (e) { setTurns(x => [...x, { from: 'err', text: msg(e) }]); bot({ kind: 'state', s: 'idle' }) }
     finally { setBusy(false); input.current?.focus() }
   }
 
@@ -77,7 +92,7 @@ export function AssistantChat({ compact, onNavigate }: { compact?: boolean; onNa
           <p key={i} className="ask-turn self-start rounded-ui border border-soft px-3 py-2 text-sm font-semibold"><Icon name="check" className="mr-1 inline size-4" />{t.text}</p>
         ) : (
           <div key={i} className="ask-turn self-start rounded-ui border border-soft px-3 py-2 text-sm">
-            <p><span className="sr-only">{tx('as.bot')}</span>{t.a.reply}</p>
+            <p className="flex items-start gap-2"><img src="./brand/laris-bot.png" alt="" className="ask-avatar" /><span><span className="sr-only">{tx('as.bot')}</span><Typed text={t.a.reply} live={i === turns.length - 1} /></span></p>
             {t.a.items.length > 0 && <ul className="mt-2 grid gap-1">{t.a.items.map((it, j) => <li key={j}><a className="link inline-flex min-h-11 items-center" href={it.href} onClick={onNavigate}>{it.label}</a></li>)}</ul>}
             {!!t.a.actions?.length && (
               <ul className="mt-2 grid gap-2" aria-label={tx('as.proposed')}>
@@ -130,7 +145,7 @@ export function AssistantView() {
 }
 
 // Floating "Ask" button on every page (bottom right) that opens the same chat in a side panel. Hidden on the Assistant page itself.
-export function AssistantWidget({ hidden }: { hidden?: boolean }) {
+export function AssistantWidget({ hidden, name, uid }: { hidden?: boolean; name?: string; uid?: string }) {
   useLang()  // redraw in the chosen language (the widget is outside the page that is redrawn)
   const [open, setOpen] = useState(false)
   const [warm, setWarm] = useState(false)  // the chat is mounted from the first hover, focus or touch of the button, so its suggestions are loaded before the click
@@ -146,21 +161,16 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
   if (hidden) return null
   return (
     <>
-      <div aria-hidden="true" className="h-16" />{/* room at the end of every page, so the button never covers the last line */}
+      <div aria-hidden="true" className="h-24" />{/* room at the end of every page, so the button never covers the last line */}
       <section ref={panel} role="dialog" aria-modal="false" aria-labelledby="ask-w-h" data-open={open}
-        className="ask-panel fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 rounded-card border border-hairline bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
+        className="ask-panel fixed inset-x-2 bottom-[7.5rem] z-40 flex max-h-[70vh] flex-col gap-2 glass-lite p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
         <div className="flex items-center justify-between gap-2">
-          <h2 id="ask-w-h" className="text-md font-semibold">{tx('as.title')}</h2>
+          <h2 id="ask-w-h" className="flex items-center gap-2 text-md font-semibold"><img src="./brand/laris-bot.png" alt="" className="ask-avatar" />{tx('as.title')}</h2>
           <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>{tx('as.close')}<span className="sr-only">{tx('as.theAssistant')}</span></button>
         </div>
         {warm && <AssistantChat compact onNavigate={() => setOpen(false)} />}
       </section>
-      <button ref={btn} type="button" aria-expanded={open} data-open={open} data-guide="ask-laris"
-        className="btn btn-primary ask-fab fixed right-4 bottom-4 z-40 min-h-12 rounded-full px-4 shadow-lg"
-        onPointerEnter={() => setWarm(true)} onFocus={() => setWarm(true)} onClick={() => { setWarm(true); setOpen(!open) }}>
-        <Icon key={open ? 'close' : 'ask'} name={open ? 'close' : 'ask'} className="ask-icon size-5" />
-        <span className="ask-fab-label">{tx('as.button')}</span><span className="sr-only">{tx('as.theAssistant')}</span>
-      </button>
+      <Bot name={name} uid={uid} open={open} onWarm={() => setWarm(true)} onClick={() => { setWarm(true); setOpen(!open) }} />
     </>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { api, can, canOpen } from './api'
 import type { Me } from './api'
 import { t, useLang } from './i18n'
+import { bot as robot } from './botBus'
 import { FirstRun } from './FirstRun'
 import { applyOnb, buildSteps, firstRunVisible, kindFor, resumable, routeOf } from './tours'
 import type { Onb, OnbPatch, TourKind } from './tours'
@@ -130,11 +131,11 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
     setEl(null); setBox(null)
     if (step.route && routeOf(location.hash) !== step.route) location.hash = '#/' + step.route
     if (!step.sel) return
-    let cur: HTMLElement | null = null, miss = 0
+    let cur: HTMLElement | null = null, miss = 0, revealed = false
     const id = setInterval(() => {
       if (!cur || !cur.isConnected) {
         cur = findEl(step.sel!)
-        if (!cur) { if (++miss > 30) { clearInterval(id); if (!step.soft) missing() } return }
+        if (!cur) { if (!revealed && miss > 3) { const b = step.reveal?.(); if (b) { revealed = true; b.click() } } if (++miss > 30) { clearInterval(id); if (!step.soft) missing() } return }
         miss = 0; cur.scrollIntoView({ block: 'center' }); setEl(cur)
       }
       const r = cur.getBoundingClientRect()
@@ -181,12 +182,15 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
   }
 
   const pad = 6, r = box && { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), w: box.w + pad * 2, h: box.h + pad * 2 }
+  // The robot walks to whatever this step points at (and goes home when the tour ends).
+  useEffect(() => { if (r) robot({ kind: 'spot', hole: r, act: !!(step?.doClick || step?.doRoute) }); else robot({ kind: 'home' }) }, [r?.x, r?.y, r?.w, r?.h, step?.id])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { robot({ kind: 'home' }) }, [])
   const narrow = innerWidth < 640, W = Math.min(352, innerWidth - 16)
   let pos: React.CSSProperties = { left: Math.max(8, (innerWidth - W) / 2), top: Math.max(8, (innerHeight - ch) / 2), width: W }
   if (narrow) pos = { left: 0, right: 0, bottom: 0 }
   else if (r) pos = { width: W, left: Math.min(Math.max(8, r.x), innerWidth - W - 8),
     top: r.y + r.h + 12 + ch < innerHeight ? r.y + r.h + 12 : r.y - ch - 12 > 8 ? r.y - ch - 12 : Math.max(8, innerHeight - ch - 8) }
-  const dim = 'tour-fade tour-glide fixed z-[80] bg-bg/75'
+  const dim = 'tour-fade tour-glide fixed z-[80] bg-bg/70 backdrop-blur-[6px]'
   const hint = (k: string) => <span aria-hidden="true" className="ml-1 text-xs">({k})</span>
 
   return (
@@ -200,7 +204,7 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
         <div aria-hidden="true" className="tour-glide pointer-events-none fixed z-[80] rounded-ui border-2 border-accent" style={{ top: r.y, left: r.x, width: r.w, height: r.h }} />
       </> : <div aria-hidden="true" className={dim} style={{ inset: 0 }} />}
       <div ref={card} role="dialog" aria-modal="true" aria-label={t({ en: 'Guided tour', ms: 'Lawatan berpandu' })} tabIndex={-1} onKeyDown={keys}
-        className="tour-fade tour-glide card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
+        data-tour-panel="" className="tour-fade tour-glide card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
         <p aria-live="polite" className="sr-only">{`${idx + 1} / ${total}. ${title}. ${body}`}</p>
         <p className="text-sm font-semibold text-muted">{t({ en: `${idx + 1} of ${total}`, ms: `${idx + 1} daripada ${total}` })}</p>
         <h2 className="mt-1 text-lg font-semibold">{title}</h2>

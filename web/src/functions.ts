@@ -20,7 +20,7 @@ export interface Fn {
 
 // Chinese and Tamil labels by id (keywords stay en/ms: matchFns also searches the English words in zh and ta).
 const ZT: Record<string, [string, string]> = {
-  'nav-home': ['首页', 'முகப்பு'], 'nav-tracker': ['报价追踪', 'மேற்கோள் கண்காணிப்பு'], 'nav-track': ['进度', 'நிலை'], 'nav-jobs': ['工单', 'வேலைகள்'], 'nav-followups': ['跟进', 'பின்தொடர்வுகள்'],
+  'nav-home': ['首页', 'முகப்பு'], 'nav-revenue': ['收入', 'வருவாய்'], 'nav-tracker': ['报价追踪', 'மேற்கோள் கண்காணிப்பு'], 'nav-track': ['日程', 'அட்டவணை'], 'nav-jobs': ['工单', 'வேலைகள்'], 'nav-followups': ['跟进', 'பின்தொடர்வுகள்'],
   'nav-contacts': ['联系人', 'தொடர்புகள்'], 'nav-ask': ['询问供应商', 'சப்ளையர்களிடம் கேள்'], 'nav-catalog': ['目录照片', 'பட்டியல் படங்கள்'], 'nav-alerts': ['过时成本', 'பழைய செலவுகள்'],
   'nav-activity': ['审计日志', 'தணிக்கைப் பதிவு'], 'nav-assistant': ['询问 Laris', 'Laris இடம் கேள்'], 'nav-team': ['团队', 'குழு'], 'nav-roles': ['角色与权限', 'பங்குகளும் அனுமதிகளும்'],
   'nav-settings': ['设置', 'அமைப்புகள்'], 'nav-privacy': ['隐私与数据', 'தனியுரிமை மற்றும் தரவு'], 'nav-api-access': ['API 访问', 'API அணுகல்'], 'nav-ai-settings': ['AI 设置', 'AI அமைப்புகள்'],
@@ -45,12 +45,13 @@ export const FUNCTIONS: Fn[] = [
   // ---- every item in NAV (Shell.tsx)
   fn('nav-home', 'home', 'Home', 'Laman utama', 'dashboard|overview|today|start|get started', 'papan pemuka|ringkasan|hari ini|mula', 'Work>Home', '#/home', page('home')),
   fn('nav-tracker', 'tracker', 'Tracker', 'Penjejak', 'quotes|documents|quotations|list|find a quote|inbox', 'sebut harga|dokumen|senarai|cari sebut harga', 'Work>Tracker', '#/tracker', page('tracker')),
-  fn('nav-track', 'pipeline', 'Track', 'Jejak', 'pipeline|status|progress|stages|board', 'saluran|status|kemajuan|peringkat', 'Work>Track', '#/track', page('track')),
+  fn('nav-track', 'pipeline', 'Schedule', 'Jadual', 'schedule|calendar|due|pipeline|status|progress|stages|board', 'jadual|kalendar|tarikh|saluran|status|kemajuan|peringkat', 'Work>Schedule', '#/track', page('track')),
   fn('nav-jobs', 'jobs', 'Jobs', 'Kerja', 'orders|accepted|won|delivery|production', 'tempahan|diterima|menang|penghantaran|pengeluaran', 'Work>Jobs', '#/jobs', page('jobs')),
   fn('nav-followups', 'clock', 'Follow-ups', 'Susulan', 'follow up|followup|remind|reminder|chase|overdue|nudge', 'susulan|peringatan|ingatkan|lewat|tuntut', 'Work>Follow-ups', '#/followups', page('followups')),
   fn('nav-contacts', 'contacts', 'Contacts', 'Kenalan', 'suppliers|customers|people|address book|vendors', 'pembekal|pelanggan|orang|buku alamat|vendor', 'Suppliers>Contacts', '#/contacts', page('contacts')),
   fn('nav-ask', 'ask', 'Ask suppliers', 'Tanya pembekal', 'rfq|request price|enquire|photo|find price|source', 'minta harga|tanya harga|pertanyaan|gambar|cari harga', 'Suppliers>Ask suppliers', '#/ask', page('ask')),
   fn('nav-catalog', 'camera', 'Catalog photos', 'Foto katalog', 'product photo|pictures|images|catalogue|camera', 'foto produk|gambar|katalog|kamera', 'Suppliers>Catalog photos', '#/catalog', c => canOpen('catalog', c.owner) && canUpload(c.me)),
+  fn('nav-revenue', 'revenue', 'Revenue', 'Hasil', 'revenue|income|profit|money in|money out|gross|net|sales|expenses|rent|wages|bills|untung kasar|untung bersih', 'hasil|pendapatan|untung|untung kasar|untung bersih|jualan|perbelanjaan|sewa|gaji|bil', 'Insight>Revenue', '#/revenue', () => can('view_revenue') && can('view_costs')),
   fn('nav-alerts', 'alerts', 'Stale costs', 'Kos lapuk', 'cost|costs|price rise|outdated|expired price|alerts|margin hurt', 'kos|kenaikan harga|lapuk|tamat tempoh|amaran', 'Insight>Stale costs', '#/alerts', page('alerts')),
   fn('nav-activity', 'activity', 'Audit log', 'Log audit', 'audit|activity|history|who did|changes|events|log', 'audit|aktiviti|sejarah|siapa buat|perubahan|peristiwa|log', 'Audit Log>Audit log', '#/activity', page('activity')),
   fn('nav-assistant', 'assistant', 'Ask Laris', 'Tanya Laris', 'assistant|ask a question|help|chat|chatbot|ai|questions', 'pembantu|tanya soalan|bantuan|sembang|soalan', 'Ask Laris button', '#/assistant', page('assistant')),

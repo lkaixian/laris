@@ -56,10 +56,13 @@ def load(conn, doc_id) -> dict:
                                p.name as party_name, p.attention, p.address, p.email, d.tenant_id
                         from documents d join parties p on p.id = d.party_id where d.id=%s""", (doc_id,)).fetchone()
     lines = conn.execute("select * from document_lines where document_id=%s order by line_no", (doc_id,)).fetchall()
-    org = conn.execute(
+    return compose(org(conn, d["tenant_id"]), d, d["party_name"], lines, d)
+
+
+def org(conn, tenant_id) -> dict:
+    return conn.execute(
         """select coalesce(display_name, name) as name, ssm_no, address, bank_details, sst_registered, sst_no, logo_data_url, brand_color,
-                  issuer_email, issuer_phone, quote_payment_terms, quote_terms_text from tenants where id=%s""", (d["tenant_id"],)).fetchone()
-    return compose(org, d, d["party_name"], lines, d)
+                  issuer_email, issuer_phone, quote_payment_terms, quote_terms_text, currency from tenants where id=%s""", (tenant_id,)).fetchone()
 
 
 def costs(conn, doc_id) -> dict:

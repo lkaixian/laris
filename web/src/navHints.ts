@@ -4,6 +4,7 @@ import type { Text } from './i18n'
 const h = (en: string, ms: string, zh: string, ta: string): Text => ({ en, ms, zh, ta })
 export const NAV_HINTS: Record<string, Text> = {
   home: h('Your day at a glance: what needs you now.', 'Ringkasan hari anda: apa yang perlukan anda sekarang.', '一览今天：现在需要您处理的事。', 'இன்றைய நிலை: இப்போது உங்கள் கவனம் தேவைப்படுபவை.'),
+  approvals: h('What a person still has to check or approve before it goes out.', 'Apa yang masih perlu disemak atau diluluskan oleh seseorang sebelum dihantar.', '发出前仍需人工检查或批准的事项。', 'அனுப்பும் முன் ஒருவர் சரிபார்க்க அல்லது அங்கீகரிக்க வேண்டியவை.'),
   tracker: h('Every supplier and customer quote, from received to sent.', 'Setiap sebut harga pembekal dan pelanggan, daripada diterima hingga dihantar.', '所有供应商和客户报价，从收到到发出。', 'பெறப்பட்டதிலிருந்து அனுப்பியது வரை அனைத்து மேற்கோள்களும்.'),
   track: h('What is due and what is late, by colour.', 'Apa yang perlu siap dan apa yang lewat, ikut warna.', '按颜色查看到期和逾期事项。', 'எது முடிய வேண்டும், எது தாமதம், நிறத்தால்.'),
   jobs: h('The work board: to do, in progress, done.', 'Papan kerja: akan dibuat, sedang dibuat, siap.', '工作看板：待办、进行中、已完成。', 'வேலைப் பலகை: செய்ய வேண்டியவை, நடப்பவை, முடிந்தவை.'),

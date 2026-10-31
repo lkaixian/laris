@@ -61,7 +61,7 @@ export const ARTICLES: Article[] = [
     id: 'connect-customer-bot',
     title: T('Connect your customer bot on Telegram', 'Sambung bot pelanggan anda di Telegram', '在 Telegram 连接您的客户机器人', 'உங்கள் வாடிக்கையாளர் போட்டை Telegram இல் இணைக்கவும்'),
     summary: T('Create a bot with your shop name in one tap, or paste a BotFather token.', 'Cipta bot dengan nama kedai anda dengan satu ketikan, atau tampal token BotFather.', '一键以您的店名创建机器人，或粘贴 BotFather 令牌。', 'ஒரே தட்டலில் உங்கள் கடை பெயருடன் போட்டை உருவாக்கவும், அல்லது BotFather டோக்கனை ஒட்டவும்.'),
-    who: ['owner'], path: ['Admin', 'Settings', 'Channels', 'Your customer bot'],
+    who: ['owner'], path: ['Platform', 'Settings', 'Channels', 'Your customer bot'],
     body: [
       steps(
         ['Open Settings and find the Your customer bot card.', 'Buka Settings dan cari kad Your customer bot.', '打开 Settings，找到 Your customer bot 卡片。', 'Settings ஐத் திறந்து Your customer bot அட்டையைக் கண்டறியவும்.'],
@@ -79,7 +79,7 @@ export const ARTICLES: Article[] = [
     id: 'link-staff-telegram',
     title: T('Link a staff member\'s Telegram', 'Pautkan Telegram seorang staf', '关联员工的 Telegram', 'ஊழியரின் Telegram ஐ இணைக்கவும்'),
     summary: T('Linked people can send catalog photos and supplier documents from their phone.', 'Mereka yang dipautkan boleh menghantar foto katalog dan dokumen pembekal dari telefon.', '已关联的人可以用手机发送目录照片和供应商文件。', 'இணைக்கப்பட்டவர்கள் தங்கள் தொலைபேசியிலிருந்து பட்டியல் புகைப்படங்களையும் சப்ளையர் ஆவணங்களையும் அனுப்பலாம்.'),
-    who: ['owner', 'staff'], path: ['Admin', 'Team', 'Link Telegram'],
+    who: ['owner', 'staff'], path: ['Governance', 'Team', 'Link Telegram'],
     body: [
       steps(
         ['Owner: open Team, find the person and press Link Telegram. A one-time link and a code appear, valid for 15 minutes.', 'Pemilik: buka Team, cari orang itu dan tekan Link Telegram. Pautan sekali guna dan kod muncul, sah selama 15 minit.', '负责人：打开 Team，找到该员工并点击 Link Telegram。会出现一次性链接和验证码，15 分钟内有效。', 'உரிமையாளர்: Team ஐத் திறந்து, நபரைக் கண்டறிந்து Link Telegram ஐ அழுத்தவும். ஒருமுறை பயன்படுத்தும் இணைப்பும் குறியீடும் தோன்றும், 15 நிமிடங்கள் செல்லுபடியாகும்.'],
@@ -98,7 +98,7 @@ export const ARTICLES: Article[] = [
     id: 'customise-bot-messages',
     title: T('Customise what the bot says', 'Ubah suai apa yang bot katakan', '自定义机器人说的话', 'போட் சொல்வதைத் தனிப்பயனாக்கு'),
     summary: T('Welcome, help, language, buttons and an after-hours reply, with a live preview.', 'Ucapan, bantuan, bahasa, butang dan balasan luar waktu, dengan pratonton.', '欢迎语、帮助、语言、按钮和下班后回复，附实时预览。', 'வரவேற்பு, உதவி, மொழி, பொத்தான்கள், வேலை நேரத்துக்குப் பிந்தைய பதில் ஆகியவை நேரடி முன்னோட்டத்துடன்.'),
-    who: ['owner'], path: ['Admin', 'Settings', 'Channels', 'How your bot talks to customers'],
+    who: ['owner'], path: ['Platform', 'Settings', 'Channels', 'How your bot talks to customers'],
     body: [
       p('This card appears under Your customer bot once the bot is connected.', 'Kad ini muncul di bawah Your customer bot selepas bot bersambung.', '机器人连接后，此卡片会出现在 Your customer bot 下方。', 'போட் இணைந்ததும் இந்த அட்டை Your customer bot க்குக் கீழே தோன்றும்.'),
       steps(
@@ -117,7 +117,7 @@ export const ARTICLES: Article[] = [
     id: 'bot-reactions',
     title: T('What the bot reactions mean', 'Maksud reaksi bot', '机器人表情回应的含义', 'போட் எதிர்வினைகளின் பொருள்'),
     summary: T('Eyes, thumbs up and crying face on a customer\'s message.', 'Mata, ibu jari ke atas dan muka menangis pada mesej pelanggan.', '客户消息上的眼睛、竖起大拇指和哭脸。', 'வாடிக்கையாளர் செய்தியில் கண்கள், கட்டைவிரல் உயர்த்தல், அழும் முகம்.'),
-    who: ['owner', 'staff'], path: ['Admin', 'Settings', 'Channels', 'How your bot talks to customers'],
+    who: ['owner', 'staff'], path: ['Platform', 'Settings', 'Channels', 'How your bot talks to customers'],
     body: [
       p('On Telegram the bot reacts to each message it receives, and shows that it is typing while it works:', 'Di Telegram bot bertindak balas pada setiap mesej yang diterima, dan menunjukkan ia sedang menaip semasa memproses:', '在 Telegram 上，机器人会对收到的每条消息做出回应，并在处理时显示正在输入：', 'Telegram இல் போட் தான் பெறும் ஒவ்வொரு செய்திக்கும் எதிர்வினை காட்டும்; செயல்படும்போது தட்டச்சு செய்வதாகவும் காட்டும்:'),
       steps(
@@ -171,7 +171,7 @@ export const ARTICLES: Article[] = [
     id: 'roles-and-hidden-costs',
     title: T('Roles, and what staff cannot see', 'Peranan, dan apa yang staf tidak boleh lihat', '角色，以及员工看不到什么', 'பங்குகளும், ஊழியர்கள் காண முடியாதவையும்'),
     summary: T('Owner and staff, custom roles, and why costs and margins are hidden.', 'Pemilik dan staf, peranan khas, dan sebab kos serta margin disembunyikan.', '负责人和员工、自定义角色，以及成本和利润率为何被隐藏。', 'உரிமையாளர் மற்றும் ஊழியர், தனிப்பயன் பங்குகள், செலவுகளும் இலாப விகிதங்களும் ஏன் மறைக்கப்படுகின்றன.'),
-    who: ['owner', 'staff'], path: ['Admin', 'Roles'],
+    who: ['owner', 'staff'], path: ['Governance', 'Roles'],
     body: [
       p('Everyone holds one role. Owner has every permission. Staff has a default set that the owner can edit, and the owner can add custom roles.', 'Setiap orang memegang satu peranan. Pemilik mempunyai semua kebenaran. Staf mempunyai set lalai yang boleh diedit pemilik, dan pemilik boleh menambah peranan khas.', '每个人都有一个角色。负责人拥有所有权限。员工有一套负责人可以编辑的默认权限，负责人还可以新增自定义角色。', 'ஒவ்வொருவருக்கும் ஒரு பங்கு உண்டு. உரிமையாளருக்கு எல்லா அனுமதிகளும் உண்டு. ஊழியர்களுக்கு உரிமையாளர் திருத்தக்கூடிய இயல்புநிலை அனுமதிகள் உண்டு; உரிமையாளர் தனிப்பயன் பங்குகளையும் சேர்க்கலாம்.'),
       p('Without the View costs permission, supplier prices, cost items, margins, stale-cost alerts and supplier chat text are removed from every screen and download. Price cells show "Hidden for staff".', 'Tanpa kebenaran View costs, harga pembekal, item kos, margin, amaran kos lapuk dan teks sembang pembekal dibuang daripada setiap skrin dan muat turun. Sel harga memaparkan "Hidden for staff".', '没有 View costs 权限时，供应商价格、成本项目、利润率、成本过期提醒和供应商聊天文字会从所有屏幕和下载内容中移除。价格单元格显示 “Hidden for staff”。', 'View costs அனுமதி இல்லாவிட்டால், சப்ளையர் விலைகள், செலவுப் பொருட்கள், இலாப விகிதங்கள், பழைய செலவு எச்சரிக்கைகள், சப்ளையர் அரட்டை உரை ஆகியவை ஒவ்வொரு திரையிலிருந்தும் பதிவிறக்கத்திலிருந்தும் நீக்கப்படும். விலைக் கலங்கள் "Hidden for staff" எனக் காட்டும்.'),
@@ -228,7 +228,7 @@ export const ARTICLES: Article[] = [
     id: 'licence',
     title: T('Licence: activate an offer or paste a key', 'Lesen: aktifkan tawaran atau tampal kunci', '授权：激活优惠或粘贴密钥', 'உரிமம்: சலுகையைச் செயல்படுத்து அல்லது விசையை ஒட்டு'),
     summary: T('Where to see your plan and how to renew.', 'Di mana melihat pelan anda dan cara memperbaharui.', '在哪里查看您的方案以及如何续期。', 'உங்கள் திட்டத்தை எங்கே காண்பது, எப்படிப் புதுப்பிப்பது.'),
-    who: ['owner'], path: ['Admin', 'Licence'],
+    who: ['owner'], path: ['Platform', 'Licence'],
     body: [
       steps(
         ['Open Admin, Licence. It shows your plan, seats and expiry.', 'Buka Admin, Licence. Ia menunjukkan pelan, tempat duduk dan tarikh tamat anda.', '打开 Admin、Licence。它会显示您的方案、席位和到期日。', 'Admin, Licence ஐத் திறக்கவும். அது உங்கள் திட்டம், இருக்கைகள், காலாவதி தேதியைக் காட்டும்.'],
@@ -282,7 +282,7 @@ export const ARTICLES: Article[] = [
     id: 'privacy-basics',
     title: T('Privacy basics: what is stored', 'Asas privasi: apa yang disimpan', '隐私基础：存储了什么', 'தனியுரிமை அடிப்படைகள்: என்ன சேமிக்கப்படுகிறது'),
     summary: T('What LARIS keeps, how long, and what the owner can do for a customer.', 'Apa yang LARIS simpan, berapa lama, dan apa yang pemilik boleh buat untuk pelanggan.', 'LARIS 保存什么、保存多久，以及负责人可以为客户做什么。', 'LARIS என்ன வைத்திருக்கிறது, எவ்வளவு காலம், ஒரு வாடிக்கையாளருக்காக உரிமையாளர் என்ன செய்யலாம்.'),
-    who: ['owner'], path: ['Admin', 'Privacy and data'],
+    who: ['owner'], path: ['Governance', 'Privacy and data'],
     body: [
       p('LARIS keeps customer names and chat numbers, chat text and voice-note transcripts, and your quotes and prices. Chat text and transcripts are blanked after 180 days by default.', 'LARIS menyimpan nama dan nombor sembang pelanggan, teks sembang dan transkrip nota suara, serta sebut harga dan harga anda. Teks sembang dan transkrip dikosongkan selepas 180 hari secara lalai.', 'LARIS 保存客户姓名和聊天号码、聊天文字和语音留言转写，以及您的报价单和价格。聊天文字和转写默认在 180 天后清空。', 'LARIS வாடிக்கையாளர் பெயர்கள், அரட்டை எண்கள், அரட்டை உரை, குரல் குறிப்பு எழுத்துப்படிகள், உங்கள் மேற்கோள்கள், விலைகளை வைத்திருக்கிறது. அரட்டை உரையும் எழுத்துப்படிகளும் இயல்பாக 180 நாட்களுக்குப் பிறகு அழிக்கப்படும்.'),
       p('Voice notes are not kept. The audio is sent for transcription, handled in memory and discarded. Photos customers send in chat are not stored either. Catalog photos and photos sent to suppliers are emptied after 90 days, and supplier reply text after 180 days.', 'Nota suara tidak disimpan. Audio dihantar untuk transkripsi, diproses dalam memori dan dibuang. Gambar yang pelanggan hantar dalam sembang juga tidak disimpan. Foto katalog dan foto yang dihantar kepada pembekal dikosongkan selepas 90 hari, dan teks balasan pembekal selepas 180 hari.', '语音留言不会被保存。音频会被送去转写，在内存中处理后丢弃。客户在聊天中发送的照片也不会被存储。目录照片和发给供应商的照片在 90 天后清空，供应商回复文字在 180 天后清空。', 'குரல் குறிப்புகள் வைக்கப்படுவதில்லை. ஒலி எழுத்துப்படிக்காக அனுப்பப்பட்டு, நினைவகத்தில் கையாளப்பட்டு நீக்கப்படும். வாடிக்கையாளர்கள் அரட்டையில் அனுப்பும் புகைப்படங்களும் சேமிக்கப்படுவதில்லை. பட்டியல் புகைப்படங்களும் சப்ளையர்களுக்கு அனுப்பிய புகைப்படங்களும் 90 நாட்களுக்குப் பிறகும், சப்ளையர் பதில் உரை 180 நாட்களுக்குப் பிறகும் அழிக்கப்படும்.'),
@@ -299,7 +299,7 @@ export const ARTICLES: Article[] = [
     id: 'api-access',
     title: T('API access: let another program ask for prices', 'Akses API: benarkan program lain meminta harga', 'API 访问：让其他程序查询价格', 'API அணுகல்: மற்றொரு நிரல் விலைகளைக் கேட்க அனுமதி'),
     summary: T('Create a key, see this month\'s usage, and call the price API.', 'Cipta kunci, lihat penggunaan bulan ini, dan panggil API harga.', '创建密钥，查看本月用量，并调用价格 API。', 'விசையை உருவாக்கி, இந்த மாதப் பயன்பாட்டைப் பார்த்து, விலை API ஐ அழைக்கவும்.'),
-    who: ['owner'], path: ['Admin', 'API access'],
+    who: ['owner'], path: ['Platform', 'API access'],
     body: [
       p('The price API lets another program send item keys and quantities and get selling prices back. It uses the same rules and cost book as the dashboard, never creates a quote and never uses the AI. Costs, margins and supplier names are not sent out.', 'API harga membenarkan program lain menghantar kunci item dan kuantiti lalu menerima harga jualan. Ia menggunakan peraturan dan buku kos yang sama seperti papan pemuka, tidak pernah mencipta sebut harga dan tidak menggunakan AI. Kos, margin dan nama pembekal tidak dihantar keluar.', '价格 API 让其他程序发送项目代码和数量，并取回售价。它使用与仪表板相同的规则和成本册，从不创建报价单，也从不使用 AI。成本、利润率和供应商名称不会发送出去。', 'விலை API மற்றொரு நிரல் பொருள் விசைகளையும் அளவுகளையும் அனுப்பி விற்பனை விலைகளைத் திரும்பப் பெற அனுமதிக்கும். இது டாஷ்போர்டின் அதே விதிகளையும் செலவுப் புத்தகத்தையும் பயன்படுத்தும்; மேற்கோளை உருவாக்காது, AI ஐப் பயன்படுத்தாது. செலவுகள், இலாப விகிதங்கள், சப்ளையர் பெயர்கள் வெளியே அனுப்பப்படாது.'),
       steps(
@@ -319,7 +319,7 @@ export const ARTICLES: Article[] = [
     id: 'ai-guide',
     title: T('The AI guide: ask where to click', 'Panduan AI: tanya di mana hendak klik', 'AI 指引：问问该点哪里', 'AI வழிகாட்டி: எங்கே கிளிக் செய்வது எனக் கேளுங்கள்'),
     summary: T('An optional helper that points to screens. Off until the owner switches it on.', 'Pembantu pilihan yang menunjuk ke skrin. Mati sehingga pemilik menghidupkannya.', '一个会指向相应页面的可选助手。负责人开启之前一直是关闭的。', 'திரைகளைச் சுட்டிக்காட்டும் விருப்ப உதவியாளர். உரிமையாளர் இயக்கும் வரை அணைந்தே இருக்கும்.'),
-    who: ['owner', 'staff'], path: ['Admin', 'AI settings'],
+    who: ['owner', 'staff'], path: ['Platform', 'AI settings'],
     body: [
       p('The AI guide answers questions like "where do I upload a supplier quote?". It can only point you to screens in LARIS. It cannot change anything, send anything to a customer or read your quotes.', 'Panduan AI menjawab soalan seperti "di mana saya muat naik sebut harga pembekal?". Ia hanya boleh menunjukkan skrin dalam LARIS. Ia tidak boleh mengubah apa-apa, menghantar apa-apa kepada pelanggan atau membaca sebut harga anda.', 'AI 指引回答诸如“我在哪里上传供应商报价单？”之类的问题。它只能指向 LARIS 中的页面，不能更改任何内容、向客户发送任何东西或读取您的报价单。', 'AI வழிகாட்டி "சப்ளையர் மேற்கோளை எங்கே பதிவேற்றுவது?" போன்ற கேள்விகளுக்குப் பதிலளிக்கும். அது LARIS இல் உள்ள திரைகளை மட்டுமே சுட்டிக்காட்டும். எதையும் மாற்றவோ வாடிக்கையாளருக்கு எதையும் அனுப்பவோ உங்கள் மேற்கோள்களைப் படிக்கவோ முடியாது.'),
       p('It is off by default. Only the owner can switch it on.', 'Ia mati secara lalai. Hanya pemilik boleh menghidupkannya.', '默认是关闭的。只有负责人可以开启。', 'இது இயல்பாக அணைந்திருக்கும். உரிமையாளர் மட்டுமே இயக்க முடியும்.'),

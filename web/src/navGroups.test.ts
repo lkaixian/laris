@@ -5,7 +5,7 @@ import { groupOf, isOpen, parse } from './navGroups.ts'
 
 test('only the everyday group starts open', () => {
   assert.equal(isOpen({}, 'Work'), true)
-  for (const g of ['Suppliers', 'Insight', 'Audit Log', 'Admin']) assert.equal(isOpen({}, g), false, g)
+  for (const g of ['Suppliers', 'Insight', 'Governance', 'Platform']) assert.equal(isOpen({}, g), false, g)
 })
 
 test('what the person chose wins over the default, both ways', () => {

@@ -10,7 +10,7 @@ import { hasGuide, startGuide } from './Guide'
 import { useShowTutorialButton } from './helpPrefs'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
-import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
+import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop, useFetch } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { useToast } from './Toast'
@@ -41,42 +41,45 @@ const SH = {
   fold: { en: 'Fold {0}', ms: 'Lipat {0}', zh: '收起{0}', ta: '{0} ஐ மூடு' },
   unfold: { en: 'Show {0}', ms: 'Tunjuk {0}', zh: '展开{0}', ta: '{0} ஐக் காட்டு' },
 } satisfies Record<string, Text>
-export interface NavItem { key: string; label: string; icon: IconName; when?: (me?: Me) => boolean }
+export interface NavItem { key: string; label: string; icon: IconName; when?: (me?: Me) => boolean; badge?: 'review' | 'stale' }
+// The order follows the work: what needs a person today, then the business flow, then the supplier side, then who may do what (Governance) and the
+// plumbing (Platform). A badge counts what is waiting: Approvals = things a person must check or approve, Stale costs = quotes whose cost has moved.
 export const NAV: { label: string; items: NavItem[] }[] = [
   { label: 'Work', items: [
     { key: 'home', label: 'Home', icon: 'home' },
-    { key: 'tracker', label: 'Tracker', icon: 'tracker' },
-    { key: 'track', label: 'Schedule', icon: 'pipeline' },
-    { key: 'jobs', label: 'Jobs', icon: 'jobs' },
+    { key: 'approvals', label: 'Approvals', icon: 'check', badge: 'review' },
     { key: 'customers', label: 'Customers', icon: 'contacts' },
+    { key: 'jobs', label: 'Jobs', icon: 'jobs' },
+    { key: 'track', label: 'Schedule', icon: 'pipeline' },
+    { key: 'tracker', label: 'Tracker', icon: 'tracker' },
     { key: 'followups', label: 'Follow-ups', icon: 'clock' },
   ] },
   { label: 'Suppliers', items: [
     { key: 'suppliers', label: 'Supplier directory', icon: 'contacts' },
+    { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
     { key: 'products', label: 'Compare prices', icon: 'pipeline' },
+    { key: 'alerts', label: 'Stale costs', icon: 'alerts', badge: 'stale' },
+    { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
+    { key: 'buying', label: 'Supplier orders', icon: 'tracker' },
     { key: 'contracts', label: 'Contracts', icon: 'tracker' },
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
-    { key: 'buying', label: 'Supplier orders', icon: 'tracker' },
-    { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
-    { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
   ] },
   { label: 'Insight', items: [
     { key: 'revenue', label: 'Revenue', icon: 'revenue' },
     { key: 'reports', label: 'Business report', icon: 'tracker' },
-    { key: 'alerts', label: 'Stale costs', icon: 'alerts' },
   ] },
   // Ask Laris (the assistant) is the floating button on every page, so it has no sidebar entry; #/assistant still opens it full page.
-  { label: 'Audit Log', items: [
-    { key: 'activity', label: 'Audit log', icon: 'activity' },
-  ] },
-  { label: 'Admin', items: [
+  { label: 'Governance', items: [
+    { key: 'activity', label: 'Activity log', icon: 'activity' },
     { key: 'team', label: 'Team', icon: 'team' },
     { key: 'roles', label: 'Roles', icon: 'roles' },
-    { key: 'settings', label: 'Settings', icon: 'settings' },
-    { key: 'templates', label: 'Document templates', icon: 'upload' },
-    { key: 'privacy', label: 'Privacy and data', icon: 'roles' },
-    { key: 'api-access', label: 'API access', icon: 'key' },
+    { key: 'privacy', label: 'Privacy and data', icon: 'lock' },
+  ] },
+  { label: 'Platform', items: [
+    { key: 'api-access', label: 'API access', icon: 'plug' },
     { key: 'ai-settings', label: 'AI settings', icon: 'ask' },
+    { key: 'templates', label: 'Document templates', icon: 'upload' },
+    { key: 'settings', label: 'Settings', icon: 'settings' },
     { key: 'status', label: 'System status', icon: 'warn' },
     { key: 'licence', label: 'Licence', icon: 'key', when: () => licenceOn() },
     { key: 'issuer', label: 'Issue licences', icon: 'key', when: () => issuerOn() },
@@ -92,8 +95,18 @@ export const visibleNav = (me: Me | undefined, owner: boolean) =>
 const COLLAPSE_KEY = 'laris.nav.collapsed'
 const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false } }
 
+// What is waiting, for the badges on Approvals and Stale costs. The counts come from /dashboard (already built for Home) and refresh when you move
+// between pages, at most every 30 seconds. A role that may not see costs gets no stale count.
+function useNavCounts(route: string) {
+  const s = useFetch<{ needs_review?: number; stale_quotes?: number }>('/dashboard')
+  const last = useRef(Date.now())
+  useEffect(() => { if (Date.now() - last.current > 30_000) { last.current = Date.now(); s.reload() } }, [route])  // eslint-disable-line react-hooks/exhaustive-deps
+  return { review: s.data?.needs_review ?? 0, stale: s.data?.stale_quotes ?? 0 }
+}
+
 function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: ReturnType<typeof visibleNav>; route: string; collapsed?: boolean; idp: string; onNavigate?: (href: string) => void }) {
   const here = PARENT[route] ?? route
+  const counts = useNavCounts(route)
   const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
   // A small pop-up beside the item you point at or tab to. It is fixed to the screen so the scrolling sidebar cannot cut it off.
   const [tip, setTip] = useState<{ key: string; top: number; left: number } | null>(null)
@@ -129,6 +142,9 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
                   <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={collapsed ? (tip?.key === i.key ? `${idp}-tip` : undefined) : NAV_HINTS[i.key] ? `${idp}-d-${i.key}` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
+                    {i.badge && counts[i.badge] > 0 && (collapsed
+                      ? <><span aria-hidden="true" className="absolute right-2 top-2 size-2 rounded-full bg-warn" /><span className="sr-only">{counts[i.badge]}</span></>
+                      : <span className="badge badge-warn ml-auto tabular-nums">{counts[i.badge]}</span>)}
                     {!collapsed && NAV_HINTS[i.key] && <span id={`${idp}-d-${i.key}`} className="sr-only">{t(NAV_HINTS[i.key])}</span>}
                   </a>
                   {!collapsed && help && (hasGuide(i.key) ? (

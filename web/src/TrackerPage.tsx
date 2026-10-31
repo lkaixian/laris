@@ -7,6 +7,7 @@ import { useWriteGate } from './Licence'
 import type { Tracker, DocDetail, DocSummary, Line } from './api'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'
+import { tx } from './strings'
 
 const S = {
   noDocNo: { en: 'No document number', ms: 'Tiada nombor dokumen', zh: '无文档编号', ta: 'ஆவண எண் இல்லை' },
@@ -14,6 +15,7 @@ const S = {
   stale: { en: 'Cost is stale', ms: 'Kos sudah lapuk', zh: '成本已过时', ta: 'செலவு பழையது' },
   needFile: { en: 'Choose a file or paste the quote text.', ms: 'Pilih fail atau tampal teks sebut harga.', zh: '请选择文件或粘贴报价文本。', ta: 'கோப்பைத் தேர்ந்தெடுக்கவும் அல்லது மேற்கோள் உரையை ஒட்டவும்.' },
   notBoth: { en: 'Use either a file or pasted text, not both.', ms: 'Guna sama ada fail atau teks yang ditampal, bukan kedua-duanya.', zh: '请使用文件或粘贴文本，二者选其一。', ta: 'கோப்பு அல்லது ஒட்டிய உரை — இரண்டில் ஒன்றை மட்டும் பயன்படுத்தவும்.' },
+  approvalsDesc: { en: 'What a person still has to check or approve before it goes out. Change the filter to see every quote.', ms: 'Apa yang masih perlu disemak atau diluluskan oleh seseorang sebelum dihantar. Tukar penapis untuk melihat setiap sebut harga.', zh: '发出前仍需人工检查或批准的事项。更改筛选可查看全部报价。', ta: 'அனுப்பும் முன் ஒருவர் சரிபார்க்க அல்லது அங்கீகரிக்க வேண்டியவை. எல்லா மேற்கோள்களையும் காண வடிகட்டியை மாற்றவும்.' },
   uploadSup: { en: 'Upload supplier quote', ms: 'Muat naik sebut harga pembekal', zh: '上传供应商报价', ta: 'சப்ளையர் மேற்கோளைப் பதிவேற்று' },
   quoteFile: { en: 'Quote file (PDF, Excel, Word, CSV, photo or text)', ms: 'Fail sebut harga (PDF, Excel, Word, CSV, foto atau teks)', zh: '报价文件（PDF、Excel、Word、CSV、照片或文本）', ta: 'மேற்கோள் கோப்பு (PDF, Excel, Word, CSV, படம் அல்லது உரை)' },
   oldFormat: { en: 'Old Excel and Word files (.xls, .doc) cannot be read. Save it as .xlsx or .docx, or as a PDF, and upload that.', ms: 'Fail Excel dan Word lama (.xls, .doc) tidak dapat dibaca. Simpan sebagai .xlsx atau .docx, atau sebagai PDF, dan muat naik itu.', zh: '无法读取旧版 Excel 和 Word 文件（.xls、.doc）。请另存为 .xlsx 或 .docx，或 PDF，再上传。', ta: 'பழைய Excel மற்றும் Word கோப்புகளை (.xls, .doc) படிக்க முடியாது. .xlsx அல்லது .docx ஆக, அல்லது PDF ஆகச் சேமித்து அதைப் பதிவேற்றவும்.' },
@@ -261,7 +263,7 @@ const OPEN_QUOTE = ['draft', 'approved', 'sent', 'read']
 let savedFilter = ''  // list state kept for this visit, so Back from a document returns to the same filtered list
 
 // arg: 'review' and 'open' pre-select a filter (Home links), 'upload' opens the upload form.
-export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
+export function TrackerView({ owner, arg, approvals }: { owner: boolean; arg?: string; approvals?: boolean }) {  // approvals: the same page opened from the Approvals menu item
   useLang()
   const gate = useWriteGate()
   const s = useFetch<Tracker>('/tracker')
@@ -298,7 +300,7 @@ export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
   )
   return (
     <>
-      <PageHeader title={t(S.title)} description={t(S.desc)}
+      <PageHeader title={approvals ? tx('nav.approvals') : t(S.title)} description={approvals ? t(S.approvalsDesc) : t(S.desc)}
         actions={can('upload_documents') && <button type="button" data-guide="tk-upload" className="btn btn-primary" {...gate(() => openForm('quote-file'))}>{t(S.uploadQuote)}</button>} />
       <FilterBar label={t(S.filterLabel)} chips={filter ? [{ label: t({ en: `Showing: ${filterName.en}`, ms: `Dipaparkan: ${filterName.ms}`, zh: `显示：${filterName.zh}`, ta: `காட்டுவது: ${filterName.ta}` }), onRemove: () => setFilter('') }] : []} onClear={() => setFilter('')}>
         <FilterSelect label={t(S.filter)} value={filter} onChange={setFilter}>

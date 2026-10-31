@@ -451,6 +451,7 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
   tracker: { render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },
+  approvals: { render: () => <TrackerView owner={can('view_costs')} arg="review" approvals /> },  // what needs a person to check or approve
   suppliers: { render: c => <SuppliersView owner={c.owner} /> },
   supplier: { render: c => c.arg ? <SupplierDetail id={c.arg} /> : <NotFound /> },
   products: { render: c => <ProductsView owner={c.owner} /> },

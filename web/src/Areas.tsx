@@ -190,9 +190,9 @@ export function areaTiles(d: AreaData, owner: boolean): BentoTile[] {
           ]} />
         </section>
     ) },
-    ...(audit ? [{ id: 'audit', size: 'L' as const, title: tx('nav.group.Audit Log'), node: (
-      <section aria-label={tx('nav.group.Audit Log')} className="glass">
-            <AreaHead icon="activity" title={tx('nav.group.Audit Log')} href="#/activity" lead={t(S.audLead)} />
+    ...(audit ? [{ id: 'audit', size: 'L' as const, title: tx('nav.activity'), node: (
+      <section aria-label={tx('nav.activity')} className="glass">
+            <AreaHead icon="activity" title={tx('nav.activity')} href="#/activity" lead={t(S.audLead)} />
             <Timeline />
           </section>
     ) }] : []),

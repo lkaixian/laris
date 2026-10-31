@@ -13,7 +13,7 @@ export const GUIDES: Record<string, Guide> = {
   ...SUPPLIER_GUIDES,
   ...ADMIN_GUIDES,
   home: { title: { en: 'Using Home', ms: 'Menggunakan Utama', zh: '使用首页', ta: 'முகப்பைப் பயன்படுத்துதல்' }, steps: [
-    S('The four tiles sum up your business: Work, Suppliers, Insight and Audit Log.', 'Empat jubin meringkaskan perniagaan anda: Kerja, Pembekal, Wawasan dan Log Audit.', '四个区块概括您的业务：工作、供应商、洞察和审计日志。', 'நான்கு கட்டங்கள் உங்கள் வணிகத்தைச் சுருக்குகின்றன: பணி, சப்ளையர்கள், நுண்ணறிவு, தணிக்கைப் பதிவு.', 'home-tiles'),
+    S('The four tiles sum up your business: Work, Suppliers, Insight and Activity log.', 'Empat jubin meringkaskan perniagaan anda: Kerja, Pembekal, Wawasan dan Log Aktiviti.', '四个区块概括您的业务：工作、供应商、洞察和活动日志。', 'நான்கு கட்டங்கள் உங்கள் வணிகத்தைச் சுருக்குகின்றன: பணி, சப்ளையர்கள், நுண்ணறிவு, தணிக்கைப் பதிவு.', 'home-tiles'),
     S('Work shows each stage of a quote, from enquiry to job, with how many are in each.', 'Kerja menunjukkan setiap peringkat sebut harga, dari pertanyaan hingga kerja, dengan bilangan di setiap peringkat.', '“工作”显示报价从询问到工单的每个阶段及数量。', 'பணி: விசாரணை முதல் வேலை வரை மேற்கோளின் ஒவ்வொரு கட்டமும் எண்ணிக்கையும்.', 'home-work'),
     S('Select any number in a tile to open the list behind it.', 'Pilih mana-mana nombor dalam jubin untuk membuka senarai di sebaliknya.', '点击区块中的任意数字即可打开对应列表。', 'ஒரு கட்டத்தில் உள்ள எண்ணைத் தேர்ந்தெடுத்தால் அதன் பட்டியல் திறக்கும்.', 'home-tiles'),
     S('Use Ask Laris at the bottom right to ask what needs your attention today.', 'Guna Tanya Laris di bawah kanan untuk bertanya apa yang perlu perhatian anda hari ini.', '使用右下角的“问 Laris”询问今天需要处理什么。', 'இன்று எதைக் கவனிக்க வேண்டும் என்று கீழ் வலதுபுறமுள்ள "Laris இடம் கேள்" மூலம் கேளுங்கள்.', 'ask-laris'),

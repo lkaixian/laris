@@ -609,7 +609,7 @@ function AppShell() {
             )}
           </div>
         )}
-        {me && lic && <AssistantWidget hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
+        {me && lic && <AssistantWidget name={me.name} uid={me.id} hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
         {me && lic && <GuidePanel />}
       </Shell>
       {me && <TourHost me={me} owner={owner} />}

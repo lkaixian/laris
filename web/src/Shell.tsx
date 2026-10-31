@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { MOCK, canOpen, getToken, logout } from './api'
+import { setThemePref } from './skin'
 import { Palette } from './Palette'
 import { LANGS, setLang, t, useLang } from './i18n'
 import type { Text } from './i18n'
@@ -238,10 +239,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
   const act = async (a: 'theme' | 'signout' | 'tour') => {
     if (a === 'tour') return startTour()
     if (a === 'signout') { await logout(); toast('You have been signed out.'); return }
-    const next = dark ? 'light' : 'dark'
-    document.documentElement.dataset.theme = next
-    try { localStorage.setItem('theme', next) } catch { /* storage blocked: choice lasts for this visit only */ }
-    setDark(!dark)
+    setDark(setThemePref(dark ? 'light' : 'dark'))
   }
   const mac = /Mac|iPhone|iPad/.test(navigator.platform)
   const picker = !signedIn && <RolePicker role={role} onRole={onRole} />

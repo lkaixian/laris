@@ -11,6 +11,7 @@ import { mockListings } from './mockListings'
 import { mockPrivacy } from './mockPrivacy'
 import { mockAi, mockAiOn } from './mockAi'
 import { mockAccept } from './mockAccept'
+import { mockChain, mockDelivery } from './mockChain'
 import { mockTrack, jobStats, dashTrack, extraMembers, heatOf, mockJobMove } from './mockTrack'
 const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
@@ -391,6 +392,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services, ...(isLive ? { checked_at: new Date().toISOString() } : {}) }
   }
   { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
+  { const r = mockDelivery(method, p, body); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)
   { const r = mockPrivacy(method, p, owner, body); if (r !== undefined) return r }
   { const r = mockAi(method, p, owner, body); if (r !== undefined) return r }
@@ -621,6 +623,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body.permissions !== undefined) r.permissions = body.permissions
     return { ...r, users: members.filter(x => x.role_id === r.id).length }
   }
+  { const r = mockChain(method, p, q, owner, body); if (r !== undefined) return r }
   { const r = mockTrack(method, p, q, { owner, me: owner ? 'sample-owner' : 'sample-staff', perm, people: members.filter(x => x.active).map(x => x.id), doc: id => docs[id]?.doc }, body); if (r !== undefined) return r }
   // Telegram. Switches: ?tg=1 connected, ?tg=none (or no switch) shows one-tap create and flips to connected after about 3 polls, ?tg=link_first, ?tg=unavailable, ?tg=attention, ?tg=env, ?tg=checking, ?helper=off. Token "bad", "inuse", "down", "nourl", "nokey" give each error.
   if (p === '/settings/telegram') {

@@ -20,7 +20,7 @@ Everything is reached from the left sidebar or the search bar at the top; the us
 
 | Group | Pages |
 | --- | --- |
-| Work | Home, Tracker, Track, Jobs, Follow-ups |
+| Work | Home, Tracker, Schedule, Jobs, Follow-ups |
 | Suppliers | Contacts, Ask suppliers, Catalog photos |
 | Insight | Stale costs |
 | Audit Log | Audit log |
@@ -33,7 +33,7 @@ Everything is reached from the left sidebar or the search bar at the top; the us
 
 ### 1.3 Follow a step-by-step guide
 
-1. Select **?** in the sidebar or **How to** on Home, Jobs, Follow-ups, Track, Catalog photos or Audit log.
+1. Select **?** in the sidebar or **How to** on Home, Jobs, Follow-ups, Schedule, Catalog photos or Audit log.
 2. The page is blurred and dimmed except the part the step is about, which has a green ring and the step number.
 3. Read the step, then select **Next** (or **Back**). The dots at the top show where you are; select one to jump to that step.
 4. Select **Done** on the last step, **Close**, or press **Esc**. Going to another page also closes the guide.
@@ -69,7 +69,7 @@ The detailed tiles you had before are below, under **Details**.
 4. Select the moon or sun button in the header to switch between dark and light themes.
 5. Select **Sign out** when you finish on a shared computer.
 
-> **Note:** Chinese and Tamil cover the menus, status labels and the Jobs, Follow-ups, Track, Audit log and Ask Laris screens. Other pages, server messages and Ask Laris answers stay in English; help, tour and palette are in English and Malay. The translations have not yet been reviewed by native speakers.
+> **Note:** Chinese and Tamil cover the menus, status labels and the Jobs, Follow-ups, Schedule, Audit log and Ask Laris screens. Other pages, server messages and Ask Laris answers stay in English; help, tour and palette are in English and Malay. The translations have not yet been reviewed by native speakers.
 
 ## Chapter 2: Managing jobs
 
@@ -262,3 +262,8 @@ The **AI guide** answers "where do I click?" from the Ctrl+K palette. **Ask Lari
 | Jobs made by hand | No quote, PDF or accept link; the amount is typed |
 | Languages | Every page is in English, Malay, Chinese and Tamil; server messages, AI answers and customer data stay English; not reviewed by native speakers |
 | Glass Home tiles | Blur needs a recent browser; older ones show plain tiles |
+
+
+## Menu hints
+
+Point at any item in the left menu, or tab to it, and a small pop-up says in one line what that page is for. Press Esc to close it.

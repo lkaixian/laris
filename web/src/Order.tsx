@@ -242,7 +242,7 @@ export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
       <PageHeader title={c ? c.job.title : TT('deal')} back={{ href: '#/deals', label: TT('deals') }} />
       <Async s={s} empty={!c}>
         {c && <>
-          <nav aria-label={TT('trail')} className="mb-4 overflow-x-auto" data-guide="deals-pipeline">
+          <nav aria-label={TT('trail')} className="relative mb-4 overflow-x-auto" data-guide="deals-pipeline">
             <ol className="flex min-w-max items-center gap-1">{steps.map(([label, k, state, href, hint], i) => <Step key={k} n={i + 1} label={label} state={state} href={href} hint={hint} />)}</ol>
           </nav>
           <section className="card mb-4 grid gap-1">

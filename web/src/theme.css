@@ -388,7 +388,7 @@
 
 /* ---- Ask Laris robot. Outer box travels (transform), inner box bobs, hop box jumps: three separate transforms so they never fight. ---- */
 @layer components {
-  .bot { position: fixed; right: 16px; bottom: 16px; z-index: 47; width: 80px; height: 100px; transform: translate(var(--bx, 0px), var(--by, 0px)) rotate(var(--br, 0deg)); transition: transform 900ms cubic-bezier(.34,1.35,.5,1); transform-origin: 50% 80%; }
+  .bot { position: fixed; right: 16px; bottom: 16px; z-index: 47; width: 80px; height: 100px; transform: translate(calc(var(--bx, 0px) + var(--hx, 0px)), var(--by, 0px)) rotate(calc(var(--br, 0deg) + var(--hr, 0deg))); transition: transform 900ms cubic-bezier(.34,1.35,.5,1); transform-origin: 50% 80%; }
   .bot[data-spot] { z-index: 90; }
   .bot-btn { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 40%; }
   .bot-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
@@ -416,3 +416,6 @@
 }
 @media (max-width: 639px) { .bot { width: 64px; height: 80px; } }
 @media (prefers-reduced-motion: reduce) { .bot, .bot-inner, .bot-hop, .bot-bubble, .bot-shadow { transition: none !important; animation: none !important; } }
+
+@layer components { .bot[data-hide] { --hx: 62px; --hr: 14deg; transition-duration: 380ms; transition-timing-function: cubic-bezier(.5,0,.75,0); } .bot[data-hide] .bot-inner { animation: none; } }
+@media (max-width: 639px) { .bot[data-hide] { --hx: 50px; } }

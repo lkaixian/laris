@@ -145,7 +145,7 @@ export function AssistantView() {
 }
 
 // Floating "Ask" button on every page (bottom right) that opens the same chat in a side panel. Hidden on the Assistant page itself.
-export function AssistantWidget({ hidden }: { hidden?: boolean }) {
+export function AssistantWidget({ hidden, name, uid }: { hidden?: boolean; name?: string; uid?: string }) {
   useLang()  // redraw in the chosen language (the widget is outside the page that is redrawn)
   const [open, setOpen] = useState(false)
   const [warm, setWarm] = useState(false)  // the chat is mounted from the first hover, focus or touch of the button, so its suggestions are loaded before the click
@@ -170,7 +170,7 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
         </div>
         {warm && <AssistantChat compact onNavigate={() => setOpen(false)} />}
       </section>
-      <Bot open={open} onWarm={() => setWarm(true)} onClick={() => { setWarm(true); setOpen(!open) }} />
+      <Bot name={name} uid={uid} open={open} onWarm={() => setWarm(true)} onClick={() => { setWarm(true); setOpen(!open) }} />
     </>
   )
 }

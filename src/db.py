@@ -2,10 +2,12 @@
 import logging
 import os
 import secrets
+from urllib.parse import quote, urlsplit, urlunsplit
 from contextlib import contextmanager
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 
 DB_DIR = Path(__file__).resolve().parent.parent / "db"
@@ -30,6 +32,16 @@ def tx(role="staff", actor="", tenant="", timeout=15):
         yield conn
 
 
+def app_role_url(owner_url: str, password: str) -> str:
+    """The same server and database as owner_url, signed in as laris_app."""
+    u = urlsplit(owner_url)
+    if u.scheme not in ("postgres", "postgresql"):
+        raise ValueError("DATABASE_URL is not a postgres:// URL")
+    host = u.hostname or ""
+    host = f"[{host}]" if ":" in host else host
+    return urlunsplit(u._replace(netloc=f"laris_app:{quote(password, safe='')}@{host}" + (f":{u.port}" if u.port else "")))
+
+
 SCHEMA_LOCK = 7412340001  # pg_advisory_lock key: two instances starting together apply the schema one after the other
 
 
@@ -37,6 +49,12 @@ def apply_schema(seed: bool | None = None) -> None:
     """Idempotent: schema/transitions/functions only on an empty DB (one transaction: all or nothing), tiers/views/rls/rfq/rbac always (CREATE OR REPLACE)."""
     # DATABASE_URL_OWNER (the schema owner) is only for this; the running app uses the least-privilege DATABASE_URL
     owner = os.environ.get("DATABASE_URL_OWNER")
+    # One URL and LARIS_APP_PASSWORD set (the Replit case): that URL is the owner for this start, laris_app is created from it
+    # and the app switches to it below. Any failure keeps the owner URL, as before (the health page then shows rls_bypass).
+    app_pw = os.environ.get("LARIS_APP_PASSWORD")
+    auto = bool(app_pw) and not owner
+    if auto:
+        owner = url()
     with psycopg.connect(owner or url(), autocommit=True, prepare_threshold=None, connect_timeout=15) as c:
         c.execute("select pg_advisory_lock(%s)", (SCHEMA_LOCK,))  # held until this connection closes; the check below runs after the wait
         c.execute("select set_config('laris.tenant', '*', false)")  # FORCE RLS applies to the owner: seeding crosses tenants on purpose
@@ -66,13 +84,24 @@ def apply_schema(seed: bool | None = None) -> None:
                 raise RuntimeError(f"migration {f.name} failed: {e.diag.message_primary or e}") from e
         if (os.environ.get("SEED") == "1" if seed is None else seed) and                 not c.execute("select 1 from tenants limit 1").fetchone():
             run("seed_made_to_order.sql")
-        if owner:  # new tables and views need their grants for laris_app
+        switched = False
+        if auto:
+            try:
+                run("roles.sql")
+                c.execute(sql.SQL("alter role laris_app password {}").format(sql.Literal(app_pw)))
+                psycopg.connect(app_role_url(owner, app_pw), connect_timeout=15).close()  # prove the login works before relying on it
+                switched = True
+            except (RuntimeError, ValueError, psycopg.Error) as e:
+                logging.getLogger("laris").error("LARIS_APP_PASSWORD is set but the laris_app role could not be set up (%s); staying on the owner login", type(e).__name__)
+        elif owner:  # new tables and views need their grants for laris_app
             run("roles.sql")
         # trade-template fields become the tenant's starting registry (owner can still add via proposals)
         for t in c.execute("select id, trade_template from tenants").fetchall():
             seed_tenant_fields(c, t[0], t[1])
         from . import license as lic  # local: license imports clock, which imports db
         lic.refresh(c)  # a key set from the admin page enforces from the first webhook after a restart, not only after the first signed-in request
+    if switched:
+        os.environ["DATABASE_URL_OWNER"], os.environ["DATABASE_URL"] = owner, app_role_url(owner, app_pw)
 
 
 def seed_tenant_fields(c, tenant_id, trade_template: str) -> None:

@@ -150,8 +150,6 @@ export function ReportsView() {
               <div className="card rep-card rep-wide"><h3 className="rep-h">{tk('trend')}</h3><Trend a={d.analytics} /></div>
               <div className="card rep-card"><h3 className="rep-h">{tk('funnel')}</h3>
                 <Bars rows={d.analytics.funnel.map(f => ({ label: tk('f' + f.k), value: f.n, text: String(f.n) }))} /></div>
-              <div className="card rep-card"><h3 className="rep-h">{tk('aging')}</h3>
-                <Bars rows={d.analytics.aging.map(g => ({ label: g.k === 'current' ? tk('current') : g.k.replace(/_/g, ' '), value: g.amount, text: rm(g.amount), warn: g.k !== 'current' }))} /></div>
               <div className="card rep-card"><h3 className="rep-h">{tk('cust')}</h3>
                 <Bars rows={d.analytics.customers.map(c => ({ label: c.name, value: c.amount, text: `${rm(c.amount)} · ${c.pct}%` }))} /></div>
               <div className="card rep-card"><h3 className="rep-h">{tk('prod')}</h3>

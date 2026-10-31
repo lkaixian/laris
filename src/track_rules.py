@@ -12,6 +12,7 @@ REVIEW_DAYS = 2            # inbound received or parsed: waiting for review
 OWNER_DECISION_DAYS = 2    # inbound reviewed: waiting for the owner
 SUPPLIER_REPLY_DAYS = 2    # ask-suppliers reply still waiting
 LISTING_REVIEW_DAYS = 3    # catalog item still needs review
+DEPOSIT_CHASE_DAYS = 7     # order: proforma issued, deposit still not recorded
 
 TERMINAL = frozenset({"accepted", "rejected", "expired", "superseded", "cancelled", "in_cost_book", "job_created",
                       "confirmed", "discarded"})  # never overdue; confirmed / discarded are the catalog item's end states
@@ -67,4 +68,9 @@ def overdue_reason(kind: str, status: str, since: datetime, now: datetime, *, se
     elif kind == "listing":
         if status == "needs_review" and age > LISTING_REVIEW_DAYS:
             return "catalog item waiting for review"
+    elif kind == "order":  # NOT in KINDS (not on the tracker list yet): status is the chain stage, since its start, valid_until the invoice due date
+        if status == "awaiting_deposit" and age > DEPOSIT_CHASE_DAYS:
+            return "deposit not received"
+        if status == "awaiting_payment" and valid_until is not None and valid_until < now.astimezone(MY).date():
+            return "invoice unpaid past its due date"
     return None

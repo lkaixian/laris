@@ -13,6 +13,7 @@ from test_chain_api import count, err, hand_job, pay, proforma
 from test_rfq import other_tenant
 
 LAYOUT = Jsonb(doc_layout.default_spec("invoice"))
+LINES = Jsonb([{"no": 1, "description": "x", "qty": "0.1", "uom": "lot", "is_header": False}])  # a delivery order must deliver something that was ordered
 
 
 def raw(pg_url, q, p=()):
@@ -28,8 +29,8 @@ def mkpay(e, job, amount, key, **kw):
 
 
 def mkdoc(e, job, kind="invoice", no="INV-2026-0001", status="issued", **cols):
-    return e.sql("""insert into deal_docs(tenant_id, job_id, kind, doc_no, status, subtotal, total, layout_snapshot)
-                    select tenant_id, id, %s, %s, %s, 10, 10, %s from jobs where id=%s returning id""", (kind, no, status, LAYOUT, job))[0]["id"]
+    return e.sql("""insert into deal_docs(tenant_id, job_id, kind, doc_no, status, lines, subtotal, total, layout_snapshot)
+                    select tenant_id, id, %s, %s, %s, %s, 10, 10, %s from jobs where id=%s returning id""", (kind, no, status, LINES, LAYOUT, job))[0]["id"]
 
 
 # ---------------------------------------------------------------- tenant isolation
@@ -70,7 +71,7 @@ def test_payments_are_append_only_for_the_app_role_and_for_the_owner(env, pg_url
     e = env
     j = hand_job(e, "1000.00")
     p = pay(e, j, "300.00", key="dep-key-0001").json()["payment"]["id"]
-    for q in ("update payments set amount = 1", "delete from payments", "truncate payments, deal_docs, delivery_signatures"):
+    for q in ("update payments set amount = 1", "delete from payments", "truncate payments, deal_docs, delivery_signatures, delivery_links"):
         with pytest.raises(psycopg.Error):
             e.sql(q)  # the app role has no UPDATE / DELETE / TRUNCATE
         with pytest.raises(psycopg.errors.RaiseException, match="payments is append-only"):

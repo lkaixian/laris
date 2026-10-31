@@ -342,9 +342,10 @@ def test_an_issue_delivery_role_reads_only_delivery_order_pdfs(env):
     driver = member(e, role(e, "Driver", ["issue_delivery"]), "Driver")
     err(e.c.get(f"/api/deal-docs/{pf['id']}/pdf", headers=driver), 403, "permission_required")
     err(e.c.get(f"/api/jobs/{j}/chain", headers=driver), 403, "permission_required")
-    do = e.sql("""insert into deal_docs(tenant_id, job_id, kind, doc_no, subtotal, total, layout_snapshot)
-                  select tenant_id, id, 'delivery_order', 'DO-2026-0001', 1000.01, 1000.01, %s from jobs where id=%s returning id""",
-               (Jsonb(doc_layout.default_spec("delivery_order")), j))[0]["id"]
+    do = e.sql("""insert into deal_docs(tenant_id, job_id, kind, doc_no, lines, subtotal, total, layout_snapshot)
+                  select tenant_id, id, 'delivery_order', 'DO-2026-0001', %s, 1000.01, 1000.01, %s from jobs where id=%s returning id""",
+               (Jsonb([{"no": 1, "description": "Shopfront sign", "qty": "1", "uom": "lot", "unit_price": "1000.01", "discount_pct": None, "amount": "1000.01", "is_header": False}]),
+                Jsonb(doc_layout.default_spec("delivery_order")), j))[0]["id"]
     t = pdf_of(e, do, driver)
     assert "Delivery Order" in t and "Goods received in good order" in t and "1,000.01" not in t  # prices are off on a DO by default
 

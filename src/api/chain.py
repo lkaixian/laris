@@ -1,10 +1,11 @@
-"""Order chain, steps 1-2 (docs/order-chain-plan.md): proforma with a deposit, payments with their receipts, the order's chain view, the PDF of an
-issued document, and the per-kind layout settings. The order is the jobs row. Every issued document is a frozen deal_docs row (lines, totals and
-the layout it was issued with); payments are append-only and the database refuses an overpayment (db/chain.sql). Selling prices only.
-Staff see any of it only with record_payments (issue_delivery for a delivery order's PDF); proforma, reversal, void and layout are owner only."""
+"""Order chain, steps 1-4 (docs/order-chain-plan.md): proforma with a deposit, payments with their receipts, the invoice, the order's chain view,
+the PDF of an issued document, and the per-kind layout settings. The order is the jobs row. Every issued document is a frozen deal_docs row (lines,
+totals and the layout it was issued with); payments are append-only and the database refuses an overpayment (db/chain.sql). Selling prices only.
+Delivery orders and the customer's sign link are in delivery.py. Staff see any of it only with record_payments (issue_delivery for a delivery
+order's PDF); proforma, invoice, reversal, void and layout are owner only."""
 import json
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import mean
 from typing import Literal
@@ -16,6 +17,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import ai_log, doc_layout, ilmu, pipeline, quote_doc, quote_pdf
+from .. import track_rules as tr
 from ..errors import ApiError
 from ..parse_util import _date, _dec, contact_names
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, require_perm, svc, throttle, write_ctx
@@ -110,6 +112,11 @@ def _net(c, job_id) -> tuple[Decimal, Decimal]:
     return x["paid"], x["dep"]
 
 
+def _delivery(c, job_id) -> list[dict]:
+    """Per order line: ordered, on live delivery orders (issued), on signed ones. The database guard and the sign link read the same function."""
+    return c.execute("select line_no as no, ordered, issued, signed from delivery_lines(%s)", (job_id,)).fetchall()
+
+
 def _spec(c, tenant_id, kind: str) -> dict:
     """The effective layout: the kind's default with the tenant's override on top, validated."""
     o = c.execute("select doc_layouts -> %s::text as o from tenants where id=%s", (kind, tenant_id)).fetchone()["o"]
@@ -175,12 +182,52 @@ def void_doc(doc_id: UUID, body: VoidIn, ctx: Ctx = Depends(write_ctx)):
         raise ApiError(409, "reverse_payment", "a receipt is voided by reversing its payment")
     if d["status"] == "void":
         raise ApiError(409, "already_void", f"{d['doc_no']} is already void")
-    if d["kind"] in ("proforma", "invoice") and _net(c, d["job_id"])[0] > 0:
+    paid, dep = _net(c, d["job_id"])
+    if d["kind"] == "proforma" and paid > 0 or d["kind"] == "invoice" and paid - dep > 0:  # an invoice outlives a deposit, not a balance payment
         raise ApiError(409, "has_payments", "money has been received on this order; reverse the payment first")
     with guarded():
         c.execute("update deal_docs set status='void', void_reason=%s, voided_at=now(), voided_by=%s where id=%s", (body.reason.strip(), ctx.user_id, doc_id))
-    audit(ctx, "jobs", d["job_id"], f"{d['kind']} {d['doc_no']} voided: {body.reason.strip()}", None, {"deal_doc_id": doc_id})
+    audit(ctx, "jobs", d["job_id"], f"{'SIGNED ' if d['status'] == 'signed' else ''}{d['kind']} {d['doc_no']} voided: {body.reason.strip()}", None, {"deal_doc_id": doc_id})
     return reply(ctx, {"id": doc_id, "doc_no": d["doc_no"], "status": "void"})
+
+
+# ---------------------------------------------------------------- invoice
+class InvoiceIn(BaseModel, extra="forbid"):
+    due_on: date | None = None  # null = from the payment terms ("Net 30", "14 days"), else none
+    override_reason: str | None = Field(None, min_length=3, max_length=300)  # issue before any delivery order is signed
+
+
+def _due(terms: str | None, today: date) -> date | None:
+    # ponytail: reads "Net N" / "N days" only; any other wording gives no due date and the owner sets due_on
+    m = re.search(r"net\s*(\d{1,3})|(\d{1,3})\s*days?", terms or "", re.I)
+    return today + timedelta(days=int(m[1] or m[2])) if m else None
+
+
+@r.post("/jobs/{job_id}/invoice")
+def issue_invoice(job_id: UUID, body: InvoiceIn = InvoiceIn(), ctx: Ctx = Depends(write_ctx)):
+    """Freeze the order's lines into the invoice (owner). Amount due = order total minus the payments received (the deposit shows as already paid);
+    a Tax Invoice only when the business is SST-registered. One live invoice per order. Needs a signed delivery order, or override_reason (stored, audited)."""
+    require_owner(ctx)
+    c = ctx.conn
+    j = _job(ctx, job_id, lock=True)
+    if c.execute("select 1 from deal_docs where job_id=%s and kind='invoice' and status <> 'void'", (job_id,)).fetchone():
+        raise ApiError(409, "already_issued", "this order already has an invoice; void it first to issue another")
+    today = pipeline.today_my()
+    if body.due_on and body.due_on < today:
+        raise ApiError(422, "bad_due", "due_on cannot be in the past")
+    m = _order_model(ctx, j)
+    total = _freeze_total(ctx, j)
+    if m["total"] != total:
+        raise ApiError(409, "total_changed", f"the order was agreed at {_rm(total)} but its lines now total {_rm(m['total'])}")
+    delivered = c.execute("select 1 from deal_docs where job_id=%s and kind='delivery_order' and status='signed' limit 1", (job_id,)).fetchone()
+    if not delivered and not body.override_reason:
+        raise ApiError(409, "not_delivered", "no delivery order is signed yet; wait for it or give override_reason")
+    paid = _net(c, job_id)[0]
+    due = body.due_on or _due(m["payment_terms"], today)
+    why = None if delivered else body.override_reason.strip()
+    d = _issue(ctx, job_id, "invoice", m, {"deposit_paid": paid, "balance_due": total - paid, "due_on": due, **({"override_reason": why} if why else {})})
+    audit(ctx, "jobs", job_id, f"invoice {d['doc_no']} issued, {_rm(total - paid)} due" + (f" (before delivery, override: {why})" if why else ""), None, {"deal_doc_id": d["id"]})
+    return reply(ctx, d, 201)
 
 
 # ---------------------------------------------------------------- payments
@@ -233,7 +280,8 @@ def record_payment(job_id: UUID, body: PaymentIn, ctx: Ctx = Depends(write_ctx))
                        body.idempotency_key, _json(body.extraction.model_dump()) if body.extraction else None)).fetchone()
     balance = total - _net(c, job_id)[0]
     m = {"lines": [], "subtotal": p["amount"], "tax_total": None, "total": p["amount"]}
-    rc = _issue(ctx, job_id, "receipt", m, {"balance": balance}, p["id"])
+    inv = c.execute("select id, doc_no from deal_docs where job_id=%s and kind='invoice' and status <> 'void'", (job_id,)).fetchone()
+    rc = _issue(ctx, job_id, "receipt", m, {"balance": balance, **({"invoice_id": inv["id"], "invoice_no": inv["doc_no"]} if inv else {})}, p["id"])  # the receipt names its invoice
     audit(ctx, "jobs", job_id, f"payment of {_rm(p['amount'])} recorded ({p['purpose']}, {p['method']}); receipt {rc['doc_no']} issued, {_rm(balance)} left to pay",
           None, {"payment_id": p["id"]})
     return reply(ctx, _pay_out(c, p), 201)
@@ -327,11 +375,27 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
     pf = next((d for d in live if d["kind"] == "proforma"), None)
     dep_due = pf["extra"]["deposit_amount"] if pf else None
     dep_due = Decimal(dep_due) if dep_due is not None else None
+    dl = _delivery(c, job_id)
+    sigs = {s["deal_doc_id"]: s for s in c.execute(
+        """select s.deal_doc_id, s.signer_name as name, s.signed_at as at, s.problems_note as problems, s.mark is not null as has_mark
+           from delivery_signatures s join deal_docs d on d.id = s.deal_doc_id where d.job_id=%s""", (job_id,))}
+    inv = next((d for d in live if d["kind"] == "invoice"), None)
+    due = date.fromisoformat(inv["extra"]["due_on"]) if inv and inv["extra"].get("due_on") else None
+    st = stage(total, paid, dep_due, dep_paid, inv is not None, bool(dl) and all(x["signed"] >= x["ordered"] for x in dl))
+    since = pf["issued_at"] if st == "awaiting_deposit" and pf else inv["issued_at"] if st == "awaiting_payment" else None
     return reply(ctx, {
         "job": {"id": j["id"], "title": j["title"], "quote_id": j["quote_id"], "status": j["status"]},
         "total": total, "paid": paid, "balance": total - paid if total is not None else None,
         "deposit": {"pct": pf["extra"]["deposit_pct"], "amount": dep_due, "paid": dep_paid} if pf else None,
-        "stage": stage(total, paid, dep_due, dep_paid, any(d["kind"] == "invoice" for d in live), any(d["kind"] == "delivery_order" and d["status"] == "signed" for d in live)),
+        "stage": st, "overdue": tr.overdue_reason("order", st, since, datetime.now(timezone.utc), valid_until=due) if since else None,
+        "delivery": {"lines": dl, "complete": bool(dl) and all(x["signed"] >= x["ordered"] for x in dl)},
+        "delivery_orders": [{"id": d["id"], "doc_no": d["doc_no"], "status": d["status"], "issued_at": d["issued_at"], "override_reason": d["extra"].get("override_reason"),
+                             "signature": ({k: sigs[d["id"]][k] for k in ("name", "at", "problems", "has_mark")} if d["id"] in sigs else None)}
+                            for d in docs if d["kind"] == "delivery_order"],
+        "problems": [{"doc_no": d["doc_no"], "note": sigs[d["id"]]["problems"], "at": sigs[d["id"]]["at"]} for d in docs if d["id"] in sigs and sigs[d["id"]]["problems"]],
+        "invoice": {"id": inv["id"], "doc_no": inv["doc_no"], "total": inv["total"], "due_on": due, "issued_at": inv["issued_at"], "balance_due": total - paid,
+                    "receipts": [{"id": d["id"], "doc_no": d["doc_no"], "payment_id": d["payment_id"], "status": d["status"]}
+                                 for d in docs if d["kind"] == "receipt" and d["extra"].get("invoice_id") == str(inv["id"])]} if inv else None,
         "documents": docs, "payments": [{**p, "reversed": p["id"] in reversed_} for p in pays]})
 
 
@@ -355,8 +419,13 @@ def deal_doc_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
         m["deposit"] = {"pct": Decimal(d["extra"]["deposit_pct"]), "amount": Decimal(d["extra"]["deposit_amount"]), "paid": _net(c, d["job_id"])[1]}
     elif d["kind"] == "receipt":
         p = c.execute("select amount, method, reference, purpose from payments where id=%s", (d["payment_id"],)).fetchone()
-        m["payment"] = {"amount": p["amount"], "method": p["method"], "reference": p["reference"], "for": p["purpose"]}
+        m["payment"] = {"amount": p["amount"], "method": p["method"], "reference": p["reference"], "for": p["purpose"], "invoice_no": d["extra"].get("invoice_no")}
         m["balance_due"] = Decimal(d["extra"]["balance"])
+    elif d["kind"] == "invoice":
+        m.update(deposit={"paid": Decimal(d["extra"]["deposit_paid"])}, balance_due=Decimal(d["extra"]["balance_due"]), due_on=d["extra"].get("due_on"))
+    elif d["kind"] == "delivery_order" and d["status"] == "signed":
+        s = c.execute("select signer_name, signed_at, mark, problems_note from delivery_signatures where deal_doc_id=%s", (doc_id,)).fetchone()
+        m["signature"] = {"name": s["signer_name"], "at": s["signed_at"].astimezone(pipeline.MY), "mark": s["mark"], "problems": s["problems_note"]}
     lang = c.execute("select doc_language from tenants where id=%s", (ctx.tenant_id,)).fetchone()["doc_language"]
     name = re.sub(r"[^A-Za-z0-9_-]", "_", d["doc_no"])
     return Response(quote_pdf.render(d["kind"], m, d["layout_snapshot"], lang), media_type="application/pdf",

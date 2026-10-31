@@ -219,6 +219,7 @@ def render(kind, model=None, layout=None, lang="en", *old) -> bytes:
             f = pay.get("for")
             rows += [(w("pay_for"), w("pay_for_" + f) if f in ("deposit", "balance") else str(f))] if f else []
             rows += [(w(k), str(pay[k])) for k in ("method", "reference") if pay.get(k)]
+            rows += [(w("invoice_ref"), pay["invoice_no"])] if pay.get("invoice_no") else []
             rows += [(w("received"), money(pay["amount"]))] if pay.get("amount") is not None else []
         if kind in ("invoice", "receipt") and bal is not None:
             rows.append((w("balance_due" if kind == "invoice" else "balance"), money(bal)))
@@ -234,11 +235,12 @@ def render(kind, model=None, layout=None, lang="en", *old) -> bytes:
 
     def signature():
         s = m.get("signature") or {}
-        cell = lambda k, v: [P(w(k), small), P(v or " ")]
-        t = Table([[cell("sig_name", s.get("name")), cell("sig_sign", None), cell("sig_date", s.get("at") and f"{s['at']:%Y-%m-%d %H:%M}")]],
-                  colWidths=[WIDTH * .38, WIDTH * .32, WIDTH * .30], rowHeights=[22 * mm])
+        cell = lambda k, v: [P(w(k), small), v if isinstance(v, Image) else P(v or " ")]
+        t = Table([[cell("sig_name", s.get("name")), cell("sig_sign", _logo(s.get("mark"))), cell("sig_date", s.get("at") and f"{s['at']:%Y-%m-%d %H:%M}")]],
+                  colWidths=[WIDTH * .38, WIDTH * .32, WIDTH * .30], rowHeights=[22 * mm])  # the drawn mark is a PNG data URL, scaled like a logo
         t.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.black), ("VALIGN", (0, 0), (-1, -1), "BOTTOM")]))
-        return [Spacer(1, 6 * mm), KeepTogether([*([P(w("good_order"), body, True), Spacer(1, 2 * mm)] if kind == "delivery_order" else []), t])]
+        note = [P(f"{w('do_problems')}: {s['problems']}", small)] if s.get("problems") else []
+        return [Spacer(1, 6 * mm), KeepTogether([*([P(w("good_order"), body, True), Spacer(1, 2 * mm)] if kind == "delivery_order" else []), t, *note])]
 
     def chop():
         t = Table([[P(w("chop"), small)]], colWidths=[50 * mm], rowHeights=[28 * mm], hAlign="LEFT")

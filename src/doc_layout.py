@@ -62,6 +62,16 @@ WORDS = {
     "sig_sign": _t("Signature", "Tandatangan", "签名", "கையொப்பம்"),
     "sig_date": _t("Date", "Tarikh", "日期", "தேதி"),
     "chop": _t("Company chop", "Cop syarikat", "公司印章", "நிறுவன முத்திரை"),
+    "do_problems": _t("Reported on receipt", "Dilaporkan semasa penerimaan", "签收时反映的问题", "பெறும்போது தெரிவிக்கப்பட்டது"),
+    "invoice_ref": _t("Invoice", "Invois", "发票", "இன்வாய்ஸ்"),
+    # shown beside the customer's sign button: says what is recorded and nothing about legal effect
+    "do_notice": _t("Typing your name and tapping Sign records your name, the time and a one-way code of your device's network address with this delivery order. "
+                    "Tick the box only if you have received the goods listed.",
+                    "Menaip nama anda dan menekan Tandatangan akan merekodkan nama anda, masa dan kod sehala bagi alamat rangkaian peranti anda bersama pesanan penghantaran ini. "
+                    "Tandakan kotak hanya jika anda telah menerima barang yang disenaraikan.",
+                    "输入姓名并点击签收后，系统会记录您的姓名、时间以及设备网络地址的单向代码，并与本送货单一并保存。仅在您已收到所列货物时才勾选。",
+                    "உங்கள் பெயரை உள்ளிட்டு கையொப்பமிடு என்பதைத் தட்டினால், உங்கள் பெயர், நேரம், உங்கள் சாதனத்தின் நெட்வொர்க் முகவரியின் ஒருவழிக் குறியீடு ஆகியவை இந்த டெலிவரி ஆர்டருடன் பதிவு செய்யப்படும். "
+                    "பட்டியலிடப்பட்ட பொருட்களைப் பெற்றிருந்தால் மட்டுமே பெட்டியைத் தேர்வு செய்யவும்."),
 }
 LABELS = {
     "no": _t("#", "#", "#", "#"),

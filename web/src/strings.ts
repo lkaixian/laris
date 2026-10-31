@@ -91,6 +91,8 @@ const D = {
   'why.waiting for owner decision': { en: 'waiting for owner decision', ms: 'menunggu keputusan pemilik', zh: '等待老板决定', ta: 'உரிமையாளர் முடிவுக்காகக் காத்திருக்கிறது' },
   'why.supplier has not replied': { en: 'supplier has not replied', ms: 'pembekal belum membalas', zh: '供应商尚未回复', ta: 'சப்ளையர் இன்னும் பதிலளிக்கவில்லை' },
   'why.catalog item waiting for review': { en: 'catalog item waiting for review', ms: 'item katalog menunggu semakan', zh: '目录项目等待审核', ta: 'பட்டியல் பொருள் மதிப்பாய்வுக்காகக் காத்திருக்கிறது' },
+  'why.deposit not received': { en: 'deposit not received', ms: 'deposit belum diterima', zh: '尚未收到订金', ta: 'முன்பணம் இன்னும் பெறப்படவில்லை' },
+  'why.invoice unpaid past its due date': { en: 'invoice unpaid past its due date', ms: 'invois belum dibayar melepasi tarikh akhir', zh: '发票已过期未付', ta: 'இன்வாய்ஸ் செலுத்தும் தேதி கடந்தும் செலுத்தப்படவில்லை' },
 
   // ---- age colours
   'heat.fresh': { en: 'Fresh', ms: 'Baharu', zh: '新近', ta: 'புதிது' },

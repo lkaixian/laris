@@ -69,7 +69,7 @@ export function DealsView({ owner, arg }: { owner: boolean; arg?: string }) {
   if (arg) return <OrderPage id={arg} owner={owner} />
   return (
     <>
-      <PageHeader title="Deals" description={say(pack.tagline)} actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? 'Close' : `New: ${say(pack.quickActions[0].label)}`}</button>} />
+      <PageHeader title="Deals" description={say(pack.tagline)} actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? 'Close' : say(pack.quickActions[0].label)}</button>} />
       <DemoSwitch pack={pack} onPick={setPack} />
       {adding && <NewDoc pack={pack} onDone={() => { setAdding(false); list.reload(); recv.reload() }} />}
       <div data-guide="deals-kpi"><StatStrip label="Deals at a glance">

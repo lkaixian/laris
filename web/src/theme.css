@@ -419,3 +419,79 @@
 
 @layer components { .bot[data-hide] { --hx: 62px; --hr: 14deg; transition-duration: 380ms; transition-timing-function: cubic-bezier(.5,0,.75,0); } .bot[data-hide] .bot-inner { animation: none; } }
 @media (max-width: 639px) { .bot[data-hide] { --hx: 50px; } }
+
+@layer components {
+  .rep { display: grid; gap: 1rem; }
+  .rep-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .rep-ai { font-size: .875rem; color: var(--muted); display: inline-flex; gap: .4rem; align-items: center; min-height: 2.75rem; }
+  .rep-asof { color: var(--muted); font-size: .875rem; }
+  .rep-kpis { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
+  .rep-kpi { padding: 1rem; display: grid; gap: .35rem; align-content: start; justify-items: start; }
+  .rep-spark { width: 100%; height: 2rem; fill: var(--accent); opacity: .85; }
+  .rep-story { padding: 1.25rem; display: grid; gap: 1rem; }
+  .rep-sum { font-size: 1.125rem; line-height: 1.6; max-width: 70ch; }
+  .rep-cols { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .rep-cols ul { display: grid; gap: .5rem; padding-left: 1.1rem; list-style: disc; }
+  .rep-next { list-style: none !important; padding-left: 0 !important; }
+  .rep-next a { font-weight: 600; text-decoration: underline; }
+  .rep-h { font-weight: 600; margin-bottom: .5rem; }
+  .rep-note { font-size: .8125rem; color: var(--muted); }
+  @media print { .rep-noprint, aside, nav, .side-pane, .bot, [data-assistant] { display: none !important; } .rep-kpi, .rep-story { break-inside: avoid; } body { background: #fff !important; color: #000 !important; } }
+}
+@layer components {
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden; }
+  .seg-btn { min-height: 2.75rem; padding: 0 .9rem; font-weight: 500; background: transparent; color: var(--ink); }
+  .seg-btn.on { background: var(--accent); color: var(--on-accent, #00251a); }
+}
+@layer components {
+  .rep-dash { display: grid; gap: .75rem; }
+  .rep-h2 { font-size: 1.25rem; font-weight: 700; }
+  .rep-grid { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+  .rep-card { padding: 1rem; min-width: 0; }
+  .rep-wide { grid-column: 1 / -1; }
+  .rep-trend { width: 100%; height: auto; }
+  .rep-area { fill: var(--accent); opacity: .14; }
+  .rep-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  .rep-line2 { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .75; }
+  .rep-dot { fill: var(--accent); stroke: var(--surface, #fff); stroke-width: 1.5; }
+  .rep-ax { font-size: 12px; fill: var(--muted); }
+  .rep-legend { display: flex; gap: 1rem; align-items: center; font-size: .8125rem; color: var(--muted); }
+  .rep-key { display: inline-block; width: 1.25rem; height: 0; border-top: 3px solid var(--accent); margin-right: .35rem; vertical-align: middle; }
+  .rep-key.k2 { border-top: 2px dashed var(--ink); margin-left: .5rem; }
+  .rep-bars { display: grid; gap: .6rem; }
+  .rep-bars li { display: grid; grid-template-columns: minmax(6rem, 9rem) 1fr auto; gap: .6rem; align-items: center; font-size: .875rem; }
+  .rep-bl { overflow-wrap: anywhere; }
+  .rep-bt { height: .65rem; background: var(--soft); border-radius: 999px; overflow: hidden; }
+  .rep-bt i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width var(--dur-slow, 400ms) var(--ease-out, ease-out); }
+  .rep-bt i.w { background: var(--warn-bar, #c2410c); }
+  @media (max-width: 639px) { .rep-bars li { grid-template-columns: 1fr auto; } .rep-bt { grid-column: 1 / -1; order: 3; } }
+  @media (prefers-reduced-motion: reduce) { .rep-bt i { transition: none; } }
+}
+@layer components {
+  .guide-q { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 9999px; font-weight: 800; font-size: 1.125rem; background: var(--accent); color: var(--on-accent); transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); animation: q-ring 2.8s var(--ease-out) 1.2s 2; }
+  .guide-q:hover { transform: scale(1.1) rotate(-6deg); box-shadow: 0 6px 18px -6px var(--accent); }
+  .guide-q:active { transform: scale(.94); }
+  @keyframes q-ring { 0%,100% { box-shadow: 0 0 0 0 transparent } 50% { box-shadow: 0 0 0 .6rem color-mix(in srgb, var(--accent) 25%, transparent) } }
+  @media (prefers-reduced-motion: reduce) { .guide-q { animation: none; transition: none; } }
+}
+@layer components {
+  .bot-bubble { padding-right: 2rem; }
+  .bot-x { position: absolute; top: 2px; right: 2px; width: 2rem; height: 2rem; border-radius: 9999px; display: grid; place-items: center; font-size: 1.25rem; line-height: 1; color: var(--muted); }
+  .bot-x:hover { background: var(--tint); color: var(--ink); }
+}
+@layer components {
+  .rep-trend { max-height: 17rem; }
+  .rep-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: rep-draw 1.1s var(--ease-out) .15s forwards; }
+  .rep-area { animation: rep-fade .9s var(--ease-out) .5s both; }
+  .rep-dot { opacity: 0; animation: rep-pop .4s var(--ease-out) both; }
+  .rep-bt i { transform-origin: left; animation: rep-grow .8s var(--ease-out) both; }
+  .rep-kpi, .rep-card { animation: rep-rise .55s var(--ease-out) both; }
+  .rep-kpi:nth-child(2), .rep-card:nth-child(2) { animation-delay: 70ms } .rep-kpi:nth-child(3), .rep-card:nth-child(3) { animation-delay: 140ms }
+  .rep-kpi:nth-child(4), .rep-card:nth-child(4) { animation-delay: 210ms } .rep-kpi:nth-child(5), .rep-card:nth-child(5) { animation-delay: 280ms }
+  .rep-kpi { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+  .rep-kpi:hover { transform: translateY(-3px); }
+  @keyframes rep-draw { to { stroke-dashoffset: 0 } } @keyframes rep-fade { from { opacity: 0 } }
+  @keyframes rep-pop { from { opacity: 0; transform: scale(.3) } to { opacity: 1; transform: none } }
+  @keyframes rep-grow { from { transform: scaleX(0) } } @keyframes rep-rise { from { opacity: 0; transform: translateY(14px) } }
+  @media (prefers-reduced-motion: reduce) { .rep-line, .rep-area, .rep-dot, .rep-bt i, .rep-kpi, .rep-card { animation: none !important; stroke-dashoffset: 0; opacity: unset; } .rep-dot { opacity: 1 } .rep-area { opacity: .14 } }
+}

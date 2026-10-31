@@ -19,6 +19,7 @@ const T = {
   hiSub: { en: 'Ask me anything, or let me show you around.', ms: 'Tanya apa sahaja, atau biar saya tunjukkan sekeliling.', zh: '有问题尽管问我，或让我带您逛逛。', ta: 'எதையும் கேளுங்கள், அல்லது சுற்றிக் காட்டுகிறேன்.' },
   tour: { en: 'Show me around', ms: 'Tunjukkan sekeliling', zh: '带我逛逛', ta: 'சுற்றிக் காட்டு' },
   ask: { en: 'Ask a question', ms: 'Tanya soalan', zh: '提问', ta: 'கேள்வி கேள்' },
+  close: { en: 'Close', ms: 'Tutup', zh: '关闭', ta: 'மூடு' },
   peek: { en: 'Peekaboo!', ms: 'Cak!', zh: '找到你啦！', ta: 'ஒளிந்து விளையாட்டு!' },
   think: { en: 'Thinking...', ms: 'Sedang berfikir...', zh: '思考中...', ta: 'யோசிக்கிறேன்...' },
 } satisfies Record<string, Text>
@@ -42,6 +43,8 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
   isOpen.current = open
   const busyRef = useRef(false)
   busyRef.current = s !== 'idle' || intro || spot
+  const lineRef = useRef(line)
+  lineRef.current = line
   const timer = useRef(0)
   const flight = useRef(0)
   const size = () => (matchMedia('(max-width: 639px)').matches ? { w: 64, h: 80 } : { w: 80, h: 100 })
@@ -88,7 +91,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
     if (!name || !uid) return
     try { if (sessionStorage.getItem('laris.bot.intro') === uid) return; sessionStorage.setItem('laris.bot.intro', uid) } catch { /* private window: it may greet again */ }
     mark('hi-' + page())  // the introduction replaces the page offer on this first page
-    const id = setTimeout(() => { setIntro(true); setHop(n => n + 1); say(t(T.hi).replace('{name}', name), 12000, true) }, 900)
+    const id = setTimeout(() => { setIntro(true); setHop(n => n + 1); say(t(T.hi).replace('{name}', name), 8000, true) }, 900)
     return () => clearTimeout(id)
   }, [name, uid])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -98,13 +101,21 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
     let back = 0, peeked = false
     const busy = () => !!document.querySelector('.guide-panel, [data-tour-panel]') || isOpen.current || busyRef.current
     const on = () => {
+      if (lineRef.current?.offer) { clearTimeout(timer.current); setLine(null); setIntro(false) }  // a scroll means "I am reading": never leave a speech bubble over the page
       if (busy()) return
       setHide(true); peeked = true
       clearTimeout(back)
       back = window.setTimeout(() => { setHide(false); if (peeked) { peeked = false; setHop(n => n + 1); say(T.peek, 1400) } }, 1100)
     }
+    const away = (e: Event) => {
+      if (!lineRef.current?.offer) return
+      if (e.type === 'keydown' && (e as KeyboardEvent).key !== 'Escape') return
+      if (e.type === 'pointerdown' && (e.target as HTMLElement | null)?.closest?.('.bot')) return
+      clearTimeout(timer.current); setLine(null); setIntro(false)
+    }
     addEventListener('scroll', on, { capture: true, passive: true })
-    return () => { removeEventListener('scroll', on, { capture: true }); clearTimeout(back) }
+    addEventListener('pointerdown', away); addEventListener('keydown', away)
+    return () => { removeEventListener('scroll', on, { capture: true }); removeEventListener('pointerdown', away); removeEventListener('keydown', away); clearTimeout(back) }
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Page change: a little hop, and (once per page per visit) an offer to walk through the page.
@@ -113,7 +124,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
       const p = page()
       setHop(n => n + 1)
       if (open || spot || !hasGuide(p) || seen('hi-' + p)) return
-      mark('hi-' + p); setTimeout(() => { if (!document.querySelector('.guide-panel, [data-tour-panel]')) say(T.hello, 9000, true) }, 900)
+      mark('hi-' + p)  // no speech bubble over the page: the round ? beside the title (it pulses once) is the offer
     }
     addEventListener('hashchange', arrive)
     const first = setTimeout(arrive, 1600)
@@ -130,6 +141,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
           {s === 'think' && line.text === T.think
             ? <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="ask-dots inline-flex gap-1">{[0, 1, 2].map(i => <span key={i} style={{ ['--i' as string]: i }} className="size-1.5 rounded-full bg-current" />)}</span>{t(T.think)}</span>
             : <span>{typeof line.text === 'string' ? line.text : t(line.text)}</span>}
+          {line.offer && <button type="button" aria-label={t(T.close)} className="bot-x" onClick={() => { clearTimeout(timer.current); setLine(null); setIntro(false) }}><span aria-hidden="true">×</span></button>}
           {intro && <span className="mt-1 block text-muted">{t(T.hiSub)}</span>}
           {line.offer && <span className="mt-2 flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary min-h-9 px-3" onClick={() => { setLine(null); setIntro(false); if (intro && !hasGuide(page())) onClick(); else startGuide(page()) }}>{t(intro ? T.tour : T.show)}</button>

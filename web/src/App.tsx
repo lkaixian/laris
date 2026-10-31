@@ -1,4 +1,5 @@
 import { DealsView } from './Deals'
+import { ReportsView } from './Reports'
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ReactNode } from 'react'
@@ -411,6 +412,7 @@ function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => { useLang(); return <><PageHeader title={t(S.notFound)} /><EmptyState title={t(S.notExist)} action={{ label: t(S.openTracker), href: '#/tracker' }} /></> }
 const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   home: { render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
+  reports: { render: () => <ReportsView /> },
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
   tracker: { render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },

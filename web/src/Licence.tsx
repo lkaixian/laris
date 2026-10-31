@@ -191,6 +191,7 @@ export function LicenceView({ owner }: { owner: boolean }) {
   return (
     <>
       <PageHeader title={title} description={owner ? t({ en: 'Your plan, seats and expiry. Activate a new key here to renew.', ms: 'Pelan, tempat dan tarikh tamat anda. Aktifkan kunci baharu di sini untuk memperbaharui.', zh: '您的套餐、席位和到期日。在此激活新密钥即可续期。', ta: 'உங்கள் திட்டம், இடங்கள் மற்றும் காலாவதி. புதுப்பிக்க இங்கே புதிய விசையைச் செயல்படுத்துங்கள்.' }) : t({ en: 'The licence status of your organisation. Only the owner can change it.', ms: 'Status lesen organisasi anda. Hanya pemilik boleh mengubahnya.', zh: '您所在组织的许可证状态。只有所有者可以更改。', ta: 'உங்கள் நிறுவனத்தின் உரிம நிலை. உரிமையாளர் மட்டுமே மாற்ற முடியும்.' })} />
+      {owner && !lic.offer && location.hash.includes('paid=1') && <p role="status" className="card mb-4 max-w-xl border-l-4 border-l-accent">{t({ en: 'Payment received. Your licence appears here in a moment; reload if it does not.', ms: 'Bayaran diterima. Lesen anda akan muncul di sini sebentar lagi; muat semula jika tidak.', zh: '已收到付款。您的许可证稍后会显示在此处；如未出现请刷新。', ta: 'கட்டணம் பெறப்பட்டது. உங்கள் உரிமம் சிறிது நேரத்தில் இங்கே தோன்றும்; தோன்றவில்லை என்றால் மீண்டும் ஏற்றவும்.' })}</p>}
       {owner && lic.offer && <div className="max-w-xl" data-guide="lic-offer"><OfferCard offer={lic.offer} onDone={reload} /></div>}
       {lic.clock?.rollback && <p role="alert" className="card mb-4 border-warn bg-warn-bg text-warn">{t({ en: 'The computer clock appears to have been set back. Licence checks may be wrong until the date is corrected.', ms: 'Jam komputer nampaknya telah diundurkan. Semakan lesen mungkin tidak tepat sehingga tarikh dibetulkan.', zh: '电脑时钟似乎被调回过。在日期更正之前，许可证检查可能不准确。', ta: 'கணினி கடிகாரம் பின்னோக்கி அமைக்கப்பட்டதாகத் தெரிகிறது. தேதி சரிசெய்யப்படும் வரை உரிமச் சோதனைகள் தவறாக இருக்கலாம்.' })}</p>}
       <section aria-labelledby="lic-s" className="card max-w-xl" data-guide="lic-status">
@@ -241,6 +242,12 @@ export function PurchaseView({ owner, backHref }: { owner: boolean; backHref: st
       setErr(e instanceof ApiError && e.code === 'email_needed' ? t({ en: 'Your account needs a verified email before we can send a licence. Add a verified email to the owner account, then try again.', ms: 'Akaun anda memerlukan e-mel yang disahkan sebelum kami boleh menghantar lesen. Tambah e-mel yang disahkan pada akaun pemilik, kemudian cuba lagi.', zh: '您的账户需要已验证的邮箱，我们才能发送许可证。请为所有者账户添加已验证的邮箱，然后重试。', ta: 'நாங்கள் உரிமத்தை அனுப்பும் முன் உங்கள் கணக்கிற்கு சரிபார்க்கப்பட்ட மின்னஞ்சல் தேவை. உரிமையாளர் கணக்கில் சரிபார்க்கப்பட்ட மின்னஞ்சலைச் சேர்த்து, மீண்டும் முயற்சிக்கவும்.' }) : msg(e))
     } finally { setBusy(false) }
   }
+  const pay = async () => {
+    if (busy || !plan) return
+    setBusy(true); setErr('')
+    try { const r = await api<{ url: string }>('POST', '/license/checkout', { plan }); window.location.assign(r.url) }
+    catch (e) { setErr(e instanceof ApiError && e.code === 'payment_off' ? t({ en: 'Online payment is not switched on here. Send a request instead.', ms: 'Pembayaran dalam talian tidak dihidupkan di sini. Hantar permohonan sebaliknya.', zh: '此处未开通在线支付。请改为发送申请。', ta: 'இங்கே ஆன்லைன் கட்டணம் இயக்கப்படவில்லை. அதற்குப் பதிலாக கோரிக்கையை அனுப்பவும்.' }) : msg(e)); setBusy(false) }
+  }
   return (
     <>
       <PageHeader back={{ href: backHref, label: t({ en: 'Back', ms: 'Kembali', zh: '返回', ta: 'பின்' }) }} title={t({ en: 'Get a licence', ms: 'Dapatkan lesen', zh: '获取许可证', ta: 'உரிமம் பெறுங்கள்' })} description={t({ en: 'Pick a plan and tell us how many people will sign in. Prices are agreed with our team, there is no card payment here.', ms: 'Pilih pelan dan beritahu kami berapa orang yang akan log masuk. Harga dipersetujui dengan pasukan kami, tiada pembayaran kad di sini.', zh: '选择套餐并告诉我们有多少人会登录。价格与我们的团队商定，此处不支持刷卡付款。', ta: 'ஒரு திட்டத்தைத் தேர்ந்தெடுத்து எத்தனை பேர் உள்நுழைவார்கள் என்று சொல்லுங்கள். விலைகள் எங்கள் குழுவுடன் ஒப்புக்கொள்ளப்படும்; இங்கே அட்டைக் கட்டணம் இல்லை.' })} />
@@ -278,7 +285,7 @@ export function PurchaseView({ owner, backHref }: { owner: boolean; backHref: st
                 <textarea className="input min-h-20 py-2 font-normal" maxLength={500} value={note} onChange={e => setNote(e.target.value)} />
               </label>
               {err && <p role="alert" className="text-sm text-warn">{err}</p>}
-              <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? t({ en: 'Sending...', ms: 'Menghantar...', zh: '正在发送...', ta: 'அனுப்புகிறது...' }) : t({ en: 'Send request', ms: 'Hantar permohonan', zh: '发送申请', ta: 'கோரிக்கையை அனுப்பு' })}</button></div>
+              <div><button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{busy ? t({ en: 'Sending...', ms: 'Menghantar...', zh: '正在发送...', ta: 'அனுப்புகிறது...' }) : t({ en: 'Send request', ms: 'Hantar permohonan', zh: '发送申请', ta: 'கோரிக்கையை அனுப்பு' })}</button> <button type="button" className="btn" aria-disabled={busy || undefined} onClick={pay}>{t({ en: 'Pay online', ms: 'Bayar dalam talian', zh: '在线支付', ta: 'ஆன்லைனில் செலுத்து' })}</button></div>
             </form>
           </>}
         </>

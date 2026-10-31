@@ -75,6 +75,14 @@ Issuer, once, on the issuer's own machine (not the server):
 3. Per customer: `python scripts/issue_license.py issue --email owner@shop.com --plan standard --days 365 --seats 10 --org "Shop" [--send]`. The key is printed once; `--send` emails it (needs `MAILTRAP_API_TOKEN` on the issuer machine, else it says email is off). The customer's owner activates it under Licence while signed in with that verified email.
 4. Requests: `DATABASE_URL=... python scripts/issue_license.py requests` lists pending ones; `issue --request <id>` fills email, plan and seats and marks it issued.
 
+### Pay online (Stripe Checkout; vendor deployment only)
+
+The owner picks a plan under Get a licence and taps Pay online; after Stripe confirms payment the server signs the key, emails it and shows it as an offer on the Licence page. Prices live in Stripe, not in the app.
+
+1. Stripe (test mode first): create one Price per plan; add a webhook endpoint `<APP_PUBLIC_URL>/webhooks/stripe` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`.
+2. Secrets on the vendor deployment: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (whsec_...), `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_STANDARD`, `STRIPE_PRICE_PRO` (price_... ids), `LICENSE_PRIVATE_KEY` (the PEM text from keygen; this server can then mint keys, see docs/licensing.md threat model 1), `APP_PUBLIC_URL`. Missing any: the button answers "not switched on".
+3. Test card 4242 4242 4242 4242. Keys last 365 days; a Stripe retry never issues twice. No refund or renewal flow yet: refund in the Stripe dashboard and the key keeps working until it expires.
+
 Server settings: `LICENSE_ISSUER_EMAIL` (where "request a licence" mails go) and `LICENSE_OFFLINE_GRACE_DAYS` (default 7: days the server may be unable to reach NTP before the status becomes `clock_unverified`; outbound UDP port 123 must be allowed). Set the public key on an existing deployment only after issuing its customers' keys, otherwise their writes stop (402) until they activate one.
 
 ## Credentials: tokens, lockout, sessions

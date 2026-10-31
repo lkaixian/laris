@@ -81,6 +81,7 @@ REQ = {
     ("POST", "/api/license"): {"json": {"key": "x"}},
     ("POST", "/api/license/accept-offer"): {},
     ("POST", "/api/license/request"): {"json": {"plan": "starter", "seats": 1}},
+    ("POST", "/api/license/checkout"): {"json": {"plan": "starter"}},
 }
 
 

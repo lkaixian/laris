@@ -73,7 +73,7 @@ Clock write rules: the request only READS the watermark (no row lock, so a slow 
 
 ## Threat model
 
-1. Forging a key needs the private key, which only the issuer holds. The app has no signing code path.
+1. Forging a key needs the private key, which only the issuer holds. The app has no signing code path, EXCEPT the optional pay-online webhook (`src/api/license_pay.py`): it signs only when env `LICENSE_PRIVATE_KEY` is set, which you do on the vendor deployment only. Anyone who can read that Secret or edit that code can mint keys, so never set it on a customer's install.
 2. Editing the stored key or its columns: the token is re-verified on every status read; a changed token is `invalid`.
 3. Sharing one key between organisations: refused (unique licence id), and the key is bound to the activating owner's verified email.
 4. Using more seats than paid: new users and reactivations stop at the seat limit; activation needs seats >= active users.

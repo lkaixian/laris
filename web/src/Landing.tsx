@@ -6,6 +6,7 @@ import { Icon } from './icons'
 import type { IconName } from './icons'
 import { LANGS, setLang, t, useLang } from './i18n'
 import { TradeOrbit } from './TradeOrbit'
+import { HeroDemo, Journey, JOURNEY_TITLE, P, PriceBuild, Pricing, PRICING_TITLE } from './LandingParts'
 import type { Text } from './i18n'
 
 // Public homepage for signed-out visitors (#/welcome, and the bare address). Same section order as the CLARION site: hero, flow, tour, modules, audiences, privacy, footer.
@@ -56,6 +57,8 @@ const S = {
     { id: 'tracker', n: { en: 'Tracker', ms: 'Penjejak', zh: '追踪' }, d: { en: 'Every quote by stage, with overdue rules and age colours.', ms: 'Setiap sebut harga mengikut peringkat, dengan peraturan lewat dan warna umur.', zh: '按阶段列出所有报价，含逾期规则和账龄颜色。' } },
     { id: 'jobs', n: { en: 'Jobs', ms: 'Kerja', zh: '工作' }, d: { en: 'A board for work from accepted quotes, or added by hand.', ms: 'Papan untuk kerja daripada sebut harga diterima, atau ditambah manual.', zh: '来自已接受报价或手动新增的工作看板。' } },
     { id: 'contacts', n: { en: 'Contacts', ms: 'Kenalan', zh: '联系人' }, d: { en: 'Customers and suppliers with their quote history.', ms: 'Pelanggan dan pembekal beserta sejarah sebut harga.', zh: '客户与供应商及其报价记录。' } },
+    { id: 'inbox', n: { en: 'Customers', ms: 'Pelanggan', zh: '客户' }, d: { en: 'Purchase order, sales order, proforma, delivery order, invoice and receipt in one flow, with a count at each step. Any document as a file, in your own Word template if you upload one.', ms: 'Pesanan belian, pesanan jualan, proforma, pesanan penghantaran, invois dan resit dalam satu aliran, dengan bilangan di setiap langkah. Mana-mana dokumen sebagai fail, dalam templat Word anda jika dimuat naik.', zh: '采购订单、销售订单、形式发票、送货单、发票和收据一条龙，每一步都有数量。任何文件都能下载，上传了 Word 模板就用您自己的版式。' } },
+    { id: 'revenue', n: { en: 'Revenue', ms: 'Hasil', zh: '收入' }, d: { en: 'Money in and out and the profit you keep, for any period.', ms: 'Wang masuk dan keluar serta untung yang anda simpan, bagi mana-mana tempoh.', zh: '任意时间段的收入、支出和您留下的利润。' } },
     { id: 'camera', n: { en: 'Catalog photos', ms: 'Foto katalog', zh: '目录照片' }, d: { en: 'Photograph a shelf or price board; items arrive for you to check and price.', ms: 'Ambil foto rak atau papan harga; item tiba untuk anda semak dan harga.', zh: '拍下货架或价目板，商品会送来供您核对定价。' } },
     { id: 'alerts', n: { en: 'Follow-ups', ms: 'Tindakan susulan', zh: '跟进' }, d: { en: 'Unanswered quotes, longest wait first. Skip or act in one tap.', ms: 'Sebut harga tanpa jawapan, menunggu terlama dahulu. Langkau atau bertindak sekali ketik.', zh: '未回复的报价，等待最久的排最前。一键跳过或处理。' } },
     { id: 'activity', n: { en: 'Activity log', ms: 'Log aktiviti', zh: '活动记录' }, d: { en: 'Who did what and when, filterable, with CSV or PDF download.', ms: 'Siapa buat apa dan bila, boleh ditapis, dengan muat turun CSV atau PDF.', zh: '谁在何时做了什么，可筛选，可下载 CSV 或 PDF。' } },
@@ -81,7 +84,7 @@ const S = {
   langL: { en: 'Language', ms: 'Bahasa', zh: '语言', ta: 'மொழி' },
 }
 
-const NAV = [['how', S.nHow], ['tour', S.nTour], ['modules', S.nMods], ['who', S.nWho], ['privacy', S.nPriv]] as const
+const NAV = [['how', S.nHow], ['journey', P.nJourney], ['tour', S.nTour], ['modules', S.nMods], ['pricing', P.nPricing], ['privacy', S.nPriv]] as const
 
 function useHealth() {
   const [up, setUp] = useState<boolean>()
@@ -149,6 +152,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
   const [lang] = useLang()
   const up = useHealth()
   const signedIn = !!getToken()
+  const [run, setRun] = useState(0)  // the hero button replays the order journey from its first step
   useEffect(() => { document.title = 'LARIS · ' + t(S.kicker) }, [lang])
   const primary = signedIn
     ? <a className="btn btn-primary min-h-11 px-6" href="#/home">{t(S.open)}</a>
@@ -176,40 +180,31 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
       </header>
 
       <main id="main" tabIndex={-1} className="outline-none">
-        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 md:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center" aria-labelledby="hero-h">
+        <section className="lp-hero" aria-labelledby="hero-h"><span aria-hidden="true" className="lp-blob a" /><span aria-hidden="true" className="lp-blob b" />
+          <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 md:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-sm font-semibold text-accent">{t(S.kicker)}</p>
-            <h1 id="hero-h" className="mt-3 text-3xl font-bold leading-tight md:text-5xl md:leading-[1.1]">{t(S.h1)}</h1>
+            <h1 id="hero-h" className="lp-grad mt-3 text-3xl font-bold leading-tight md:text-5xl md:leading-[1.1]">{t(S.h1)}</h1>
             <p className="mt-5 max-w-xl text-md text-muted">{t(S.lead)}</p>
-            <div className="mt-7 flex flex-wrap gap-3">{primary}</div>
+            <div className="mt-7 flex flex-wrap gap-3">{primary}<button type="button" className="btn btn-quiet min-h-11 px-4" onClick={() => { setRun(r => r + 1); document.getElementById('journey')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }}><Icon name="right" className="size-4" />{t(P.walk)}</button></div>
             <p role="status" className="mt-6 inline-flex items-center gap-2 rounded-ui border border-hairline bg-surface px-3 py-2 text-sm">
               <span aria-hidden className={`size-2.5 rounded-full ${up ? 'bg-accent' : up === false ? 'bg-warn' : 'bg-line'}`} />
               {up === undefined ? t(S.statusWait) : up ? t(S.statusUp) : t(S.statusDown)}
             </p>
           </div>
-          <figure className="m-0 grid gap-3" aria-label={t(S.exTag)}>
-            <div className="card shadow-2 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t(S.exTag)} · Telegram</p>
-              <p className="mt-2 rounded-card bg-tint p-3 text-sm">{t(S.exMsg)}</p>
-            </div>
-            <div className="card shadow-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold">{t(S.exDraft)}</p>
-                <span className="rounded-ui bg-tint px-2 py-0.5 text-xs font-semibold">RM 1,260.00</span>
-              </div>
-              <dl className="mt-3 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-                <dt>{t(S.exLine)} × 3</dt><dd className="text-right tabular-nums">RM 1,260.00</dd>
-              </dl>
-              <p className="mt-3 flex items-center gap-2 text-sm text-muted"><Icon name="check" className="size-4 text-accent" />{t(S.exMargin)}</p>
-            </div>
-            <figcaption className="text-xs text-muted">{t(S.exNote)}</figcaption>
-          </figure>
+          <HeroDemo />
+          </div>
         </section>
 
         <section id="loop" className={sec} aria-labelledby="loop-h">
           <h2 id="loop-h" className="text-2xl font-bold">{t(LOOP.h)}</h2>
           <p className="mt-2 max-w-2xl text-muted">{t(LOOP.p)}</p>
           <div className="glass-lite mt-6 p-4"><TradeOrbit story /></div>
+        </section>
+
+        <section id="journey" className={sec} aria-labelledby="journey-h">
+          <h2 id="journey-h" className="text-xl font-semibold md:text-2xl">{t(JOURNEY_TITLE)}</h2>
+          <Journey run={run} />
         </section>
 
         <section id="how" className={sec} aria-labelledby="how-h">
@@ -223,6 +218,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
               </li>
             ))}
           </ol>
+          <PriceBuild />
         </section>
 
         <section id="tour" className={sec} aria-labelledby="tour-h">
@@ -247,6 +243,11 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
           </div>
         </section>
 
+        <section id="pricing" className={sec} aria-labelledby="pricing-h">
+          <h2 id="pricing-h" className="text-xl font-semibold md:text-2xl">{t(PRICING_TITLE)}</h2>
+          <Pricing signedIn={signedIn} />
+        </section>
+
         <section id="privacy" className={sec} aria-labelledby="priv-h">
           <h2 id="priv-h" className="text-xl font-semibold md:text-2xl">{t(S.privH)}</h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -259,7 +260,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-16" aria-labelledby="cta-h">
+        <section id="start" className="mx-auto w-full max-w-6xl px-4 pb-16" aria-labelledby="cta-h">
           <div className="rounded-tile bg-accent p-8 text-on-accent md:p-12">
             <h2 id="cta-h" className="text-xl font-semibold md:text-2xl">{t(S.ctaH)}</h2>
             <div className="mt-5 flex flex-wrap gap-3">

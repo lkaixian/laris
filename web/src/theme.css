@@ -503,3 +503,4 @@
   .rep-kpi, .rep-card { transition: transform .2s var(--ease-tile, ease-out); } .rep-kpi:hover, .rep-card:hover { transform: translateY(-2px); }
   @media (prefers-reduced-motion: reduce) { .rep-kpi, .rep-card, .rep-story, .rep-tools { animation: none; transition: none; } }
 }
+@layer components { .rep-kpi .metric { font-size: clamp(1.35rem, 2.1vw, 1.9rem); white-space: nowrap; } }

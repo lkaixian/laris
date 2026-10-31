@@ -11,7 +11,9 @@ const PER: Record<string, { en: string; ms: string; zh: string; ta: string; prev
   month: { en: 'This month', ms: 'Bulan ini', zh: '本月', ta: 'இந்த மாதம்', prevEn: 'last month', days: 4, k: 4.1 },
 }
 
-export function mockReports(method: string, p: string, q: string, owner: boolean): unknown {
+let tg = { revenue_month: '150000', margin_pct: '45', profit_month: '22500', cac: '35', runway_months: '6', cash_on_hand: '90000', cash_as_of: new Date().toISOString().slice(0, 10) }
+export function mockReports(method: string, p: string, q: string, owner: boolean, body?: Record<string, string | null>): unknown {
+  if (p === '/reports/targets') { if (!owner) throw new ApiError(403, 'forbidden', 'The business report is for the owner'); if (method === 'PUT') tg = { ...tg, ...body, cash_as_of: new Date().toISOString().slice(0, 10) } as typeof tg; return tg }
   if (p !== '/reports' || method !== 'GET') return undefined
   if (!owner) throw new ApiError(403, 'forbidden', 'The business report is for the owner')
   const sp = new URLSearchParams(q), key = PER[sp.get('period') ?? 'week'] ? (sp.get('period') ?? 'week') : 'week', per = PER[key]

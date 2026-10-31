@@ -2,13 +2,13 @@
 // prints cleanly to A4 or saves as PDF, and downloads as CSV. LARIS works out every number from your records with fixed rules.
 // Preview: the numbers here are sample data until the report service is switched on.
 import { useState } from 'react'
-import { MOCK } from './api'
-import { useFetch, Async, PageHeader } from './ui'
+import { MOCK, api } from './api'
+import { useFetch, Async, PageHeader, msg } from './ui'
 import { t, useLang, getLang, locale } from './i18n'
 import type { Text } from './i18n'
 
 type KpiKey = 'revenue' | 'margin' | 'profit' | 'cac' | 'runway'
-type Kpi = { key: KpiKey; target: number; actual: number; variance: number; vunit: '%' | 'mo'; status: 'on_track' | 'monitor' | 'at_risk' }
+type Kpi = { key: KpiKey; target: number | null; actual: number | null; variance: number | null; vunit: '%' | 'mo'; status: 'on_track' | 'monitor' | 'at_risk' | 'no_target' | 'no_data' }
 type Ops = { quotes_sent: number; quotes_accepted: number; quotes_accepted_prev: number; waiting: number; late_count: number; late_amount: number; supplier_spend: number; supplier_spend_prev: number; sales: number; sales_prev: number }
 type An = { labels: string[]; sales: number[]; margin: number[]; funnel: { k: string; n: number }[]; customers: { name: string; amount: number; pct: number }[]
   products: { name: string; margin: number; amount: number }[]; aging: { k: string; count: number; amount: number }[]; suppliers: { name: string; amount: number; change: number }[] }
@@ -31,9 +31,18 @@ const S: Record<string, Text> = {
   profit: { en: 'Net Profit', ms: 'Untung Bersih', zh: '净利润', ta: 'நிகர இலாபம்' }, cac: { en: 'Customer Acquisition Cost (CAC)', ms: 'Kos Pemerolehan Pelanggan (CAC)', zh: '客户获取成本（CAC）', ta: 'வாடிக்கையாளர் பெறும் செலவு (CAC)' },
   runway: { en: 'Cash Runway', ms: 'Tempoh Tunai (Runway)', zh: '现金可支撑时间', ta: 'பண இருப்பு காலம்' },
   months: { en: 'Months', ms: 'Bulan', zh: '个月', ta: 'மாதங்கள்' }, mo: { en: 'Mo', ms: 'Bln', zh: '个月', ta: 'மா' },
+  no_target: { en: 'Set a target', ms: 'Tetapkan sasaran', zh: '请设定目标', ta: 'இலக்கை அமைக்கவும்' }, no_data: { en: 'No data yet', ms: 'Belum ada data', zh: '暂无数据', ta: 'இன்னும் தரவு இல்லை' },
+  footReal: { en: 'Prepared with LARIS. Every number is worked out from your records by fixed rules; no AI writes a number.', ms: 'Disediakan dengan LARIS. Setiap nombor dikira daripada rekod anda dengan peraturan tetap; tiada AI menulis nombor.', zh: '由 LARIS 编制。每个数字都由固定规则根据您的记录计算，没有任何数字由 AI 编写。', ta: 'LARIS மூலம் தயாரிக்கப்பட்டது. ஒவ்வொரு எண்ணும் உங்கள் பதிவுகளிலிருந்து நிலையான விதிகளால் கணக்கிடப்படுகிறது; எந்த எண்ணையும் AI எழுதவில்லை.' },
+  tgTitle: { en: 'Targets and cash on hand', ms: 'Sasaran dan tunai di tangan', zh: '目标与现金', ta: 'இலக்குகளும் கையிருப்பும்' },
+  tgLead: { en: 'Optional. Leave a box empty and that line shows “Set a target”. Revenue and profit are per month; a week uses 12/52 of them. Cash runway is your cash on hand divided by this period’s running costs per month.', ms: 'Pilihan. Biarkan kosong dan baris itu menunjukkan “Tetapkan sasaran”. Hasil dan untung ialah sebulan; seminggu guna 12/52. Tempoh tunai ialah tunai di tangan dibahagi kos operasi sebulan bagi tempoh ini.', zh: '可选。留空则该行显示“请设定目标”。收入和利润按月计；一周按其 12/52 计。现金可支撑时间 = 现金 ÷ 本期折算为每月的运营成本。', ta: 'விருப்பம். காலியாக விட்டால் அந்த வரி “இலக்கை அமைக்கவும்” எனக் காட்டும். வருவாயும் இலாபமும் மாதத்துக்கானவை; ஒரு வாரம் அதன் 12/52 ஐப் பயன்படுத்தும். பண இருப்பு காலம் = கையிருப்பு ÷ இந்தக் காலத்தின் மாதாந்திர இயக்கச் செலவு.' },
+  tRev: { en: 'Revenue target per month (RM)', ms: 'Sasaran hasil sebulan (RM)', zh: '每月收入目标（RM）', ta: 'மாதாந்திர வருவாய் இலக்கு (RM)' }, tMar: { en: 'Gross margin target (%)', ms: 'Sasaran margin kasar (%)', zh: '毛利率目标（%）', ta: 'மொத்த இலாப விகித இலக்கு (%)' },
+  tPro: { en: 'Net profit target per month (RM)', ms: 'Sasaran untung bersih sebulan (RM)', zh: '每月净利润目标（RM）', ta: 'மாதாந்திர நிகர இலாப இலக்கு (RM)' }, tCac: { en: 'CAC target (RM per new customer)', ms: 'Sasaran CAC (RM setiap pelanggan baharu)', zh: 'CAC 目标（每位新客户 RM）', ta: 'CAC இலக்கு (புதிய வாடிக்கையாளருக்கு RM)' },
+  tRun: { en: 'Cash runway target (months)', ms: 'Sasaran tempoh tunai (bulan)', zh: '现金可支撑时间目标（月）', ta: 'பண இருப்பு கால இலக்கு (மாதங்கள்)' }, tCash: { en: 'Cash on hand now (RM)', ms: 'Tunai di tangan sekarang (RM)', zh: '当前现金（RM）', ta: 'இப்போதைய கையிருப்பு (RM)' },
+  tSave: { en: 'Save targets', ms: 'Simpan sasaran', zh: '保存目标', ta: 'இலக்குகளைச் சேமி' }, tSaved: { en: 'Saved.', ms: 'Disimpan.', zh: '已保存。', ta: 'சேமிக்கப்பட்டது.' },
+  tAsOf: { en: 'Cash figure entered on', ms: 'Angka tunai dimasukkan pada', zh: '现金数字录入于', ta: 'கையிருப்பு உள்ளிடப்பட்ட நாள்' },
   on_track: { en: 'On Track', ms: 'Mengikut Sasaran', zh: '达标', ta: 'இலக்கில்' }, monitor: { en: 'Monitor', ms: 'Pantau', zh: '需关注', ta: 'கவனிக்க' }, at_risk: { en: 'At Risk', ms: 'Berisiko', zh: '有风险', ta: 'ஆபத்து' },
   rules: { en: 'How status is set: on track means the target is met or beaten (for CAC, at or below target). Monitor means up to 5% short (CAC: up to 15% over). Anything worse is At Risk. Margin counts in percentage points and runway in months.', ms: 'Cara status ditetapkan: mengikut sasaran bermaksud sasaran dicapai atau dilepasi (CAC: pada atau di bawah sasaran). Pantau bermaksud kurang sehingga 5% (CAC: lebih sehingga 15%). Yang lebih teruk ialah Berisiko. Margin dikira dalam mata peratus dan runway dalam bulan.', zh: '状态规则：达标指达到或超过目标（CAC 为不高于目标）。需关注指差距在 5% 以内（CAC：超出 15% 以内）。更差则为有风险。利润率按百分点计，现金可支撑时间按月计。', ta: 'நிலை விதி: இலக்கை எட்டினால் அல்லது மிஞ்சினால் இலக்கில் (CAC: இலக்கு அல்லது குறைவு). 5% வரை குறைவு கவனிக்க (CAC: 15% வரை அதிகம்). அதைவிட மோசம் ஆபத்து. இலாப விகிதம் சதவீத புள்ளிகளிலும், இருப்பு காலம் மாதங்களிலும் கணக்கிடப்படும்.' },
-  def: { en: 'CAC is marketing spend divided by new customers. Cash runway is the months of running costs your cash on hand covers. Targets are set by the owner (Settings, roadmap).', ms: 'CAC ialah perbelanjaan pemasaran dibahagi pelanggan baharu. Runway tunai ialah bilangan bulan kos operasi yang dilindungi tunai semasa. Sasaran ditetapkan pemilik (Tetapan, peta jalan).', zh: 'CAC 为营销支出除以新客户数。现金可支撑时间指现有现金可覆盖的运营成本月数。目标由业主设定（设置，路线图）。', ta: 'CAC என்பது சந்தைப்படுத்தல் செலவை புதிய வாடிக்கையாளர்களால் வகுத்தது. பண இருப்பு காலம் என்பது கையிருப்பு பணம் ஈடுசெய்யும் செயல்பாட்டு மாதங்கள். இலக்குகளை உரிமையாளர் அமைப்பார் (அமைப்புகள், திட்டம்).' },
+  def: { en: 'CAC is the marketing spend you recorded divided by customers whose first order is in this period. Cash runway is the months of running costs your cash on hand covers. Targets and cash on hand are the ones you set above.', ms: 'CAC ialah perbelanjaan pemasaran dibahagi pelanggan baharu. Runway tunai ialah bilangan bulan kos operasi yang dilindungi tunai semasa. Sasaran ditetapkan pemilik (Tetapan, peta jalan).', zh: 'CAC 为营销支出除以新客户数。现金可支撑时间指现有现金可覆盖的运营成本月数。目标由业主设定（设置，路线图）。', ta: 'CAC என்பது சந்தைப்படுத்தல் செலவை புதிய வாடிக்கையாளர்களால் வகுத்தது. பண இருப்பு காலம் என்பது கையிருப்பு பணம் ஈடுசெய்யும் செயல்பாட்டு மாதங்கள். இலக்குகளை உரிமையாளர் அமைப்பார் (அமைப்புகள், திட்டம்).' },
   ops: { en: 'Operations at a glance', ms: 'Operasi sekilas pandang', zh: '运营概览', ta: 'செயல்பாடுகள் ஒரு பார்வையில்' },
   measure: { en: 'Measure', ms: 'Ukuran', zh: '项目', ta: 'அளவு' }, now: { en: 'This period', ms: 'Tempoh ini', zh: '本期', ta: 'இந்த காலம்' }, before: { en: 'Previous', ms: 'Sebelum ini', zh: '上期', ta: 'முந்தையது' }, chg: { en: 'Change', ms: 'Perubahan', zh: '变化', ta: 'மாற்றம்' },
   sales: { en: 'Sales', ms: 'Jualan', zh: '销售额', ta: 'விற்பனை' }, quotes: { en: 'Quotes accepted', ms: 'Sebut harga diterima', zh: '已接受报价', ta: 'ஏற்ற விலைப்புள்ளிகள்' },
@@ -58,12 +67,12 @@ const rm = (n: number) => 'RM ' + Math.round(n).toLocaleString('en-MY')
 const rm2 = (n: number) => 'RM ' + n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const sg = (n: number) => (n > 0 ? '+' : '') + n
 const pc = (a: number, b: number) => (b === 0 ? 0 : Math.round((a - b) / b * 1000) / 10)
-const fmt = (k: KpiKey, v: number) => k === 'margin' ? `${v.toFixed(1)}%` : k === 'cac' ? rm2(v) : k === 'runway' ? `${v} ${t(S.months)}` : rm(v)
-const vfmt = (k: Kpi) => k.vunit === 'mo' ? `${sg(k.variance)} ${t(S.mo)}` : `${k.variance > 0 ? '+' : ''}${k.variance.toFixed(1)}%`
+const fmt = (k: KpiKey, v: number | null) => v === null ? '\u2013' : k === 'margin' ? `${v.toFixed(1)}%` : k === 'cac' ? rm2(v) : k === 'runway' ? `${v} ${t(S.months)}` : rm(v)
+const vfmt = (k: Kpi) => k.variance === null ? '\u2013' : k.vunit === 'mo' ? `${sg(k.variance)} ${t(S.mo)}` : `${k.variance > 0 ? '+' : ''}${k.variance.toFixed(1)}%`
 
 function Trend({ a }: { a: An }) {
-  const W = matchMedia("(max-width: 639px)").matches ? 330 : 640, H = W < 400 ? 150 : 170, P = W < 400 ? 20 : 26, mx = Math.max(...a.sales), n = a.sales.length
-  const x = (i: number) => P + (i * (W - 2 * P)) / (n - 1), ys = (v: number) => H - P - (v / mx) * (H - 2 * P)
+  const W = matchMedia("(max-width: 639px)").matches ? 330 : 640, H = W < 400 ? 150 : 170, P = W < 400 ? 20 : 26, mx = Math.max(...a.sales, 1), n = a.sales.length
+  const x = (i: number) => P + (i * (W - 2 * P)) / Math.max(n - 1, 1), ys = (v: number) => H - P - (v / mx) * (H - 2 * P)
   const lo = Math.min(...a.margin) - 1, hi = Math.max(...a.margin) + 1, ym = (v: number) => H - P - ((v - lo) / (hi - lo)) * (H - 2 * P)
   const path = (f: (i: number) => number) => a.sales.map((_, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${f(i).toFixed(1)}`).join(' ')
   return <div>
@@ -82,21 +91,48 @@ function Bars({ rows }: { rows: { label: string; value: number; text: string; wa
   return <ul className="rep-bars">{rows.map(r => <li key={r.label}><span className="rep-bl">{r.label}</span><span className="rep-bt" aria-hidden><i className={r.warn ? 'w' : ''} style={{ width: `${Math.max(3, (r.value / mx) * 100)}%` }} /></span><b>{r.text}</b></li>)}</ul>
 }
 function StatusChip({ s }: { s: Kpi['status'] }) {
-  return <span className="rep-st" data-s={s}><i aria-hidden="true">{s === 'on_track' ? '✓' : s === 'monitor' ? '!' : '▲'}</i>{t(S[s])}</span>
+  return <span className="rep-st" data-s={s}><i aria-hidden="true">{s === 'on_track' ? '✓' : s === 'monitor' ? '!' : s === 'at_risk' ? '▲' : '–'}</i>{t(S[s])}</span>
 }
 
-// The report service is not built on the server yet (no GET /reports), so a live server would answer 404. Only mock mode has the sample numbers.
-export function ReportsView() {
+// The owner's targets and cash on hand (PUT /api/reports/targets). A box left empty clears that target.
+type Targets = { revenue_month: string | null; margin_pct: string | null; profit_month: string | null; cac: string | null; runway_months: string | null; cash_on_hand: string | null; cash_as_of: string | null }
+const TG: [keyof Omit<Targets, 'cash_as_of'>, string][] = [['revenue_month', 'tRev'], ['margin_pct', 'tMar'], ['profit_month', 'tPro'], ['cac', 'tCac'], ['runway_months', 'tRun'], ['cash_on_hand', 'tCash']]
+function TargetsForm({ onSaved }: { onSaved: () => void }) {
   useLang()
-  return MOCK ? <ReportsSample /> : (
-    <div className="rep">
-      <PageHeader title={t(S.title)} description={t(S.lead)} />
-      <p role="status" className="card text-muted">{t(S.notYet)}</p>
-    </div>
+  const cur = useFetch<Targets>('/reports/targets')
+  const [f, setF] = useState<Record<string, string>>({})
+  const [msgText, setMsgText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const val = (k: string) => f[k] ?? (cur.data?.[k as keyof Targets] ?? '')
+  const save = async () => {
+    setBusy(true); setMsgText('')
+    try {
+      const body = Object.fromEntries(TG.map(([k]) => [k, String(val(k)).trim() === '' ? null : String(val(k)).trim()]))
+      await api('PUT', '/reports/targets', body)
+      setF({}); cur.reload(); onSaved(); setMsgText(t(S.tSaved))
+    } catch (e) { setMsgText(msg(e)) } finally { setBusy(false) }
+  }
+  return (
+    <details className="card rep-noprint mb-3" data-guide="rep-targets">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(S.tgTitle)}</summary>
+      <p className="mt-1 text-sm text-muted">{t(S.tgLead)}</p>
+      <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onSubmit={e => { e.preventDefault(); void save() }}>
+        {TG.map(([k, label]) => (
+          <label key={k} className="grid min-w-0 gap-1 text-sm font-semibold">{t(S[label])}
+            <input className="input w-full font-normal tabular-nums" type="number" min="0" step="any" inputMode="decimal" value={val(k)} onChange={e => setF({ ...f, [k]: e.target.value })} />
+          </label>))}
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-3">
+          <button type="submit" className="btn btn-primary" aria-disabled={busy || undefined}>{t(S.tSave)}</button>
+          {cur.data?.cash_as_of && <span className="text-sm text-muted">{t(S.tAsOf)} {cur.data.cash_as_of}</span>}
+          {msgText && <span role="status" className="text-sm">{msgText}</span>}
+        </div>
+      </form>
+    </details>
   )
 }
 
-function ReportsSample() {
+export function ReportsView() {
+  useLang()
   const [period, setPeriod] = useState('month')
   const s = useFetch<Report>(`/reports?period=${period}&lang=${getLang()}`)
   const d = s.data
@@ -112,9 +148,10 @@ function ReportsSample() {
   const o = d?.ops
   return (
     <div className="rep">
-      <PageHeader title={t(S.title)} description={t(S.lead)} meta={<span className="pill">{t(S.preview)}</span>}
+      <PageHeader title={t(S.title)} description={t(S.lead)} meta={MOCK ? <span className="pill">{t(S.preview)}</span> : undefined}
         actions={<div className="flex flex-wrap gap-2 rep-noprint"><button type="button" className="btn" onClick={csv} disabled={!d}>{t(S.csv)}</button>
           <button type="button" className="btn btn-primary" onClick={() => window.print()}>{t(S.print)}</button></div>} />
+      <TargetsForm onSaved={s.reload} />
       <div className="rep-bar rep-noprint">
         <div role="group" aria-label={t(S.period)} className="seg">
           {(['week', 'last_week', 'month'] as const).map(k => <button key={k} type="button" aria-pressed={period === k} className={`seg-btn ${period === k ? 'on' : ''}`} onClick={() => setPeriod(k)}>{t(S[k])}</button>)}
@@ -170,7 +207,7 @@ function ReportsSample() {
                 <Bars rows={d.analytics.suppliers.map(p => ({ label: p.name, value: p.amount, text: `${rm(p.amount)} · ${p.change > 0 ? '▲ +' : '▼ '}${p.change}%`, warn: p.change > 5 }))} /></div>
             </div>
           </section>
-          <footer className="rep-foot"><span>{d.org.name} · {t(S.doc)} · {d.label}</span><span>{t(S.foot)}</span></footer>
+          <footer className="rep-foot"><span>{d.org.name} · {t(S.doc)} · {d.label}</span><span>{t(MOCK ? S.foot : S.footReal)}</span></footer>
         </article>}
       </Async>
     </div>

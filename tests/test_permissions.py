@@ -77,6 +77,7 @@ REQ = {
     ("DELETE", "/api/invites/{iid}"): {},
     ("POST", "/api/listings"): {"files": {"image": ("i.jpg", JPEG, "image/jpeg")}},
     ("POST", "/api/catalog/categories"): {"json": {"name": "x"}},
+    ("PUT", "/api/reports/targets"): {"json": {}},
     ("POST", "/api/catalog/categories/rename"): {"json": {"old": "x", "new": "y"}},
     ("POST", "/api/catalog/categories/delete"): {"json": {"name": "x"}},
     ("POST", "/api/catalog/items/move"): {"json": {"item_ids": [ID], "category": "x"}},

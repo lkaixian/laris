@@ -4,6 +4,9 @@ import { Icon } from './icons'
 import type { IconName } from './icons'
 import { t } from './i18n'
 import type { Text } from './i18n'
+import { Glyph, PATH } from './TradeOrbit'
+import type { Lane } from './TradeOrbit'
+import { PRICE } from './Pricing'
 import './landing.css'
 
 // The animated parts of the public homepage: a looping chat-to-quote demo, the order journey as a clickable process diagram, how a price is built,
@@ -177,3 +180,153 @@ export function PriceBuild() {
     </div>
   )
 }
+
+
+// ---------------------------------------------------------------- customer, your business, supplier: one order told as a loop that never needs a button
+// Eight beats, 2.6 s each. A document or a coin flies along a lane, the node it reaches pulses, and the three cards below keep the score.
+const TS = {
+  label: { en: 'One order travelling between your customer, your business and your supplier', ms: 'Satu pesanan bergerak antara pelanggan, perniagaan dan pembekal anda', zh: '一张订单在客户、您的企业与供应商之间流转' },
+  customer: { en: 'Customer', ms: 'Pelanggan', zh: '客户' }, business: { en: 'Your business', ms: 'Perniagaan anda', zh: '您的企业' }, supplier: { en: 'Supplier', ms: 'Pembekal', zh: '供应商' },
+  buys: { en: 'buys from you', ms: 'beli daripada anda', zh: '向您购买' }, you: { en: 'your workspace', ms: 'ruang kerja anda', zh: '您的工作区' }, sells: { en: 'you buy from', ms: 'anda beli daripada', zh: '您向其采购' },
+  quote: { en: 'Quote', ms: 'Sebut harga', zh: '报价' }, order: { en: 'Order', ms: 'Pesanan', zh: '订单' }, deposit: { en: 'Deposit', ms: 'Deposit', zh: '订金' }, owed: { en: 'Still owed', ms: 'Masih terhutang', zh: '尚欠' },
+  loop: { en: 'Repeats on its own', ms: 'Berulang sendiri', zh: '自动循环' },
+}
+type Fly = { lane: Lane; code: string; coin?: boolean; to: 'customer' | 'business' | 'supplier' }
+const FLY: Fly[] = [
+  { lane: 'lu', code: 'ASK', to: 'business' }, { lane: 'ld', code: 'QT', to: 'customer' }, { lane: 'lu', code: 'SO', to: 'business' }, { lane: 'lu', code: 'RM', coin: true, to: 'business' },
+  { lane: 'ru', code: 'PO', to: 'supplier' }, { lane: 'rd', code: 'GRN', to: 'business' }, { lane: 'ld', code: 'INV', to: 'customer' }, { lane: 'lu', code: 'RM', coin: true, to: 'business' },
+]
+const CAP: Text[] = [
+  { en: 'A customer asks for a price', ms: 'Pelanggan minta harga', zh: '客户询价' }, { en: 'You send a quotation, priced by your rules', ms: 'Anda hantar sebut harga, harga ikut peraturan anda', zh: '您发出报价单，由规则定价' },
+  { en: 'The customer accepts and orders', ms: 'Pelanggan terima dan buat pesanan', zh: '客户接受并下单' }, { en: '50% deposit arrives and is recorded', ms: 'Deposit 50% diterima dan direkodkan', zh: '收到 50% 订金并记录' },
+  { en: 'You order what you need from your supplier', ms: 'Anda pesan keperluan daripada pembekal', zh: '您向供应商下采购订单' }, { en: 'The goods arrive and are booked in', ms: 'Barang tiba dan direkodkan', zh: '货物到达并入库记录' },
+  { en: 'Delivered, signed for and invoiced', ms: 'Dihantar, ditandatangani dan diinvois', zh: '送达、签收并开票' }, { en: 'The balance is paid and a receipt is made', ms: 'Baki dibayar dan resit dibuat', zh: '余款付清，生成收据' },
+]
+const CUST: Text[] = [
+  { en: 'Wants 3 signboards', ms: 'Mahu 3 papan tanda', zh: '想要 3 块招牌' }, { en: 'Reading your quotation', ms: 'Membaca sebut harga anda', zh: '正在看您的报价' }, { en: 'Accepted RM 1,260', ms: 'Terima RM 1,260', zh: '已接受 RM 1,260' }, { en: 'Deposit sent RM 630', ms: 'Deposit dihantar RM 630', zh: '已付订金 RM 630' },
+  { en: 'Waiting for the goods', ms: 'Menunggu barang', zh: '等待货物' }, { en: 'Waiting for the goods', ms: 'Menunggu barang', zh: '等待货物' }, { en: 'Goods received, invoice in hand', ms: 'Barang diterima, invois di tangan', zh: '已收货，持有发票' }, { en: 'Paid in full', ms: 'Dibayar penuh', zh: '已全额付款' },
+]
+const SUP: Text[] = [{ en: 'Ready to quote you', ms: 'Sedia memberi sebut harga', zh: '随时为您报价' }, { en: 'Got your purchase order', ms: 'Terima pesanan belian anda', zh: '已收到您的采购订单' }, { en: 'Goods sent to you', ms: 'Barang dihantar kepada anda', zh: '货物已发出' }, { en: 'Order complete', ms: 'Pesanan selesai', zh: '订单完成' }]
+const supStage = (s: number) => (s < 4 ? 0 : s === 4 ? 1 : s === 5 ? 2 : 3)
+// What the business card shows after each beat: [quote RM, order RM, deposit RM, still owed RM]
+const BIZ: [number, number, number, number][] = [[0, 0, 0, 0], [1260, 0, 0, 0], [1260, 1260, 0, 1260], [1260, 1260, 630, 630], [1260, 1260, 630, 630], [1260, 1260, 630, 630], [1260, 1260, 630, 630], [1260, 1260, 630, 0]]
+const STEP_MS = 2600
+const rmv = (n: number) => (n ? 'RM ' + n.toLocaleString('en-MY') : '-')
+
+export function TradeStory() {
+  const ref = useRef<HTMLDivElement>(null)
+  const seen = useInView(ref)
+  const calm = reducedNow()
+  const [step, setStep] = useState(calm ? FLY.length - 1 : 0)
+  useEffect(() => {
+    if (!seen || calm) return
+    const id = setInterval(() => setStep(s => (s + 1) % FLY.length), STEP_MS)
+    return () => clearInterval(id)
+  }, [seen, calm])
+  const f = FLY[step], b = BIZ[step], sup = supStage(step)
+  const nodes: { id: 'customer' | 'business' | 'supplier'; x: number; r: number; name: Text; sub: Text }[] = [
+    { id: 'customer', x: 100, r: 42, name: TS.customer, sub: TS.buys }, { id: 'business', x: 380, r: 54, name: TS.business, sub: TS.you }, { id: 'supplier', x: 660, r: 42, name: TS.supplier, sub: TS.sells },
+  ]
+  return (
+    <div ref={ref} className="grid gap-4" aria-label={t(TS.label)} role="group">
+      <svg viewBox="0 0 760 260" role="img" aria-label={t(TS.label)} className="h-auto w-full" style={{ maxHeight: 300 }}>
+        <title>{t(TS.label)}</title>
+        {(Object.keys(PATH) as Lane[]).map(l => <path key={l} className="orb-lane" d={PATH[l]} data-on={f.lane === l ? '1' : undefined} />)}
+        {nodes.map(n => {
+          const hit = f.to === n.id
+          return (
+            <g key={n.id} className="orb-node" transform={`translate(${n.x} 130)`} style={{ cursor: 'default' }}>
+              <circle className="orb-halo" r={n.r + 14} />
+              <circle className="orb-ring" r={n.r} data-hit={hit ? '1' : undefined} key={hit ? `h${step}` : 'x'} />
+              <circle className="orb-disc" r={n.r} style={hit ? { transform: 'scale(1.08)' } : undefined} />
+              <g transform="translate(0 -6)"><Glyph node={n.id} /></g>
+              <text className="orb-text" y={n.r + 22}>{t(n.name)}</text>
+              <text className="orb-sub" y={n.r + 38}>{t(n.sub)}</text>
+            </g>
+          )
+        })}
+        {!calm && (
+          <g key={step} className="lp-fly" style={{ offsetPath: `path('${PATH[f.lane]}')` }} aria-hidden="true">
+            {f.coin
+              ? <><circle r="13" fill="var(--amber)" stroke="var(--ink)" strokeWidth="1.2" /><text textAnchor="middle" y="4" fontSize="10" fontWeight="800" fill="#1b1300">RM</text></>
+              : <><rect x="-22" y="-12" width="44" height="24" rx="8" fill="var(--accent)" /><text textAnchor="middle" y="4" fontSize="11" fontWeight="800" fill="var(--on-accent)">{f.code}</text></>}
+          </g>
+        )}
+        {!calm && f.coin && [0, 1, 2, 3, 4].map(i => <circle key={`${step}-${i}`} className="lp-spark" cx={380 + (i - 2) * 16} cy={70} r="3.5" style={{ animationDelay: `${1.25 + i * 0.08}s` }} />)}
+      </svg>
+
+      <div className="grid gap-3 md:grid-cols-3" aria-live="off">
+        <article className={`card p-4 transition-shadow duration-500 ${f.to === 'customer' ? 'shadow-2 border-accent' : ''}`}>
+          <h3 className="text-sm font-semibold text-muted">{t(TS.customer)}</h3>
+          <p key={step} className="lp-pop mt-1.5 text-md font-semibold">{t(CUST[step])}</p>
+        </article>
+        <article className={`card p-4 transition-shadow duration-500 ${f.to === 'business' ? 'shadow-2 border-accent' : ''}`}>
+          <h3 className="text-sm font-semibold text-muted">{t(TS.business)}</h3>
+          <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+            {([[TS.quote, b[0]], [TS.order, b[1]], [TS.deposit, b[2]], [TS.owed, b[3]]] as const).map(([k, v], i) => (
+              <div key={i}><dt className="text-xs text-muted">{t(k)}</dt><dd key={`${step}-${v}`} className="lp-pop font-semibold tabular-nums">{rmv(v)}</dd></div>
+            ))}
+          </dl>
+        </article>
+        <article className={`card p-4 transition-shadow duration-500 ${f.to === 'supplier' ? 'shadow-2 border-accent' : ''}`}>
+          <h3 className="text-sm font-semibold text-muted">{t(TS.supplier)}</h3>
+          <p key={sup} className="lp-pop mt-1.5 text-md font-semibold">{t(SUP[sup])}</p>
+        </article>
+      </div>
+
+      <div>
+        <p key={step} className="lp-pop text-center text-md font-semibold md:text-lg"><span className="text-accent">{step + 1}.</span> {t(CAP[step])}</p>
+        <ol className="mt-3 grid grid-cols-8 gap-1.5" aria-hidden="true">
+          {FLY.map((_, i) => (
+            <li key={i} className="h-1.5 overflow-hidden rounded-full bg-hairline">
+              <span className={`block h-full rounded-full bg-accent ${i === step && !calm ? 'lp-seg' : ''}`} style={{ width: i < step || calm ? '100%' : i === step ? undefined : '0%', animationDuration: `${STEP_MS}ms` }} />
+            </li>
+          ))}
+        </ol>
+        <p className="mt-2 text-center text-xs text-muted">{t(TS.loop)}</p>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- pricing teaser: the plans flip between monthly and yearly by themselves
+const PT = {
+  h: { en: 'Simple pricing, monthly or yearly', ms: 'Harga mudah, bulanan atau tahunan', zh: '简单价格，按月或按年' },
+  p: { en: 'One price per business, not per quote. Pay monthly, or yearly and get two months free.', ms: 'Satu harga setiap perniagaan, bukan setiap sebut harga. Bayar bulanan, atau tahunan dan dapat dua bulan percuma.', zh: '按企业收费，不按报价次数。按月付款，或按年付款送两个月。' },
+  month: { en: 'Monthly', ms: 'Bulanan', zh: '按月' }, year: { en: 'Yearly', ms: 'Tahunan', zh: '按年' }, mo: { en: '/ month', ms: '/ bulan', zh: '/ 月' }, yr: { en: '/ year', ms: '/ tahun', zh: '/ 年' },
+  seats: { en: 'Up to {0} people', ms: 'Sehingga {0} orang', zh: '最多 {0} 人' }, see: { en: 'See every plan', ms: 'Lihat semua pelan', zh: '查看全部套餐' }, free: { en: '2 months free', ms: '2 bulan percuma', zh: '送 2 个月' },
+}
+const PT_PLANS = [{ k: 'starter', name: 'Lite', seats: 3 }, { k: 'standard', name: 'Standard', seats: 10 }, { k: 'pro', name: 'Pro', seats: 25 }] as const
+export function PricingTeaser() {
+  const ref = useRef<HTMLDivElement>(null)
+  const seen = useInView(ref)
+  const [per, setPer] = useState<'month' | 'year'>('month')
+  useEffect(() => {
+    if (!seen || reducedNow()) return
+    const id = setInterval(() => setPer(p => (p === 'month' ? 'year' : 'month')), 3600)
+    return () => clearInterval(id)
+  }, [seen])
+  return (
+    <div ref={ref} className="mt-6">
+      <p className="max-w-2xl text-muted">{t(PT.p)}</p>
+      <div className="mt-5 inline-flex rounded-full border border-hairline bg-surface p-1" role="img" aria-label={t(per === 'month' ? PT.month : PT.year)}>
+        {(['month', 'year'] as const).map(k => (
+          <span key={k} className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors duration-500 ${per === k ? 'bg-accent text-on-accent' : 'text-muted'}`}>
+            {t(k === 'month' ? PT.month : PT.year)}{k === 'year' && <span className="ml-2 text-xs opacity-90">{t(PT.free)}</span>}
+          </span>
+        ))}
+      </div>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {PT_PLANS.map((p, n) => (
+          <a key={p.k} href="#/pricing" className={`lp-plan card block p-6 no-underline ${n === 1 ? 'mid border-accent shadow-2' : ''}`}>
+            <h3 className="text-lg font-semibold">{p.name}</h3>
+            <p className="mt-2 flex items-baseline gap-1"><span key={per} className="lp-pop text-4xl font-bold tabular-nums">RM{PRICE[per][p.k].toLocaleString('en-MY')}</span><span className="text-sm text-muted">{t(per === 'month' ? PT.mo : PT.yr)}</span></p>
+            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-accent"><Icon name="team" className="size-4" />{t(PT.seats).replace('{0}', String(p.seats))}</p>
+          </a>
+        ))}
+      </div>
+      <p className="mt-5"><a className="btn min-h-11 px-6" href="#/pricing">{t(PT.see)}</a></p>
+    </div>
+  )
+}
+export const PRICING_TEASER_TITLE = PT.h

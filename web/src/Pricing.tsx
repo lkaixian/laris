@@ -10,7 +10,7 @@ import type { NavItem } from './SiteChrome'
 // Public pricing page (#/pricing) and service status page (#/service-status). Both work signed out.
 // Prices in RM per business, monthly or yearly, for the plan keys the server knows (starter is sold as LARIS Lite; seats in src/license.py).
 // Yearly is the monthly price with a zero added (ten months' price for twelve). The server's /license/plans still answers "Contact us"; change PRICE here and nowhere else.
-const PRICE = { month: { starter: 59, standard: 189, pro: 499 }, year: { starter: 590, standard: 1890, pro: 4990 } } as const
+export const PRICE = { month: { starter: 59, standard: 189, pro: 499 }, year: { starter: 590, standard: 1890, pro: 4990 } } as const
 type Key = keyof typeof PRICE.month
 type Per = keyof typeof PRICE
 

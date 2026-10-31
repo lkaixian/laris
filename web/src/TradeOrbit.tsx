@@ -7,8 +7,8 @@ import type { Text } from './i18n'
 // Only transform/offset-distance and opacity animate. Reduced motion, or a tab that is hidden / off screen, shows a still picture or pauses.
 // The numbers in the panels come from the API (/chain); the picture never invents money. Sample data in mock mode only.
 type Node = 'customer' | 'business' | 'supplier'
-type Lane = 'lu' | 'ld' | 'ru' | 'rd'
-const PATH: Record<Lane, string> = {
+export type Lane = 'lu' | 'ld' | 'ru' | 'rd'
+export const PATH: Record<Lane, string> = {
   lu: 'M150,118 C210,36 290,36 330,112', ld: 'M330,148 C290,224 210,224 150,142',
   ru: 'M430,112 C470,36 550,36 610,118', rd: 'M610,142 C550,224 470,224 430,148',
 }
@@ -24,8 +24,6 @@ const S = {
   you: { en: 'your workspace', ms: 'ruang kerja anda', zh: '您的工作区', ta: 'உங்கள் பணியிடம்' },
   sells: { en: 'you buy from', ms: 'anda beli daripada', zh: '您向其采购', ta: 'நீங்கள் வாங்குபவர்' },
   label: { en: 'Trade Orbit: documents moving between your customer, your business and your supplier', ms: 'Orbit Dagangan: dokumen bergerak antara pelanggan, perniagaan dan pembekal anda', zh: '贸易轨道：文件在客户、企业与供应商之间流转', ta: 'வர்த்தக சுற்றுப்பாதை: வாடிக்கையாளர், வணிகம், விநியோகஸ்தர் இடையே ஆவணங்கள் நகர்கின்றன' },
-  pause: { en: 'Pause story', ms: 'Jeda cerita', zh: '暂停演示', ta: 'கதையை இடைநிறுத்து' },
-  play: { en: 'Play story', ms: 'Main cerita', zh: '播放演示', ta: 'கதையை இயக்கு' },
   owedIn: { en: 'Owed to you', ms: 'Terhutang kepada anda', zh: '客户欠您', ta: 'உங்களுக்குச் செலுத்த வேண்டியது' },
   owedOut: { en: 'You owe suppliers', ms: 'Anda terhutang kepada pembekal', zh: '您欠供应商', ta: 'நீங்கள் செலுத்த வேண்டியது' },
   openSell: { en: 'Open sales documents', ms: 'Dokumen jualan terbuka', zh: '未结销售文件', ta: 'திறந்த விற்பனை ஆவணங்கள்' },
@@ -46,16 +44,6 @@ const PARCELS: Parcel[] = [
   P('RFQ', 'ru', 28, 'Request for quotation', 'Permintaan Sebut Harga', '询价单', 'விலைப்புள்ளி கோரிக்கை'), P('PO', 'ru', 70, 'Purchase order', 'Pesanan Belian', '采购订单', 'கொள்முதல் ஆணை'),
   P('GRN', 'rd', 34, 'Goods received', 'Barang Diterima', '收货单', 'பெறப்பட்ட பொருட்கள்'), P('BILL', 'rd', 76, 'Supplier invoice', 'Invois pembekal', '供应商发票', 'விநியோகஸ்தர் விலைப்பட்டியல்'),
 ]
-// The landing-page story: 6 steps, 2 s each (12 s loop).
-const STORY: { lane: Lane; code: string; to: Node; cap: Text }[] = [
-  { lane: 'lu', code: 'ASK', to: 'business', cap: { en: 'A customer asks for a price', ms: 'Pelanggan minta harga', zh: '客户询价', ta: 'வாடிக்கையாளர் விலை கேட்கிறார்' } },
-  { lane: 'ld', code: 'QT', to: 'customer', cap: { en: 'You send a quotation', ms: 'Anda hantar sebut harga', zh: '您发出报价单', ta: 'நீங்கள் விலைப்புள்ளி அனுப்புகிறீர்கள்' } },
-  { lane: 'lu', code: 'SO', to: 'business', cap: { en: 'The customer accepts and orders', ms: 'Pelanggan terima dan buat pesanan', zh: '客户接受并下单', ta: 'வாடிக்கையாளர் ஏற்று ஆர்டர் செய்கிறார்' } },
-  { lane: 'ru', code: 'PO', to: 'supplier', cap: { en: 'You order from your supplier', ms: 'Anda buat pesanan kepada pembekal', zh: '您向供应商下采购订单', ta: 'நீங்கள் விநியோகஸ்தரிடம் ஆர்டர் செய்கிறீர்கள்' } },
-  { lane: 'rd', code: 'GRN', to: 'business', cap: { en: 'The goods arrive', ms: 'Barang tiba', zh: '货物到达', ta: 'பொருட்கள் வந்து சேர்கின்றன' } },
-  { lane: 'ld', code: 'INV', to: 'customer', cap: { en: 'Delivered, invoiced and paid', ms: 'Dihantar, diinvois dan dibayar', zh: '送达、开票、收款', ta: 'வழங்கி, விலைப்பட்டியலிட்டு, பணம் பெறப்பட்டது' } },
-]
-
 export function useReducedMotion() {
   const [r, setR] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => {
@@ -69,22 +57,18 @@ export function useReducedMotion() {
 
 export interface OrbitData { owedIn: number; owedOut: number; openSell: number; openBuy: number; late: number }
 
-function Glyph({ node }: { node: Node }) {
+export function Glyph({ node }: { node: Node }) {
   // Simple line icons, drawn here so they take the theme colour: person, shop, truck.
   if (node === 'customer') return <g className="orb-glyph" aria-hidden="true"><circle cx="0" cy="-9" r="6" /><path d="M-12 14c0-8 6-12 12-12s12 4 12 12" /></g>
   if (node === 'business') return <g className="orb-glyph" aria-hidden="true"><path d="M-18 -4l4-12h28l4 12M-16 -4v20h32V-4M-5 16V6h10v10" /></g>
   return <g className="orb-glyph" aria-hidden="true"><path d="M-17 -8h22v18h-22zM5 -2h9l5 6v6H5M-10 12a3 3 0 106 0M8 12a3 3 0 106 0" /></g>
 }
 
-export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: boolean; onGo?: (href: string) => void }) {
+export function TradeOrbit({ data, onGo }: { data?: OrbitData; onGo?: (href: string) => void }) {
   useLang()
-  const reduced = useReducedMotion()
   const [open, setOpen] = useState<Node>('business')
   const [chain, setChain] = useState<'sell' | 'buy' | null>(null)
-  const [step, setStep] = useState(0)
-  const [paused, setPaused] = useState(false)
   const [run, setRun] = useState(true)
-  const [hit, setHit] = useState<Node | null>(null)
   const box = useRef<HTMLDivElement>(null)
   // Pause when scrolled off screen or the tab is hidden.
   useEffect(() => {
@@ -95,19 +79,6 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
     io.observe(el); document.addEventListener('visibilitychange', vis)
     return () => { io.disconnect(); document.removeEventListener('visibilitychange', vis) }
   }, [])
-  const playing = !!story && !paused && !reduced && run
-  useEffect(() => {
-    if (!playing) return
-    const id = setInterval(() => setStep(s => (s + 1) % STORY.length), 2000)
-    return () => clearInterval(id)
-  }, [playing])
-  useEffect(() => {
-    if (!story || reduced) return
-    const n = STORY[step].to
-    setHit(n); const id = setTimeout(() => setHit(null), 1700)
-    return () => clearTimeout(id)
-  }, [story, step, reduced])
-  const cur = story ? STORY[step] : undefined
   const go = (href: string) => (onGo ? onGo(href) : (location.hash = href))
   const d = data ?? { owedIn: 0, owedOut: 0, openSell: 0, openBuy: 0, late: 0 }
   const nodes: { id: Node; x: number; r: number; name: Text; sub: Text }[] = [
@@ -119,12 +90,12 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
     supplier: { a: [t(S.owedOut), rm(String(d.owedOut))], b: [t(S.openBuy), String(d.openBuy)], n: t(S.nextS), href: '#/customers' },
   }[open]
   return (
-    <div ref={box} className="orbit-wrap" data-run={run && !paused ? '1' : '0'} data-guide="orbit">
+    <div ref={box} className="orbit-wrap" data-run={run ? '1' : '0'} data-guide="orbit">
       <svg viewBox="0 0 760 260" role="img" aria-label={t(S.label)} className="h-auto w-full" style={{ maxHeight: 280 }}>
         <title>{t(S.label)}</title>
         {(Object.keys(PATH) as Lane[]).map(l => (
           <g key={l}>
-            <path className="orb-lane" d={PATH[l]} data-on={cur?.lane === l || chain === LANE_CHAIN[l] ? '1' : undefined} />
+            <path className="orb-lane" d={PATH[l]} data-on={chain === LANE_CHAIN[l] ? '1' : undefined} />
             <path className="orb-hit" d={PATH[l]} onClick={() => { const c = LANE_CHAIN[l]; setChain(x => (x === c ? null : c)); go('#/customers') }}>
               <title>{t(LANE_CHAIN[l] === 'sell' ? S.sell : S.buy)}</title></path>
           </g>
@@ -133,32 +104,21 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
           <g key={n.id} className="orb-node" transform={`translate(${n.x} 130)`} tabIndex={0} role="button" aria-pressed={open === n.id} aria-label={`${t(n.name)}: ${t(n.sub)}`}
             onClick={() => setOpen(n.id)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(n.id) } }}>
             <circle className="orb-halo" r={n.r + 14} />
-            <circle className="orb-ring" r={n.r} data-hit={hit === n.id ? '1' : undefined} key={hit === n.id ? `h${step}` : 'x'} />
+            <circle className="orb-ring" r={n.r} />
             <circle className="orb-disc" r={n.r} />
             <g transform="translate(0 -6)"><Glyph node={n.id} /></g>
             <text className="orb-text" y={n.r + 22}>{t(n.name)}</text>
             <text className="orb-sub" y={n.r + 38}>{t(n.sub)}</text>
           </g>
         ))}
-        {story
-          ? cur && !reduced && <g key={step} className="orb-parcel orb-once" style={{ offsetPath: `path('${PATH[cur.lane]}')`, animationIterationCount: 1 }} aria-hidden="true">
-            <rect x="-20" y="-11" width="40" height="22" rx="7" /><text textAnchor="middle" y="4">{cur.code}</text></g>
-          : PARCELS.map((p, i) => {
+        {PARCELS.map((p, i) => {
             const dim = chain && LANE_CHAIN[p.lane] !== chain
             return <g key={p.code} className="orb-parcel" opacity={dim ? 0.25 : undefined} aria-hidden="true"
               style={{ offsetPath: `path('${PATH[p.lane]}')`, offsetDistance: `${p.at}%`, ['--orb-d' as string]: `${6 + (i % 4)}s`, ['--orb-delay' as string]: `${-(i * 1.3)}s` }}>
               <title>{`${t(p.name)} ${t(S.towards)} ${t(S[LANE_DEST[p.lane]])}`}</title>
               <rect x="-20" y="-11" width="40" height="22" rx="7" /><text textAnchor="middle" y="4">{p.code}</text></g>
-          })}
+        })}
       </svg>
-      {story ? (
-        <div className="grid gap-2">
-          <ol className="grid gap-1 sm:grid-cols-3" aria-label={t({ en: 'The story in six steps', ms: 'Cerita dalam enam langkah', zh: '六步流程', ta: 'ஆறு படிகளில் கதை' })}>
-            {STORY.map((s, i) => <li key={i} className="orb-step rounded-ui border border-hairline px-3 py-2 text-sm" aria-current={i === step ? 'step' : undefined}>{i + 1}. {t(s.cap)}</li>)}
-          </ol>
-          {!reduced && <button type="button" className="btn w-fit" aria-pressed={paused} onClick={() => setPaused(p => !p)}>{t(paused ? S.play : S.pause)}</button>}
-        </div>
-      ) : (
         <section className="card grid gap-2 sm:grid-cols-[1fr_auto]" aria-live="polite">
           <div className="grid gap-1">
             <h3 className="text-md font-semibold">{t(nodes.find(n => n.id === open)!.name)}</h3>
@@ -170,7 +130,6 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
           </div>
           <a className="btn btn-primary self-end" href={panel.href} onClick={e => { e.preventDefault(); go(panel.href) }}>{t(S.openIt)}</a>
         </section>
-      )}
     </div>
   )
 }

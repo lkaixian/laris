@@ -6,8 +6,7 @@ import type { IconName } from './icons'
 import { t, useLang } from './i18n'
 import { SiteFooter, SiteHeader } from './SiteChrome'
 import type { NavItem } from './SiteChrome'
-import { TradeOrbit } from './TradeOrbit'
-import { Journey, JOURNEY_TITLE, P, PriceBuild, Ticker } from './LandingParts'
+import { Journey, JOURNEY_TITLE, P, PRICING_TEASER_TITLE, PriceBuild, PricingTeaser, Ticker, TradeStory } from './LandingParts'
 import type { Text } from './i18n'
 
 // Public homepage for signed-out visitors (#/welcome, and the bare address). Same section order as the CLARION site: hero, flow, tour, modules, audiences, privacy, footer.
@@ -294,7 +293,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
         <section id="loop" className={sec} aria-labelledby="loop-h">
           <h2 id="loop-h" className="text-2xl font-bold">{t(LOOP.h)}</h2>
           <p className="mt-2 max-w-2xl text-muted">{t(LOOP.p)}</p>
-          <div className="glass-lite mt-6 p-4"><TradeOrbit story /></div>
+          <div className="glass-lite mt-6 p-4 md:p-6"><TradeStory /></div>
         </section>
 
         <section id="journey" className={sec} aria-labelledby="journey-h">
@@ -314,6 +313,11 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
             ))}
           </ol>
           <PriceBuild />
+        </section>
+
+        <section id="plans" className={sec} aria-labelledby="plans-h">
+          <h2 id="plans-h" className="text-xl font-semibold md:text-2xl">{t(PRICING_TEASER_TITLE)}</h2>
+          <PricingTeaser />
         </section>
 
         <section id="tour" className={sec} aria-labelledby="tour-h">

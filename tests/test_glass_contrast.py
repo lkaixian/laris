@@ -147,7 +147,7 @@ def test_orb_opacity_is_capped_so_text_always_has_room():
 
 
 THEME_CSS = (Path(__file__).resolve().parent.parent / "web" / "src" / "theme.css").read_text(encoding="utf-8")
-KNOWN_SURFACE_MIXES = 15   # rules in theme.css that mix --surface with transparency; each has a counterpart in glass.css (see its "Compatibility" block)
+KNOWN_SURFACE_MIXES = 16   # rules in theme.css that mix --surface with transparency; each has a counterpart in glass.css (see its "Compatibility" block)
 
 
 def test_upstream_glass_rules_use_the_tested_surface():

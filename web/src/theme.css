@@ -504,3 +504,10 @@
   @media (prefers-reduced-motion: reduce) { .rep-kpi, .rep-card, .rep-story, .rep-tools { animation: none; transition: none; } }
 }
 @layer components { .rep-kpi .metric { font-size: clamp(1.35rem, 2.1vw, 1.9rem); white-space: nowrap; } }
+@layer components {
+  /* Open sidebar: the hint for the item you point at shows in a strip pinned to the bottom of the sidebar, so nothing floats over the page. */
+  .nav-hint { position: fixed; bottom: 12px; z-index: 60; min-height: 3.25rem; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--hairline); background: var(--surface-solid, var(--surface));
+    color: var(--ink); font-size: 0.8125rem; line-height: 1.35; opacity: 0; transition: opacity var(--dur-fast, 120ms); pointer-events: none; }
+  .nav-hint[data-on] { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .nav-hint { transition: none; } }
+}

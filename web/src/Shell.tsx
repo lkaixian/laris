@@ -87,13 +87,13 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
   const here = PARENT[route] ?? route
   const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
   // A small pop-up beside the item you point at or tab to. It is fixed to the screen so the scrolling sidebar cannot cut it off.
-  const [tip, setTip] = useState<{ key: string; top: number; left: number } | null>(null)
-  const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
+  const [tip, setTip] = useState<{ key: string; top: number; left: number; nl: number; nw: number } | null>(null)
+  const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); const n = el.closest('nav')?.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10, nl: (n?.left ?? 0) + 8, nw: Math.max(160, (n?.width ?? 224) - 16) }) }
   useEffect(() => { if (!tip) return; const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setTip(null) }, away = () => setTip(null); addEventListener('keydown', k); addEventListener('scroll', away, true); return () => { removeEventListener('keydown', k); removeEventListener('scroll', away, true) } }, [tip])
   const hint = tip ? NAV_HINTS[tip.key] : undefined
   return (
     <nav aria-label={tx('nav.main')} className="px-2 pb-2">
-      {tip && hint && <div id={`${idp}-tip`} role="tooltip" className="nav-tip" style={{ top: tip.top, left: tip.left }}>{t(hint)}</div>}
+      {tip && hint && collapsed && <div id={`${idp}-tip`} role="tooltip" className="nav-tip" style={{ top: tip.top, left: tip.left }}>{t(hint)}</div>}
       <ul>
         {groups.map(g => (
           <li key={g.label} className={collapsed ? 'mt-2 border-t border-hairline pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
@@ -121,6 +121,8 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
           </li>
         ))}
       </ul>
+      {!collapsed && tip && hint && <div id={`${idp}-tip`} role="tooltip" className="sr-only">{t(hint)}</div>}
+      {!collapsed && <div className="nav-hint" aria-hidden="true" data-on={tip && hint ? '' : undefined} style={tip ? { left: tip.nl, width: tip.nw } : undefined}>{tip && hint ? t(hint) : ''}</div>}
     </nav>
   )
 }

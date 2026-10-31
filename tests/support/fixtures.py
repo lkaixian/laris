@@ -109,7 +109,7 @@ class Env:
 
 @pytest.fixture
 def env(pg_url, monkeypatch):
-    ai_log._pending.set([])  # a test that called the model helper directly leaves notes in this thread; the next test must not count them
+    ai_log._pending.set(None)  # None, not []: a list would be shared by every request the client makes (they copy this context) and be recorded again each time. A test that called the model helper directly leaves notes in this thread; the next test must not count them
     monkeypatch.setenv("DATABASE_URL", pg_url)
     monkeypatch.setenv("ILMU_API_KEY", "test-key")
     monkeypatch.setenv("TELEGRAM_ASK_PROFILE", "0")  # the name-and-number question is tested in test_telegram_profile.py

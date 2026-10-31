@@ -316,9 +316,11 @@ export function ProductsView({ owner }: { owner: boolean }) {
       <FilterBar label={t(T.search)} search={{ value: q, onChange: setQ, label: t({ en: 'Search products (any language)', ms: 'Cari produk (mana-mana bahasa)', zh: '搜索产品（任意语言）', ta: 'பொருட்களைத் தேடு (எந்த மொழியும்)' }) }} />
       <Async s={s} empty={!s.data?.length} emptyText={t(T.none)} shape="cards">
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{s.data?.map(p => (
-          <li key={p.id} className="card"><h3 className="font-semibold"><a href={`#/product/${p.id}`}>{p.name}</a></h3>
+          <li key={p.id} className="card flex flex-col"><h3 className="font-semibold"><a href={`#/product/${p.id}`}>{p.name}</a></h3>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm"><StatusChip v={p.coverage === 'partial' ? 'partial' : p.coverage} /><span className="text-muted">{p.offers} {t({ en: 'offers', ms: 'tawaran', zh: '报价', ta: 'சலுகைகள்' })} · /{p.base_uom}</span></p>
-            {p.aliases.length > 0 && <p className="mt-1 text-xs text-muted">{p.aliases.slice(0, 4).join(' · ')}</p>}</li>
+            {p.aliases.length > 0 && <p className="mt-1 text-xs text-muted">{p.aliases.slice(0, 4).join(' · ')}</p>}
+            <span className="block h-3" aria-hidden="true" />
+            <a className="btn mt-auto self-start" href={`#/product/${p.id}`}>{t({ en: 'View and compare', ms: 'Lihat dan banding', zh: '查看并比价', ta: 'பார்த்து ஒப்பிடு' })}<span className="sr-only">: {p.name}</span></a></li>
         ))}</ul>
       </Async>
     </>

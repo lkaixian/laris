@@ -204,3 +204,38 @@ Health adds `ai_not_reviewed` (info) while no choice has been saved.
 | `POST /api/privacy/requests/{id}` | owner, audited. `{action: "erase"\|"dismiss"}` returns the updated row (same shape as above). `erase` runs `POST /api/parties/{id}/erase` for that customer, marks it `done`, then tells the customer "Your data has been erased." on the same channel (best effort: a failed send never fails the request). `dismiss` marks it `dismissed` and tells the customer the business could not erase it, with the data protection contact if set. 404 `not_found`, 409 `already_decided`, 409 `not_customer` (from the erase), 422 `bad_action` |
 
 Health adds `privacy_requests_waiting` (warn) when a request has been pending more than 3 days.
+
+
+## Orders, purchase orders and the order chain
+
+Preparation only: payments are recorded, never taken; nothing is filed or sent. An order is a `jobs` row. Its money and paper (proforma, delivery order, invoice, receipt, payments) are the order chain below; `/api/chain` holds only the customer PO, sales order and supplier PO, each linked to the order by `job_id`. Proforma, delivery order, invoice and receipt are no longer chain documents (the old `convert` targets `pf`, `do`, `inv` and `POST /api/chain/{id}/payment` are gone).
+
+### `/api/chain` (customer PO, sales order, supplier PO)
+
+Write routes need `manage_contacts`; some moves are owner-only (403 for staff).
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/chain` | Create a customer PO (`cpo`), sales order (`so`) or supplier PO (`spo`). Body: `kind`, `customer_id` (the supplier for `spo`), `lines[{description, qty, uom, unit_price}]`, optional `ref`, `discount_pct`, `sst_rate`, `round5`, `note`, `serves` (spo only: the order it is bought for). A `cpo` or `so` creates its order (a job holding the document total as one lot line); an `spo` with `serves` joins that order; 409 `duplicate_po` for a repeated customer PO number. |
+| `POST /api/chain/from-quote/{quote_id}` | Make a `cpo` or `so` from an accepted outgoing quote, joined to the order Accept made (`job_id`). 409 `quote_not_accepted`; 409 `no_order` if the quote has no order row; 409 `already_converted`. |
+| `POST /api/chain/{id}/convert` | `{to: "so"}` from a customer PO, same order and deal. 409 `illegal_conversion`. |
+| `POST /api/chain/{id}/transition` | `{to, reason?}` along the state machine in `src/chain.py`. 409 `illegal_transition`; 403 `owner_only`; 422 `reason_required`; 409 `has_payments` when cancelling an order that has payments. |
+| `GET /api/chain?kind=&status=` | List (`cpo`, `so`, `spo`), each with `job_id`. |
+| `GET /api/chain/receivables` | Ageing buckets (current, 1-30, 31-60, 60+) from the live invoices and payments of the order chain, plus `deposits_waiting` (proformas whose deposit is not recorded). Needs `record_payments`. |
+| `GET /api/chain/{id}` | The document, its Document Trail (`trail`) and its history. |
+| `POST /api/chain/buy/compare`, `POST /api/chain/buy/margin` | Stateless supplier quote ranking and deal margin (`src/buyside.py`). |
+
+### Order chain (`/api/jobs/{id}/...`, `/api/deal-docs/...`, `/api/payments/...`)
+
+| Route | What it does | Gate |
+| --- | --- | --- |
+| `GET /api/jobs/{id}/chain` | Documents, payments, totals, balance, delivery lines and the stage (`awaiting_deposit`, `in_production`, `delivered`, `awaiting_payment`, `paid`); `job.quote_deposit_pct` and `job.customer`. | `record_payments` |
+| `POST /api/jobs/{id}/proforma` | `{deposit_pct?}` (null = the quote's). | owner |
+| `POST /api/jobs/{id}/payments` | `{amount, method, reference?, paid_on, purpose, idempotency_key, extraction?}`; issues the receipt; the same key returns the first result; 409 on overpayment. | `record_payments` |
+| `POST /api/payments/propose-from-slip` | Multipart `image`; returns a proposal only. | `record_payments` |
+| `POST /api/jobs/{id}/delivery-orders` | `{lines?, override_reason?}`; 409 `deposit_missing`. | `issue_delivery` (override: owner) |
+| `POST /api/deal-docs/{id}/delivery-link` | `{url, expires_at}`, shown once. | `issue_delivery` |
+| `POST /api/jobs/{id}/invoice` | `{due_on?, override_reason?}`; 409 `not_delivered`. | owner |
+| `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse` | Void (reason), reversing payment row. | owner |
+| `GET /api/deal-docs/{id}/pdf` | The issued document as PDF in the business's document language. | `record_payments` (delivery order: `issue_delivery`) |
+| `GET /api/public/delivery/{token}`, `POST /api/public/delivery/{token}/sign` | The customer's page and `{name, agree, problems?, mark?}`; 404 generic, 409 `already_signed`, 429. No sign-in. | link |

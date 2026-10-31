@@ -52,7 +52,7 @@ def apply_schema(seed: bool | None = None) -> None:
             with c.transaction():  # a failure in the second or third file must not leave the first one installed
                 run("schema.sql", "transitions.sql", "functions.sql")
         run("tiers.sql", "views.sql", "auth.sql", "rls.sql", "rfq.sql", "listings.sql", "catalog_tiers.sql", "rbac.sql", "license.sql", "signup.sql", "multi.sql",
-            "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "jobs_manual.sql", "track.sql", "privacy.sql", "onboarding.sql", "accept.sql", "chain.sql", "delivery.sql", "apiaccess.sql", "aiguide.sql", "aicalls.sql", "consent.sql")
+            "invites.sql", "channels.sql", "quotes.sql", "jobs.sql", "jobs_manual.sql", "track.sql", "privacy.sql", "onboarding.sql", "accept.sql", "chain.sql", "delivery.sql", "deals.sql", "apiaccess.sql", "aiguide.sql", "aicalls.sql", "consent.sql")
         c.execute("create table if not exists schema_migrations (file text primary key, applied_at timestamptz not null default now())")
         done = {r[0] for r in c.execute("select file from schema_migrations").fetchall()}
         for f in sorted(MIGRATIONS_DIR.glob("*.sql")) if MIGRATIONS_DIR.is_dir() else []:

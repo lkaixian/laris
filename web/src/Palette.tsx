@@ -135,7 +135,7 @@ export function Palette({ ctx, onClose, onAction }: { ctx: Ctx; onClose: () => v
     <div className="fixed inset-0 z-[60]" onKeyDown={keys}>
       <div aria-hidden="true" className="absolute inset-0 bg-ink/50" onClick={onClose} />
       <div ref={box} role="dialog" aria-modal="true" aria-label={t(S.label, lang)}
-        className="absolute inset-0 flex flex-col bg-surface md:inset-auto md:left-1/2 md:top-[10vh] md:max-h-[70vh] md:w-[40rem] md:max-w-[calc(100vw-2rem)] md:-translate-x-1/2 md:rounded-ui md:border md:border-soft md:shadow-xl">
+        className="glass-pane absolute inset-0 flex flex-col md:inset-auto md:left-1/2 md:top-[10vh] md:max-h-[70vh] md:w-[40rem] md:max-w-[calc(100vw-2rem)] md:-translate-x-1/2 md:rounded-ui md:border md:border-soft md:shadow-xl">
         <div className="flex items-center gap-2 border-b border-soft p-3">
           <span aria-hidden="true" className="text-muted"><Icon name="search" /></span>
           <input autoFocus type="text" role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={t(S.label, lang)}

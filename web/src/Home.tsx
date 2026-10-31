@@ -9,9 +9,41 @@ import { Icon } from './icons'
 import { areaTiles } from './Areas'
 import { BentoGrid } from './Bento'
 import type { BentoPreset, BentoTile } from './Bento'
+import { LiveOrbit } from './TradeOrbit'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { tx } from './strings'
+
+const N = {
+  head: { en: 'Needs you', ms: 'Perlukan anda', zh: '需要您处理', ta: 'உங்கள் கவனம் தேவை' },
+  review: { en: 'quotes to review', ms: 'sebut harga untuk disemak', zh: '份报价待审核', ta: 'மதிப்பாய்வுக்கான விலைப்புள்ளிகள்' },
+  replies: { en: 'customer replies to record', ms: 'balasan pelanggan untuk direkod', zh: '条客户回复待记录', ta: 'பதிவு செய்ய வேண்டிய வாடிக்கையாளர் பதில்கள்' },
+  chase: { en: 'quotes waiting for a reply', ms: 'sebut harga menunggu balasan', zh: '份报价等待回复', ta: 'பதிலுக்காகக் காத்திருக்கும் விலைப்புள்ளிகள்' },
+  late: { en: 'jobs are overdue', ms: 'kerja lewat tempoh', zh: '项工单已逾期', ta: 'வேலைகள் காலம் கடந்துள்ளன' },
+  go: { en: 'Open', ms: 'Buka', zh: '打开', ta: 'திற' },
+  clear: { en: 'All clear. Nothing needs you right now.', ms: 'Semua jelas. Tiada yang perlukan anda sekarang.', zh: '一切就绪，目前没有需要您处理的事项。', ta: 'எல்லாம் சரி. இப்போது எதுவும் தேவையில்லை.' },
+}
+// "Needs you": at most three one-tap items, worked out from the dashboard counts the page already has.
+function NeedsYou({ d }: { d: { needs_review: number; customer_replies: unknown[]; followups_pending?: number; jobs_overdue?: number | null } }) {
+  useLang()
+  const items = [
+    { n: d.needs_review, text: N.review, href: '#/tracker/review', icon: 'tracker' as const },
+    { n: d.customer_replies.length, text: N.replies, href: '#/tracker', icon: 'ask' as const },
+    { n: d.followups_pending ?? 0, text: N.chase, href: '#/followups', icon: 'alerts' as const },
+    { n: d.jobs_overdue ?? 0, text: N.late, href: '#/jobs?overdue', icon: 'jobs' as const },
+  ].filter(i => i.n > 0).slice(0, 3)
+  return (
+    <section aria-label={t(N.head)} className="glass-lite mb-4 grid gap-2 p-3" data-guide="needs-you">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t(N.head)}</h2>
+      {items.length === 0 ? <p className="flex items-center gap-2 text-sm"><Icon name="check" className="size-4 text-accent" />{t(N.clear)}</p> : (
+        <ul className="grid gap-2 sm:grid-cols-3">
+          {items.map(i => <li key={i.href} className="flex items-center justify-between gap-3 rounded-ui border border-hairline px-3 py-2">
+            <span className="flex min-w-0 items-center gap-2 text-sm"><Icon name={i.icon} className="size-4 shrink-0 text-accent" /><span><b className="tabular-nums">{i.n}</b> {t(i.text)}</span></span>
+            <a className="btn btn-primary shrink-0" href={i.href}>{t(N.go)}</a></li>)}
+        </ul>)}
+    </section>
+  )
+}
 
 const S = {
   addSupplier: { en: 'Add a supplier', ms: 'Tambah pembekal', zh: '添加供应商', ta: 'சப்ளையரைச் சேர்' },
@@ -59,8 +91,8 @@ const S = {
   doing: { en: 'In progress', ms: 'Sedang berjalan', zh: '进行中', ta: 'நடந்து கொண்டிருக்கிறது' },
   done2: { en: 'Done', ms: 'Selesai', zh: '已完成', ta: 'முடிந்தது' },
   overdueJobs: { en: 'Overdue jobs', ms: 'Kerja lewat tempoh', zh: '逾期工单', ta: 'காலம் கடந்த வேலைகள்' },
-  onTrack: { en: 'On track', ms: 'Jejak', zh: '进度', ta: 'நிலை' },
-  openTrack: { en: 'Open Track', ms: 'Buka Jejak', zh: '打开进度', ta: 'நிலையைத் திற' },
+  onTrack: { en: 'On schedule', ms: 'Ikut jadual', zh: '日程', ta: 'அட்டவணை' },
+  openTrack: { en: 'Open Schedule', ms: 'Buka Jadual', zh: '打开日程', ta: 'அட்டவணையைத் திற' },
   overdueItems: { en: 'Overdue items', ms: 'Item lewat tempoh', zh: '逾期项目', ta: 'காலம் கடந்த உருப்படிகள்' },
   waitSupplier: { en: 'Waiting for a supplier', ms: 'Menunggu pembekal', zh: '等待供应商', ta: 'சப்ளையருக்காகக் காத்திருப்பு' },
   waitApproval: { en: 'Quotes waiting for approval', ms: 'Sebut harga menunggu kelulusan', zh: '待批准报价', ta: 'அங்கீகாரத்திற்காகக் காத்திருக்கும் மேற்கோள்கள்' },
@@ -160,7 +192,7 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
     <>
       <PageHeader title={tx('nav.home')} description={t({ en: `Hello, ${me.name}. Here is where things stand.`, ms: `Helo, ${me.name}. Beginilah keadaan semasa.`, zh: `您好，${me.name}。以下是目前的情况。`, ta: `வணக்கம், ${me.name}. தற்போதைய நிலை இதோ.` })} actions={actions} />
       <Async s={s} empty={false} rows={4} shape="tiles">
-        {s.data && <><GetStarted d={s.data} owner={owner} /><HomeTiles d={s.data} owner={owner} userId={me.id} /></>}
+        {s.data && <><NeedsYou d={s.data} /><section className="glass-lite mb-4 p-3" aria-label="Trade Orbit"><LiveOrbit /></section><GetStarted d={s.data} owner={owner} /><HomeTiles d={s.data} owner={owner} userId={me.id} /></>}
       </Async>
     </>
   )
@@ -170,9 +202,9 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
 // Home = a bento (Bento.tsx) of tiles: the four areas (Areas.tsx) and the number tiles below. Which are shown, their order and size, come from a
 // preset for the kind of person, then from whatever the person changed with "Edit layout" (saved on this device).
 const PRESETS: BentoPreset[] = [
-  { id: 'owner', label: { en: 'Owner', ms: 'Pemilik', zh: '老板', ta: 'உரிமையாளர்' }, tiles: ['needs', 'quotes', 'margin', 'work', 'suppliers', 'insight', 'speed', 'latest', 'replies', 'audit'] },
-  { id: 'operator', label: { en: 'Operator', ms: 'Operator', zh: '操作员', ta: 'இயக்குநர்' }, tiles: ['needs', 'due', 'work', 'jobs', 'track', 'suppliers', 'contacts', 'latest'] },
-  { id: 'accountant', label: { en: 'Accountant', ms: 'Akauntan', zh: '会计', ta: 'கணக்காளர்' }, tiles: ['needs', 'margin', 'insight', 'replies', 'latest', 'track'] },
+  { id: 'owner', label: { en: 'Owner', ms: 'Pemilik', zh: '老板', ta: 'உரிமையாளர்' }, tiles: ['quotes', 'margin', 'work', 'suppliers', 'insight', 'speed', 'latest', 'replies', 'audit'] },
+  { id: 'operator', label: { en: 'Operator', ms: 'Operator', zh: '操作员', ta: 'இயக்குநர்' }, tiles: ['due', 'work', 'jobs', 'track', 'suppliers', 'contacts', 'latest'] },
+  { id: 'accountant', label: { en: 'Accountant', ms: 'Akauntan', zh: '会计', ta: 'கணக்காளர்' }, tiles: ['margin', 'insight', 'replies', 'latest', 'track'] },
   { id: 'everything', label: { en: 'Everything', ms: 'Semua', zh: '全部', ta: 'அனைத்தும்' }, tiles: ['needs', 'quotes', 'margin', 'due', 'speed', 'work', 'suppliers', 'insight', 'replies', 'latest', 'jobs', 'track', 'contacts', 'audit'] },
 ]
 

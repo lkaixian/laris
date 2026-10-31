@@ -62,10 +62,11 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `GET /api/audit/export` | `view_audit` and `export_data` |
 | `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
-| `POST /api/jobs/{id}/payments`, `POST /api/payments/propose-from-slip`, `GET /api/jobs/{id}/chain` | `record_payments` |
+| `POST /api/jobs/{id}/payments`, `POST /api/payments/propose-from-slip`, `GET /api/jobs/{id}/chain`, `GET /api/chain/receivables` | `record_payments` |
 | `GET /api/deal-docs/{id}/pdf` | `record_payments` (a delivery order also `issue_delivery`) |
 | `POST /api/jobs/{id}/delivery-orders`, `POST /api/deal-docs/{id}/delivery-link` | `issue_delivery` (an `override_reason` on the first is owner only) |
 | `POST /api/jobs/{id}/proforma`, `POST /api/jobs/{id}/invoice`, `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`, `PUT/GET /api/settings/doc-layout/{kind}` | owner |
+| `POST /api/chain`, `POST /api/chain/from-quote/{id}`, `POST /api/chain/{id}/convert`, `POST /api/chain/{id}/transition`, `POST /api/chain/buy/*` | `manage_contacts` (customer PO, sales order, supplier PO only). Moves to `so:cancelled`, `cpo:confirmed` and `spo:sent` are owner only; cancelling an order that has payments is refused (409). These routes never touch money or delivery: proforma, delivery order, invoice, receipt and payments exist only on the routes above, so `record_payments` and `issue_delivery` cannot be bypassed through `/api/chain` |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |

@@ -16,6 +16,7 @@ import { useToast } from './Toast'
 import { licenceOn, issuerOn, useIssuerProbe } from './Licence'
 import { articleForNav } from './help/articles'
 import { startTour } from './Tour'
+import { NAV_HINTS } from './navHints'
 
 /*
   App shell: grouped sidebar (>= md, collapsible to icons), top bar + slide-over drawer (< md), header with org mark,
@@ -40,8 +41,9 @@ export const NAV: { label: string; items: NavItem[] }[] = [
   { label: 'Work', items: [
     { key: 'home', label: 'Home', icon: 'home' },
     { key: 'tracker', label: 'Tracker', icon: 'tracker' },
-    { key: 'track', label: 'Track', icon: 'pipeline' },
+    { key: 'track', label: 'Schedule', icon: 'pipeline' },
     { key: 'jobs', label: 'Jobs', icon: 'jobs' },
+    { key: 'deals', label: 'Deals', icon: 'tracker' },
     { key: 'followups', label: 'Follow-ups', icon: 'clock' },
   ] },
   { label: 'Suppliers', items: [
@@ -81,16 +83,22 @@ const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) ==
 function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: ReturnType<typeof visibleNav>; route: string; collapsed?: boolean; idp: string; onNavigate?: (href: string) => void }) {
   const here = PARENT[route] ?? route
   const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
+  // A small pop-up beside the item you point at or tab to. It is fixed to the screen so the scrolling sidebar cannot cut it off.
+  const [tip, setTip] = useState<{ key: string; top: number; left: number } | null>(null)
+  const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
+  useEffect(() => { if (!tip) return; const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setTip(null) }, away = () => setTip(null); addEventListener('keydown', k); addEventListener('scroll', away, true); return () => { removeEventListener('keydown', k); removeEventListener('scroll', away, true) } }, [tip])
+  const hint = tip ? NAV_HINTS[tip.key] : undefined
   return (
     <nav aria-label={tx('nav.main')} className="px-2 pb-2">
+      {tip && hint && <div id={`${idp}-tip`} role="tooltip" className="nav-tip" style={{ top: tip.top, left: tip.left }}>{t(hint)}</div>}
       <ul>
         {groups.map(g => (
           <li key={g.label} className={collapsed ? 'mt-2 border-t border-hairline pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
             <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{txOr(`nav.group.${g.label}`, g.label)}</p>
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
-                <li key={i.key} className="group relative">
-                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                <li key={i.key} className="group relative" onMouseEnter={e => show(i.key, e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={e => show(i.key, e.currentTarget)} onBlur={() => setTip(null)}>
+                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={tip?.key === i.key ? `${idp}-tip` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>
@@ -191,7 +199,7 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
   return (
     <div className="fixed inset-0 z-50 md:hidden" onKeyDown={keys}>
       <div aria-hidden="true" className="absolute inset-0 bg-ink/50" style={{ animation: 'fade-in 150ms ease-out' }} onClick={onClose} />
-      <div ref={box} role="dialog" aria-modal="true" aria-label={t(SH.menu)} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface shadow-3" style={{ animation: 'drawer-in 160ms ease-out' }}>
+      <div ref={box} role="dialog" aria-modal="true" aria-label={t(SH.menu)} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col glass-pane overflow-y-auto shadow-3" style={{ animation: 'drawer-in 160ms ease-out' }}>
         {children}
       </div>
     </div>
@@ -244,7 +252,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-[70] focus:bg-surface focus:p-3" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }}>{t(SH.skip)}</a>
       <div className="md:flex">
-        <div role="region" aria-label={t(SH.sidebar)} inert={pal || undefined} className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-150 md:flex ${collapsed ? 'w-14' : 'w-58'}`}>
+        <div role="region" aria-label={t(SH.sidebar)} inert={pal || undefined} className={`glass-pane side-pane glass-open sticky top-0 hidden h-screen shrink-0 flex-col border-r transition-[width] duration-150 md:flex ${collapsed ? 'w-14' : 'w-58'}`}>
           <div className={`flex shrink-0 items-center border-b border-hairline ${collapsed ? 'flex-col gap-1 px-1 py-2' : 'h-14 justify-between pl-4 pr-2'}`}>
             <a href="#/home" className="inline-flex min-h-(--control-h) items-center" aria-label={t(SH.home)}>
               {collapsed ? <img src="/brand/laris-mark.png" alt="" className="size-8 object-contain" /> : <Brand dark={dark} />}
@@ -258,7 +266,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
         </div>
 
         <div className="min-w-0 flex-1" inert={drawer || pal || undefined}>
-          <header className="z-30 border-b border-hairline bg-surface md:sticky md:top-0">
+          <header className="glass-pane z-30 border-b md:sticky md:top-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 md:h-14 md:flex-nowrap md:px-6 md:py-0">
               <button ref={menuBtn} type="button" className="btn size-11 px-0 md:hidden" aria-label={t(SH.open)} aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" /></button>
               <span className="shrink-0 md:hidden"><Brand dark={dark} /></span>
@@ -276,9 +284,9 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
               <UserMenu me={me} signedIn={signedIn} loc={hash} />
             </div>
           </header>
-          {MOCK && <div role="region" aria-label="Sample data notice" className="sticky top-0 z-20 flex min-h-7 items-center justify-center bg-surface-2 px-4 text-center text-xs text-warn md:top-14">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</div>}
+          {MOCK && <div role="region" aria-label="Sample data notice" className="sticky top-0 z-20 glass-pane flex min-h-7 items-center justify-center px-4 text-center text-xs text-warn md:top-14">SAMPLE data. Mock mode is on: nothing here is real and nothing is saved to a server.</div>}
           {banner}
-          <main id="main" tabIndex={-1} key={role} className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-6 xl:px-8">{children}</main>
+          <main id="main" tabIndex={-1} key={role} className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-6 xl:px-8">{route === 'home' ? children : <div className="glass-stage">{children}</div>}</main>
         </div>
       </div>
 

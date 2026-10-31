@@ -196,9 +196,9 @@ function Progress({ step }: { step: number }) {
   return (
     <ol aria-label={t(S.progress)} className="flex items-center gap-2 text-xs">
       {STEPS.map((x, i) => (
-        <li key={x.en} aria-current={step === i + 1 ? 'step' : undefined} className="flex flex-1 flex-col gap-1">
+        <li key={x.en} aria-current={step === i + 1 ? 'step' : undefined} className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={`h-1.5 rounded-full ${step >= i + 1 ? 'bg-accent' : 'bg-line'}`} />
-          <span className={step === i + 1 ? 'font-semibold' : 'text-muted'}>{i + 1}. {t(x)}</span>
+          <span className={`truncate ${step === i + 1 ? 'font-semibold' : 'text-muted'}`}>{i + 1}. {t(x)}</span>
         </li>
       ))}
     </ol>

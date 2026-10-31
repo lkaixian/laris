@@ -194,7 +194,7 @@ function Board({ f, me, people }: { f: Filters; me: Me; people: Assignee[] }) {
         {cols.map(([st, title]) => {
           const list = (s.data ?? []).filter(j => j.status === st)
           return (
-            <section key={st} aria-labelledby={`jobs-${st}`} className="min-w-0 rounded-card bg-surface-2 p-2">
+            <section key={st} aria-labelledby={`jobs-${st}`} className="min-w-0 glass-lite p-2">
               <h2 id={`jobs-${st}`} className="mb-2 flex items-baseline gap-2 text-md font-semibold">{title}<span className="text-sm font-normal tabular-nums text-muted">{list.length}</span></h2>
               <ul className="grid gap-2">{list.map(j => <JobCard key={j.id} j={j} people={people} me={me} onChanged={s.reload} />)}</ul>
               {list.length === 0 && <p className="text-sm text-muted">{tx('jobs.nothingHere')}</p>}

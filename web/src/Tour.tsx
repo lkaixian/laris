@@ -130,11 +130,11 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
     setEl(null); setBox(null)
     if (step.route && routeOf(location.hash) !== step.route) location.hash = '#/' + step.route
     if (!step.sel) return
-    let cur: HTMLElement | null = null, miss = 0
+    let cur: HTMLElement | null = null, miss = 0, revealed = false
     const id = setInterval(() => {
       if (!cur || !cur.isConnected) {
         cur = findEl(step.sel!)
-        if (!cur) { if (++miss > 30) { clearInterval(id); if (!step.soft) missing() } return }
+        if (!cur) { if (!revealed && miss > 3) { const b = step.reveal?.(); if (b) { revealed = true; b.click() } } if (++miss > 30) { clearInterval(id); if (!step.soft) missing() } return }
         miss = 0; cur.scrollIntoView({ block: 'center' }); setEl(cur)
       }
       const r = cur.getBoundingClientRect()
@@ -186,7 +186,7 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
   if (narrow) pos = { left: 0, right: 0, bottom: 0 }
   else if (r) pos = { width: W, left: Math.min(Math.max(8, r.x), innerWidth - W - 8),
     top: r.y + r.h + 12 + ch < innerHeight ? r.y + r.h + 12 : r.y - ch - 12 > 8 ? r.y - ch - 12 : Math.max(8, innerHeight - ch - 8) }
-  const dim = 'tour-fade tour-glide fixed z-[80] bg-bg/75'
+  const dim = 'tour-fade tour-glide fixed z-[80] bg-bg/70 backdrop-blur-[6px]'
   const hint = (k: string) => <span aria-hidden="true" className="ml-1 text-xs">({k})</span>
 
   return (

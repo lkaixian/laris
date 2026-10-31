@@ -57,7 +57,7 @@ function FormDialog({ open, title, onClose, children }: { open: boolean; title: 
     if (!open && d.open) d.close()
   }, [open])
   return (
-    <dialog ref={ref} aria-labelledby="fd-title" onCancel={e => { e.preventDefault(); onClose() }} className="m-auto max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-card bg-surface p-5 text-ink shadow-3 backdrop:bg-ink/50">
+    <dialog ref={ref} aria-labelledby="fd-title" onCancel={e => { e.preventDefault(); onClose() }} className="m-auto max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto glass-dialog p-5 text-ink shadow-3 backdrop:bg-ink/50">
       <h2 id="fd-title" className="text-md font-semibold">{title}</h2>
       {open && children}
     </dialog>

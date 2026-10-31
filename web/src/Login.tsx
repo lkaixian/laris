@@ -46,8 +46,8 @@ const rememberBiz = (email: string, id: string) => { try { const m = JSON.parse(
 export function AuthPage({ dark, setDark, children, onBrand }: { dark: boolean; setDark: (d: boolean) => void; children: ReactNode; onBrand?: (e: { preventDefault: () => void }) => void }) {
   useLang()
   return (
-    <main id="main" className="mx-auto grid min-h-screen max-w-md content-center gap-6 px-4 py-8">
-      <div className="auth-head flex items-center justify-between gap-4">
+    <main id="main" className="mx-auto grid min-h-screen max-w-md grid-cols-[minmax(0,1fr)] content-center gap-6 px-4 py-8">
+      <div className="auth-head flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <a href="#/login" aria-label={t(S.goSignIn)} onClick={onBrand} className="inline-flex min-h-11 items-center"><Brand dark={dark} /></a>
         <ThemeToggle dark={dark} setDark={setDark} />
       </div>

@@ -130,3 +130,17 @@ header.bg-surface, aside.bg-surface { border-color: var(--glass-border); }
 .bento-handle:active { cursor: grabbing; }
 .bento-shell[data-dragging] { user-select: none; -webkit-user-select: none; cursor: grabbing; }
 .bento-tray { margin-top: 16px; padding: 14px 16px; border-radius: 18px; background: var(--surface); border: 1px dashed var(--line); }
+
+/* ---- Compatibility with the glass classes upstream added in theme.css (.glass-pane, .glass-lite, .glass-dialog, glass .card, .input, .btn, .toast, ...).
+   They were written for an opaque --surface and mix it with "transparent" (78 to 88 percent). With the frosted --surface that multiplies to roughly
+   55 percent and breaks the contrast tests/test_glass_contrast.py proves. These rules point them at the tested surface instead. Floating things
+   (dialogs, tooltips, toasts, the guide panel) use the firmer --surface-solid. If a new theme.css rule mixes --surface with transparency, add it here
+   (a test counts them and fails until you do). ---- */
+:root[data-theme] .card, :root[data-theme] .glass-lite, :root[data-theme] .glass-stage fieldset { background-color: var(--surface); background-image: var(--glass-highlight); }
+:root[data-theme] .glass-pane::before { background: var(--surface); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter); }
+:root[data-theme] .glass-dialog, :root[data-theme] .nav-tip, :root[data-theme] .toast { background: var(--surface-solid); }
+:root[data-theme] .input { background: var(--surface); }
+:root[data-theme] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-danger) { background-color: var(--surface); background-image: none; }
+:root[data-theme] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-danger):hover { background-color: var(--surface); background-image: linear-gradient(var(--tint), var(--tint)); }
+:root[data-theme] .guide-panel { background: var(--surface-solid) !important; }
+:root[data-theme] .orb-node circle.orb-disc { fill: var(--surface-solid); }

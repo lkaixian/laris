@@ -9,6 +9,7 @@ import { tx } from './strings'
 // to point at leaves the page alone. When the part is not there yet (an empty list) the panel shows an Example of it instead.
 // It closes by itself when you go to another page.
 const EVENT = 'laris:guide'
+const MOVE = { en: 'Move this panel', ms: 'Alih panel ini', zh: '移动此面板', ta: 'இந்த பலகையை நகர்த்து' }
 export const openGuide = (navKey: string) => dispatchEvent(new CustomEvent(EVENT, { detail: navKey }))
 export const hasGuide = (navKey: string) => !!guideFor(navKey)
 
@@ -25,8 +26,10 @@ export function GuidePanel() {
   const [spot, setSpot] = useState<{ top: number; left: number; n: number; hole: { x: number; y: number; w: number; h: number } } | null>(null)
   const [missing, setMissing] = useState(false)  // the step points at something that is not on the screen
   const [glide, setGlide] = useState(false)  // the ring slides to the new part for a moment after a step change, then follows scrolling tightly
+  const [pos, setPos] = useState<'br' | 'bl' | 'tr' | 'tl'>('br')  // which corner the panel sits in: the one that does not cover the ringed part
   const [done, setDone] = useState(false)  // "Try it" clicked: tick shown for a beat before the next step
   const dir = useRef(1)
+  const manual = useRef(false)  // the person moved the panel themselves on this step
   const box = useRef<HTMLElement>(null)
   const lastFocus = useRef<HTMLElement | null>(null)
   const guide = key ? guideFor(key) : null
@@ -58,10 +61,10 @@ export function GuidePanel() {
   // Point at this step's part of the page: scroll it into view, ring it, and put the step number beside it.
   useEffect(() => {
     document.querySelectorAll('.guide-spot').forEach(el => el.classList.remove('guide-spot', 'guide-try'))
-    setDone(false); setGlide(true)
+    manual.current = false; setDone(false); setGlide(true)
     const gt = setTimeout(() => setGlide(false), 700)
     const target = guide?.steps[i]?.target
-    const el = target ? [...document.querySelectorAll<HTMLElement>(`[data-guide="${target}"]`)].find(x => x.offsetParent !== null) : undefined
+    const el = target ? [...document.querySelectorAll<HTMLElement>(`[data-guide="${target}"]`)].find(x => x.getClientRects().length > 0) : undefined
     setMissing(!!target && !el)
     if (!el) { setSpot(null); return () => clearTimeout(gt) }  // otherwise the old ring stays until here, so it can slide to the next part
     el.classList.add('guide-spot')
@@ -72,7 +75,17 @@ export function GuidePanel() {
     el.scrollIntoView({ block: phone ? 'start' : 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     const place = () => {
       const r = el.getBoundingClientRect(), pad = 8
-      setSpot({ top: Math.max(8, r.top - 14), left: Math.max(8, r.left - 14), n: i + 1, hole: { x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 } })
+      // A part taller or wider than the screen is cut to what is on screen, so the mask and the ring never run off it.
+      const x0 = Math.max(4, r.left - pad), y0 = Math.max(4, r.top - pad), x1 = Math.min(innerWidth - 4, r.right + pad), y1 = Math.min(innerHeight - 4, r.bottom + pad)
+      const hole = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) }
+      setSpot({ top: Math.max(8, y0 - 6), left: Math.max(8, x0 - 6), n: i + 1, hole })
+      const p = box.current
+      if (p && !phone) {  // first corner where the panel and the ringed part do not overlap
+        const pw = p.offsetWidth, ph = p.offsetHeight, m = 16
+        const at: Record<string, [number, number]> = { br: [innerWidth - m - pw, innerHeight - 88 - ph], bl: [m, innerHeight - 88 - ph], tr: [innerWidth - m - pw, 72], tl: [m, 72] }
+        const lap = (c: [number, number]) => Math.max(0, Math.min(c[0] + pw, hole.x + hole.w) - Math.max(c[0], hole.x)) * Math.max(0, Math.min(c[1] + ph, hole.y + hole.h) - Math.max(c[1], hole.y))
+        if (!manual.current) setPos((['br', 'bl', 'tr', 'tl'] as const).reduce((b, k) => (lap(at[k]) < lap(at[b]) ? k : b), 'br'))  // the corner that covers the least of it
+      }
     }
     place()
     const t1 = setTimeout(place, 400)
@@ -96,13 +109,16 @@ export function GuidePanel() {
     <>
       {spot && createPortal(<Mask hole={spot.hole} glide={glide} />, document.body)}
       {spot && <span aria-hidden="true" className={`guide-badge ${glide ? 'guide-glide' : ''}`} style={{ top: spot.top, left: spot.left }}>{spot.n}</span>}
-      <section ref={box} role="dialog" aria-modal="false" aria-labelledby="guide-h" className="guide-panel">
+      {createPortal(<section ref={box} role="dialog" aria-modal="false" aria-labelledby="guide-h" className="guide-panel" data-pos={pos}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">{tx('guide.howto')}</p>
             <h2 id="guide-h" tabIndex={-1} className="text-md font-semibold">{t(guide.title)}</h2>
           </div>
+          <span className="flex shrink-0 gap-2">
+          <button type="button" className="btn min-h-9 px-3" title={t(MOVE)} onClick={() => { manual.current = true; setPos(p => (p === 'br' ? 'bl' : p === 'bl' ? 'tl' : p === 'tl' ? 'tr' : 'br')) }}><span aria-hidden="true">&#8644;</span><span className="sr-only">{t(MOVE)}</span></button>
           <button type="button" className="btn min-h-9 px-3" onClick={close}>{tx('as.close')}<span className="sr-only"> {tx('guide.howto')}</span></button>
+          </span>
         </div>
         <ol className="mt-3 flex gap-1" aria-label={tx('guide.progress', i + 1, n)}>
           {guide.steps.map((_, j) => (
@@ -130,7 +146,7 @@ export function GuidePanel() {
             ? <button type="button" className="btn btn-primary" onClick={() => go(i + 1)}>{tx('guide.next')}</button>
             : <button type="button" className="btn btn-primary" onClick={close}>{tx('guide.done')}</button>}
         </div>
-      </section>
+      </section>, document.body)}
     </>
   )
 }

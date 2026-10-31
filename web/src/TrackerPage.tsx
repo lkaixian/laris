@@ -289,10 +289,10 @@ export function TrackerView({ owner, arg }: { owner: boolean; arg?: string }) {
     : filter === 'open' ? { en: 'open customer quotes', ms: 'sebut harga pelanggan terbuka', zh: '未结客户报价', ta: 'திறந்த வாடிக்கையாளர் மேற்கோள்கள்' }
     : { en: `with status ${st}`, ms: `berstatus ${st}`, zh: `状态：${st}`, ta: `நிலை: ${st}` }
   const lane = (key: string, title: string, hint: string, l: DocSummary[], extra: ReactNode, empty: { title: string; hint: string; action?: { label: string; onClick: () => void } }) => (
-    <section aria-labelledby={key} data-guide={`tk-${key.toLowerCase()}`} className="min-w-0">
+    <section aria-labelledby={key} data-guide={`tk-${key.toLowerCase()}`} className="glass-lite min-w-0 p-4">
       <h2 id={key} className="border-b border-hairline pb-2 text-md font-semibold">{title} <span className="text-sm font-normal text-muted">({l.length}) {hint}</span></h2>
       {extra}
-      {l.length ? <ul className="mt-3 divide-y divide-hairline rounded-card border border-hairline bg-surface">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
+      {l.length ? <ul className="mt-3 divide-y divide-hairline glass-lite">{l.map(d => <DocCard key={d.id} d={d} owner={owner} />)}</ul>
         : <div className="mt-3">{filter ? <p className="py-3 text-muted">{t({ en: `No documents ${filterName.en}.`, ms: `Tiada dokumen ${filterName.ms}.`, zh: `没有符合条件的文档（${filterName.zh}）。`, ta: `ஆவணங்கள் இல்லை (${filterName.ta}).` })} <button type="button" className="link" onClick={() => setFilter('')}>{t(S.showAll)}</button></p> : <EmptyState {...empty} />}</div>}
     </section>
   )

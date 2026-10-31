@@ -8,7 +8,7 @@ Status key: **A** drafted, needs native review. **B** reused from existing LARIS
 
 | Key | English | Malay | Chinese | Tamil | Status |
 |---|---|---|---|---|---|
-| system | System | Sistem | 跟随系统 | சாதனம் | A. Tamil: consider "கணினி/சாதன அமைப்பு"; the short word may be too vague |
+| system | Match my device | Ikut peranti saya | 跟随设备 | என் சாதனத்தைப் பின்பற்று | B. Upstream added this same label independently; after the merge the app uses upstream's wording and my "System" draft was dropped |
 | reduceTransparency | Reduce transparency | Kurangkan kelutsinaran | 减少透明效果 | ஒளிஊடுருவலைக் குறைக்கவும் | A |
 | reduceTransparencyHint | Solid panels instead of frosted glass. Also on when your device asks for less transparency. | Panel pepejal, bukan kaca berfros. Turut aktif jika peranti anda meminta kurang kelutsinaran. | 用实色面板代替磨砂玻璃。当设备要求减少透明效果时也会自动启用。 | (see file) | A. "Frosted glass" is a design metaphor: check it reads naturally in each language |
 | liteVisuals | Lite visuals | Visual ringan | 精简视觉效果 | எளிய காட்சிகள் | A |

@@ -488,7 +488,7 @@ function PhotoDialog({ id, showPrice, onClose }: { id?: string; showPrice: boole
   const counts = d ? (['confirmed', 'needs_review', 'discarded'] as const).map(k => [k, d.items.filter(i => i.status === k).length] as const) : []
   return (
     <dialog ref={ref} aria-labelledby="pd-title" onCancel={e => { e.preventDefault(); onClose() }}
-      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-3xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
+      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-3xl glass-dialog p-0 text-ink shadow-3 backdrop:bg-ink/50">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline p-4">
         <div className="min-w-0">
           <h2 id="pd-title" className="text-md font-semibold">{photoFrom(d && when(d.created_at))}</h2>

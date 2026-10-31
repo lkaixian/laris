@@ -1,6 +1,6 @@
 # AUDIT_3DP: what LARIS has today, what the 3D printing edition reuses, what it adds
 
-Audited 2026-10-31 on `master` at `7b0a3bd` (fresh clone of lkaixian/laris). Branch: `feat/3dp-glass-bento`. Corrected the same day after reading `Areas.tsx` and `theme.css` (the first pass of section 3 had missed the existing glass Home).
+Audited 2026-10-31 on `master` at `7b0a3bd`, rebased onto `c63d0c2` (order chain steps 3-4 landed while this work was in progress) (fresh clone of lkaixian/laris). Branch: `feat/3dp-glass-bento`. Corrected the same day after reading `Areas.tsx` and `theme.css` (the first pass of section 3 had missed the existing glass Home).
 
 ## 1. Stack (kept as is)
 
@@ -26,8 +26,8 @@ The brief says the system "stops at Quotation". On current `master` it does not.
 | Proforma (PF) | Done: `deal_docs` kind `proforma`, deposit at `deposit_pct`, one live proforma per order | 3DP default deposit rule (50% custom, 0% small) |
 | Payments and Receipt (RCP) | Done: append-only `payments` with row-lock overpayment guard, receipt auto-issued per payment, reversal rows, AI slip proposal | Spec wants prefix `RCP`; today `RC` (prefix is a tenant setting, so this is data, not code) |
 | Production job | `jobs` has status todo/doing/done, due date, assignee, priority | No printers, no queue, no QC, no stock, no failures. This is the largest gap |
-| Delivery order (DO) | Schema only (`delivery_signatures`, kind `delivery_order`); **no API, no screen** (plan step 3) | Whole feature. Many DOs per order are already allowed in the schema, so partial delivery is possible |
-| Invoice (INV) | Schema kind `invoice`, one live per order; **no API** (plan step 4) | Whole feature: delivered quantities only, deposit credit |
+| Delivery order (DO) | **API done upstream** after this audit began (commit `c63d0c2`, plan step 3: `src/api/delivery.py`, `db/delivery.sql`, tap-to-sign, deposit gate). No screen verified by this work | The brief's partial deliveries, QC gate before a DO, and model/spec lines on the paper |
+| Invoice (INV) | **API done upstream** (`c63d0c2`, plan step 4: invoice, balance receipt, overdue rules). Not exercised by this work | Delivered-quantities-only billing across several DOs, e-invoice preparation fields |
 | Credit note (CN) | Deferred in the plan ("void only") | Brief requires it: add table and kind |
 | Supplier PO and GRN | Not present | New |
 | Public instant-quote page | Not present. The only public pages are accept, signup, landing, status | New |

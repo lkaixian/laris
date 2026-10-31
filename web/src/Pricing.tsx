@@ -6,7 +6,6 @@ import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { SiteFooter, SiteHeader } from './SiteChrome'
 import type { NavItem } from './SiteChrome'
-import { Payback, ROI, ROI_NOTE } from './LandingParts'
 
 // Public pricing page (#/pricing) and service status page (#/service-status). Both work signed out.
 // Prices in RM per business, monthly or yearly, for the plan keys the server knows (starter is sold as LARIS Lite; seats in src/license.py).
@@ -116,7 +115,6 @@ export function Pricing({ dark, setDark }: Props) {
                 <ul className={`grid gap-2 text-sm ${i > 0 ? 'mt-2' : 'mt-4'}`}>
                   {p.pts.map(x => <li key={x.en} className="flex items-start gap-2"><Icon name="check" className="mt-0.5 size-4 text-accent" />{t(x)}</li>)}
                 </ul>
-                <div className="mt-5"><Payback p={ROI[p.key]} price={PRICE.month[p.key]} /></div>
                 <div className="mt-auto pt-6">
                   {mine
                     ? <a className="btn w-full" aria-disabled="true" href="#/licence">{t(S.current)}</a>
@@ -127,7 +125,6 @@ export function Pricing({ dark, setDark }: Props) {
           })}
         </ul>
         <p className="mt-6 text-sm text-muted">{t(S.indicative)}</p>
-        <p className="mt-2 text-sm text-muted">{t(ROI_NOTE)}</p>
         <p className="mt-2 text-sm text-muted">{t(S.more)}</p>
       </main>
       <SiteFooter dark={dark} />

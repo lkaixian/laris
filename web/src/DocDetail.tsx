@@ -92,6 +92,7 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
   // The total follows what is typed, so a price per 100g with a quantity in kg shows up at once (5 x RM8.00 per 100g is RM40.00, not 5 kg of it).
   const nQty = Number(qty), nPrice = Number(priceEdit ? price : l.unit_price ?? ''), disc = Number(l.discount_pct ?? 0)
   const total = qty !== '' && Number.isFinite(nQty) && l.unit_price !== null && Number.isFinite(nPrice) ? nQty * nPrice * (1 - disc / 100) : null
+  const [draft, setDraft] = useState<string | null>(null)  // the line total while it is being typed
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const errId = `line-err-${l.id}`
@@ -127,7 +128,10 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
       <td className="num">{!showPrice ? <span className="text-muted">{t(S.hidden)}</span>
         : priceEdit ? <input className="input w-28" type="number" min="0" step="any" inputMode="decimal" aria-label={t({ en: `Unit cost for line ${l.line_no}`, ms: `Kos seunit untuk baris ${l.line_no}`, zh: `第 ${l.line_no} 行的单位成本`, ta: `வரி ${l.line_no} இன் அலகு செலவு` })} value={price} onChange={e => setPrice(e.target.value)} {...bad} />
         : rm(l.unit_price)}</td>
-      <td className="num">{showPrice && total !== null ? <><span className="font-semibold tabular-nums">{rm(total.toFixed(2))}</span><span className="block text-xs text-muted tabular-nums">{nQty} × {rm(nPrice.toFixed(2))} {t(S.perUnit)} {uom || l.uom}</span></> : <span className="text-muted">–</span>}</td>
+      <td className="num">{showPrice && total !== null ? <>{priceEdit && nQty > 0
+          ? <input className="input w-28 font-semibold" type="number" min="0" step="any" inputMode="decimal" aria-label={`Line total for line ${l.line_no}: sets the unit price from the quantity`} value={draft ?? total.toFixed(2)}
+              onChange={e => { setDraft(e.target.value); const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setPrice(String(+(v / (nQty * (1 - disc / 100))).toFixed(6))) }} onBlur={() => setDraft(null)} />
+          : <span className="font-semibold tabular-nums">{rm(total.toFixed(2))}</span>}<span className="block text-xs text-muted tabular-nums">{nQty} × {rm(nPrice.toFixed(2))} {t(S.perUnit)} {uom || l.uom}</span></> : <span className="text-muted">–</span>}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
       {editable && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? t(S.saving) : t({ en: `Save line ${l.line_no}`, ms: `Simpan baris ${l.line_no}`, zh: `保存第 ${l.line_no} 行`, ta: `வரி ${l.line_no} ஐச் சேமி` })}</button></td>}
     </tr>

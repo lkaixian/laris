@@ -29,12 +29,12 @@ export function CountUp({ value, format = n => Math.round(n).toLocaleString(loca
 }
 
 // One bento cell. A link when `href` is set (the whole tile is the target), else a plain section.
-// `order` staggers the entry animation; `hero` is the solid-accent tile (one per page).
-export function Tile({ href, label, order = 0, hero, className = '', children }: {
+// `order` staggers the entry animation by hand; leave it out inside the bento shell, whose cell sets the stagger. `hero` is the solid-accent tile (one per page).
+export function Tile({ href, label, order, hero, className = '', children }: {
   href?: string; label?: string; order?: number; hero?: boolean; className?: string; children: ReactNode
 }) {
   const cls = `tile ${hero ? 'tile-hero' : ''} ${href ? 'tile-link' : ''} ${className}`
-  const style = { '--d': `${order * 50}ms` } as CSSProperties
+  const style = order === undefined ? undefined : ({ '--d': `${order * 50}ms` } as CSSProperties)
   return href
     ? <a href={href} className={cls} style={style}>{children}</a>
     : <section aria-label={label} className={cls} style={style}>{children}</section>

@@ -1,0 +1,63 @@
+# 3D printing edition: every number the price engine uses. SAMPLE (invented): synthetic starting values, not real prices.
+# The owner edits these in Settings (later); the engine reads only this file, so nothing is hidden in code. Money is RM.
+currency: MYR
+target_margin_pct: 40          # price = cost / (1 - this)
+margin_floor_pct: 25           # below this the quote is flagged and needs an approver
+estimate_accuracy_pct: 20      # print time and weight are estimates; the UI says "about plus or minus this much"
+
+wall_mm: 1.2                   # solid outer shell thickness (three 0.4 mm perimeters)
+support_fraction: 0.15          # extra material, as a share of the part, when supports are on
+failure_buffer_pct: 5          # spoiled prints, charged as a share of material and machine cost
+setup_minutes: 10              # per job: slice, load, first-layer check
+labour_rate_hour: 20
+design_rate_hour: 60
+min_order_charge: 15           # the smallest order price (before tax)
+packaging: {pickup: 0.00, courier: 3.50}      # per order
+quantity_tiers:                # percent off the price, by how many are ordered
+  - {min_qty: 1, pct: 0}
+  - {min_qty: 5, pct: 5}
+  - {min_qty: 10, pct: 8}
+  - {min_qty: 25, pct: 12}
+  - {min_qty: 50, pct: 15}
+rush:                          # price multiplier and the days it takes
+  standard: {multiplier: 1.00, label_days: 5}
+  rush: {multiplier: 1.25, label_days: 2}
+  express: {multiplier: 1.50, label_days: 1}
+sst: {enabled: false, rate_pct: 8}
+rounding: five_sen             # Malaysian 5-sen rounding of the final total; `none` to turn it off
+approvals:
+  quote_value_above: 1000      # a manager or owner approves quotes above this total
+  discount_pct_above: 10       # ...and any discount above this percent
+loyalty_max_pct: 30            # the most a loyalty discount may be set to at all
+
+print_time:
+  reference_layer_mm: 0.2      # material flow rates below are quoted at this layer height
+  layer_overhead_s: 5          # seconds per layer for moves, retraction and cooling
+  support_time_factor: 0.20    # supports add this share to print time
+  warmup_hours: 0.15           # heat-up and first layer, once per plate
+  plate_fill: 0.70             # share of the bed that can be used when packing copies of one part
+  max_per_plate: 24
+
+materials:
+  pla:   {name: PLA,   technology: fdm, density: 1.24, price_per_kg: 75,  waste_pct: 3, flow_mm3_s: 12, spool_g: 1000, layer_heights: [0.1, 0.2, 0.3], colours: [white, black, grey, red, blue, green, orange]}
+  petg:  {name: PETG,  technology: fdm, density: 1.27, price_per_kg: 85,  waste_pct: 4, flow_mm3_s: 10, spool_g: 1000, layer_heights: [0.1, 0.2, 0.3], colours: [clear, white, black, blue]}
+  abs:   {name: ABS,   technology: fdm, density: 1.04, price_per_kg: 80,  waste_pct: 6, flow_mm3_s: 10, spool_g: 1000, layer_heights: [0.1, 0.2, 0.3], colours: [white, black, grey]}
+  asa:   {name: ASA,   technology: fdm, density: 1.07, price_per_kg: 100, waste_pct: 6, flow_mm3_s: 10, spool_g: 1000, layer_heights: [0.1, 0.2, 0.3], colours: [white, black, grey]}
+  tpu:   {name: TPU,   technology: fdm, density: 1.21, price_per_kg: 120, waste_pct: 5, flow_mm3_s: 4,  spool_g: 1000, layer_heights: [0.2, 0.3], colours: [black, white, red]}
+  nylon: {name: Nylon, technology: fdm, density: 1.14, price_per_kg: 180, waste_pct: 8, flow_mm3_s: 8,  spool_g: 1000, layer_heights: [0.2, 0.3], colours: [natural, black]}
+  resin_standard: {name: Resin (standard), technology: sla, density: 1.10, price_per_kg: 150, waste_pct: 10, sla_layer_s: 9, spool_g: 1000, layer_heights: [0.05, 0.1], colours: [grey, clear, white]}
+  resin_tough:    {name: Resin (tough),    technology: sla, density: 1.15, price_per_kg: 190, waste_pct: 10, sla_layer_s: 11, spool_g: 1000, layer_heights: [0.05, 0.1], colours: [grey, black]}
+
+printers:                      # generic names on purpose: no brands
+  printer_a: {name: Printer A, technology: fdm, build_mm: [220, 220, 250], rate_hour: 4.00, materials: [pla, petg, tpu]}
+  printer_b: {name: Printer B, technology: fdm, build_mm: [220, 220, 250], rate_hour: 4.00, materials: [pla, petg]}
+  printer_c: {name: Printer C, technology: fdm, build_mm: [300, 300, 340], rate_hour: 5.50, materials: [pla, petg, abs, asa, nylon]}
+  printer_d: {name: Printer D, technology: fdm, build_mm: [256, 256, 256], rate_hour: 4.50, materials: [pla, petg, abs, asa, tpu]}
+  printer_e: {name: Printer E (resin), technology: sla, build_mm: [192, 120, 200], rate_hour: 6.00, materials: [resin_standard, resin_tough]}
+  printer_f: {name: Printer F (resin), technology: sla, build_mm: [143, 89, 175], rate_hour: 5.00, materials: [resin_standard]}
+
+finishing:                     # minutes of hand work per piece: a fixed part plus a part that grows with surface area
+  sanding:  {name: Sanding,  minutes_base: 10, minutes_per_100cm2: 6, consumable_per_100cm2: 0.20}
+  priming:  {name: Priming,  minutes_base: 8,  minutes_per_100cm2: 4, consumable_per_100cm2: 0.80}
+  painting: {name: Painting, minutes_base: 15, minutes_per_100cm2: 8, consumable_per_100cm2: 1.20}
+  vapour:   {name: Vapour smoothing, minutes_base: 20, minutes_per_100cm2: 2, consumable_per_100cm2: 0.50}

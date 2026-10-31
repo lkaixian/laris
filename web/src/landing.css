@@ -1,0 +1,45 @@
+/* Public homepage animations (LandingParts.tsx). Every one of them ends in the finished, readable picture, so with prefers-reduced-motion
+   (theme.css switches all animation and transition off) a visitor simply sees the final state. */
+.lp-hero { position: relative; isolation: isolate; overflow: hidden; }
+.lp-blob { position: absolute; z-index: -1; border-radius: 9999px; filter: blur(70px); opacity: .5; pointer-events: none; animation: lp-drift 16s ease-in-out infinite alternate; }
+.lp-blob.a { width: 26rem; height: 26rem; left: -8rem; top: -6rem; background: color-mix(in srgb, var(--accent) 38%, transparent); }
+.lp-blob.b { width: 22rem; height: 22rem; right: -6rem; top: 4rem; background: color-mix(in srgb, var(--accent) 22%, #7c5cff); animation-delay: -6s; }
+@keyframes lp-drift { to { transform: translate3d(36px, 24px, 0) scale(1.1); } }
+.lp-grad { background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #7c5cff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lp-float { animation: lp-float 7s ease-in-out infinite; }
+@keyframes lp-float { 50% { transform: translateY(-6px); } }
+
+/* Hero demo: each piece fades up when its step is reached. */
+.lp-step { transition: opacity .55s ease, transform .55s cubic-bezier(.2, .8, .2, 1); }
+.lp-step[data-on="false"] { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+.lp-typing > span { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 9999px; background: currentColor; animation: lp-bounce 1s ease-in-out infinite; }
+.lp-typing > span:nth-child(2) { animation-delay: .15s; }
+.lp-typing > span:nth-child(3) { animation-delay: .3s; }
+@keyframes lp-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+.lp-pulse { animation: lp-pulse 1.7s ease-out infinite; }
+@keyframes lp-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.lp-bar { transition: width 1.1s cubic-bezier(.2, .8, .2, 1); }
+.lp-chip { transition: opacity .4s ease, transform .4s ease; }
+.lp-chip[data-on="false"] { opacity: 0; transform: scale(.85); }
+
+/* Journey: nodes light up in turn along a line that fills as the order moves on. */
+.lp-node { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 9999px; border: 2px solid var(--hairline); background: var(--surface); color: var(--muted);
+  transition: background .4s ease, color .4s ease, border-color .4s ease, transform .4s cubic-bezier(.2, .8, .2, 1); position: relative; z-index: 1; }
+.lp-node[data-s="done"] { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); color: var(--accent); }
+.lp-node[data-s="now"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); transform: scale(1.14); animation: lp-pulse 1.7s ease-out infinite; }
+.lp-line { transition: width .8s cubic-bezier(.2, .8, .2, 1); }
+.lp-pop { animation: lp-pop .5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes lp-pop { from { opacity: 0; transform: translateY(10px); } }
+.lp-flow { stroke-dasharray: 6 8; animation: lp-dash 1.2s linear infinite; }
+@keyframes lp-dash { to { stroke-dashoffset: -14; } }
+
+/* Pricing cards lift on hover; the middle one sits a little higher on wide screens. */
+.lp-plan { transition: transform .3s cubic-bezier(.2, .8, .2, 1), box-shadow .3s ease, border-color .3s ease; }
+.lp-plan:hover { transform: translateY(-4px); border-color: var(--accent); }
+@media (min-width: 768px) { .lp-plan.mid { transform: translateY(-8px); } .lp-plan.mid:hover { transform: translateY(-12px); } }
+
+/* Ribbon of what LARIS does all day; and the little "deposit recorded" notice that pops over the hero demo. */
+.lp-marquee { animation: lp-marquee 55s linear infinite; }
+@keyframes lp-marquee { to { transform: translateX(-50%); } }
+.lp-ticker { mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.lp-toast[data-on="true"] { animation: lp-float 4s ease-in-out infinite; }

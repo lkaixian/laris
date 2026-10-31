@@ -7,6 +7,7 @@ import { t, useLang } from './i18n'
 import { SiteFooter, SiteHeader } from './SiteChrome'
 import type { NavItem } from './SiteChrome'
 import { TradeOrbit } from './TradeOrbit'
+import { Journey, JOURNEY_TITLE, P, PriceBuild, Ticker } from './LandingParts'
 import type { Text } from './i18n'
 
 // Public homepage for signed-out visitors (#/welcome, and the bare address). Same section order as the CLARION site: hero, flow, tour, modules, audiences, privacy, footer.
@@ -88,7 +89,7 @@ const S = {
   ctaH: { en: 'Ready to quote faster?', ms: 'Sedia untuk beri sebut harga lebih pantas?', zh: '准备好更快报价了吗？' },
 }
 
-const SECTIONS = [['how', S.nHow], ['tour', S.nTour], ['modules', S.nMods], ['who', S.nWho], ['privacy', S.nPriv]] as const
+const SECTIONS = [['journey', P.nJourney], ['how', S.nHow], ['tour', S.nTour], ['modules', S.nMods], ['who', S.nWho], ['privacy', S.nPriv]] as const
 const NAV: NavItem[] = [...SECTIONS.map(([id, label]) => ({ id, label, href: '#' + id })), { id: 'pricing', label: S.nPrice, href: '#/pricing' }]
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -288,10 +289,17 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
           <EnquiryDemo />
         </section>
 
+        <Ticker />
+
         <section id="loop" className={sec} aria-labelledby="loop-h">
           <h2 id="loop-h" className="text-2xl font-bold">{t(LOOP.h)}</h2>
           <p className="mt-2 max-w-2xl text-muted">{t(LOOP.p)}</p>
           <div className="glass-lite mt-6 p-4"><TradeOrbit story /></div>
+        </section>
+
+        <section id="journey" className={sec} aria-labelledby="journey-h">
+          <h2 id="journey-h" className="text-xl font-semibold md:text-2xl">{t(JOURNEY_TITLE)}</h2>
+          <Journey />
         </section>
 
         <section id="how" className={sec} aria-labelledby="how-h">
@@ -305,6 +313,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
               </li>
             ))}
           </ol>
+          <PriceBuild />
         </section>
 
         <section id="tour" className={sec} aria-labelledby="tour-h">

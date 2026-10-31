@@ -6,12 +6,14 @@ import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { SiteFooter, SiteHeader } from './SiteChrome'
 import type { NavItem } from './SiteChrome'
+import { Payback, ROI, ROI_NOTE } from './LandingParts'
 
 // Public pricing page (#/pricing) and service status page (#/service-status). Both work signed out.
-// Prices in RM per year, per business, for the plan keys the server knows (starter is sold as LARIS Lite; seats in src/license.py).
-// The server's /license/plans still answers "Contact us"; change PRICE here and nowhere else.
-const PRICE = { starter: 299, standard: 599, pro: 999 } as const
-type Key = keyof typeof PRICE
+// Prices in RM per business, monthly or yearly, for the plan keys the server knows (starter is sold as LARIS Lite; seats in src/license.py).
+// Yearly is the monthly price with a zero added (ten months' price for twelve). The server's /license/plans still answers "Contact us"; change PRICE here and nowhere else.
+const PRICE = { month: { starter: 59, standard: 189, pro: 499 }, year: { starter: 590, standard: 1890, pro: 4990 } } as const
+type Key = keyof typeof PRICE.month
+type Per = keyof typeof PRICE
 
 const S = {
   navHome: { en: 'Home', ms: 'Utama', zh: '首页' },
@@ -19,8 +21,10 @@ const S = {
   navStatus: { en: 'Service status', ms: 'Status perkhidmatan', zh: '服务状态' },
   h1: { en: 'One price per business, not per quote', ms: 'Satu harga setiap perniagaan, bukan setiap sebut harga', zh: '按企业收费，不按报价次数' },
   lead: { en: 'Pick the number of seats your team needs. Every plan includes quoting from chat, rules-based pricing, the margin guard and the tracker.', ms: 'Pilih bilangan tempat untuk pasukan anda. Setiap pelan termasuk sebut harga dari sembang, harga berasaskan peraturan, pelindung margin dan penjejak.', zh: '按团队需要的席位数选择。每个套餐都包含聊天报价、规则定价、利润保护和追踪。' },
-  indicative: { en: 'Prices in MYR per year, per business, before SST.', ms: 'Harga dalam MYR setahun, setiap perniagaan, sebelum SST.', zh: '价格为每家企业每年的马币价格，未含 SST。' },
-  month: { en: '/ year', ms: '/ tahun', zh: '/ 年' },
+  indicative: { en: 'Prices in MYR, per business, before SST.', ms: 'Harga dalam MYR, setiap perniagaan, sebelum SST.', zh: '价格为每家企业的马币价格，未含 SST。' },
+  month: { en: '/ month', ms: '/ bulan', zh: '/ 月' }, year: { en: '/ year', ms: '/ tahun', zh: '/ 年' },
+  billing: { en: 'Billing period', ms: 'Tempoh bil', zh: '计费周期' }, monthly: { en: 'Monthly', ms: 'Bulanan', zh: '按月' }, yearly: { en: 'Yearly', ms: 'Tahunan', zh: '按年' },
+  free2: { en: '2 months free', ms: '2 bulan percuma', zh: '送 2 个月' }, yearNote: { en: 'Yearly is ten months’ price for twelve.', ms: 'Tahunan ialah harga sepuluh bulan untuk dua belas bulan.', zh: '按年付款：付 10 个月的钱，用 12 个月。' },
   seats: (n: number): Text => ({ en: `${n} seats`, ms: `${n} tempat`, zh: `${n} 个席位` }),
   current: { en: 'Your current plan', ms: 'Pelan semasa anda', zh: '您当前的套餐' },
   upgrade: { en: 'Upgrade to this plan', ms: 'Naik taraf ke pelan ini', zh: '升级到此套餐' },
@@ -79,6 +83,7 @@ export function Pricing({ dark, setDark }: Props) {
     document.title = 'LARIS · ' + t(S.navPricing)
     if (signedIn) api<License>('GET', '/license').then(setLic, () => setLic(null))
   }, [signedIn])
+  const [per, setPer] = useState<Per>('month')
   const cur = lic?.plan ?? null
   const curIdx = PLANS.findIndex(p => p.key === cur)
   return (
@@ -87,6 +92,14 @@ export function Pricing({ dark, setDark }: Props) {
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 py-12 outline-none md:py-16">
         <h1 className="text-3xl font-bold md:text-4xl">{t(S.h1)}</h1>
         <p className="mt-4 max-w-2xl text-md text-muted">{t(S.lead)}</p>
+        <div role="radiogroup" aria-label={t(S.billing)} className="mt-6 inline-flex rounded-full border border-hairline bg-surface p-1">
+          {(['month', 'year'] as const).map(k => (
+            <button key={k} type="button" role="radio" aria-checked={per === k} onClick={() => setPer(k)}
+              className={`min-h-10 rounded-full px-5 text-sm font-semibold transition-colors ${per === k ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'}`}>
+              {t(k === 'month' ? S.monthly : S.yearly)}{k === 'year' && <span className={`ml-2 text-xs ${per === k ? 'opacity-90' : 'text-accent'}`}>{t(S.free2)}</span>}
+            </button>
+          ))}
+        </div>
         {signedIn && lic && curIdx < 0 && <p role="status" className="card mt-6 text-sm">{t(S.none)}</p>}
         <ul className="mt-8 grid gap-4 md:grid-cols-3">
           {PLANS.map((p, i) => {
@@ -96,12 +109,14 @@ export function Pricing({ dark, setDark }: Props) {
               <li key={p.key} className={`card relative flex flex-col ${mine ? 'border-2 border-accent' : p.pop && curIdx < 0 ? 'border-accent' : ''}`}>
                 {(mine || (p.pop && curIdx < 0)) && <span className="badge absolute right-4 top-4">{t(mine ? S.current : S.popular)}</span>}
                 <h2 className="text-lg font-semibold">{p.name}</h2>
-                <p className="mt-2"><span className="text-3xl font-bold tabular-nums">RM {PRICE[p.key]}</span> <span className="text-muted">{t(S.month)}</span></p>
+                <p className="mt-2"><span className="text-3xl font-bold tabular-nums">RM {PRICE[per][p.key].toLocaleString('en-MY')}</span> <span className="text-muted">{t(per === 'month' ? S.month : S.year)}</span></p>
+                {per === 'year' && <p className="mt-1 text-xs text-accent">{t(S.yearNote)}</p>}
                 <p className="mt-1 text-sm font-semibold text-accent">{t(S.seats(p.seats))}</p>
                 {i > 0 && <p className="mt-4 text-sm text-muted">{t(S.upsHint)}</p>}
                 <ul className={`grid gap-2 text-sm ${i > 0 ? 'mt-2' : 'mt-4'}`}>
                   {p.pts.map(x => <li key={x.en} className="flex items-start gap-2"><Icon name="check" className="mt-0.5 size-4 text-accent" />{t(x)}</li>)}
                 </ul>
+                <div className="mt-5"><Payback p={ROI[p.key]} price={PRICE.month[p.key]} /></div>
                 <div className="mt-auto pt-6">
                   {mine
                     ? <a className="btn w-full" aria-disabled="true" href="#/licence">{t(S.current)}</a>
@@ -112,6 +127,7 @@ export function Pricing({ dark, setDark }: Props) {
           })}
         </ul>
         <p className="mt-6 text-sm text-muted">{t(S.indicative)}</p>
+        <p className="mt-2 text-sm text-muted">{t(ROI_NOTE)}</p>
         <p className="mt-2 text-sm text-muted">{t(S.more)}</p>
       </main>
       <SiteFooter dark={dark} />

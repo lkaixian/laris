@@ -98,7 +98,7 @@ const Step = ({ n, label, state, href, hint }: { n: number; label: string; state
   const inner = <>{label}<span className="sr-only"> ({TT(state)})</span></>
   const cls = `chip ${state === 'done' ? 'chip-approved' : state === 'now' ? 'chip-accepted' : 'chip-draft'}`
   return <li className="flex items-center gap-1">{n > 1 && <span aria-hidden="true" className="text-muted">&rarr;</span>}
-    {href ? <a href={href} className={cls} aria-current={state === 'now' ? 'step' : undefined}>{inner}</a> : <span className={cls} title={hint} aria-current={state === 'now' ? 'step' : undefined}>{inner}</span>}</li>
+    {href ? <a href={href} className={`${cls} min-h-11`} aria-current={state === 'now' ? 'step' : undefined}>{inner}</a> : <span className={cls} title={hint} aria-current={state === 'now' ? 'step' : undefined}>{inner}</span>}</li>
 }
 
 function PayForm({ c, purpose, run }: { c: Chain; purpose: 'deposit' | 'balance'; run: Run }) {

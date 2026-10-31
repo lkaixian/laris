@@ -1,3 +1,4 @@
+import { DealsView } from './Deals'
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ReactNode } from 'react'
@@ -45,6 +46,7 @@ import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, H
 import type { Heat } from './ui'
 import type { Role, Me, Alert, Followup, MarginReport, Settings, Proposal } from './api'
 
+const pref = (): 'light' | 'dark' | 'system' => { try { const v = localStorage.getItem('theme'); return v === 'light' || v === 'dark' ? v : 'system' } catch { return 'system' } }
 const S = {
   last7: { en: 'Last 7 days', ms: '7 hari lepas', zh: '最近 7 天', ta: 'கடந்த 7 நாட்கள்' },
   noQuotes7: { en: 'No quotes were created in the last 7 days.', ms: 'Tiada sebut harga dibuat dalam 7 hari lepas.', zh: '最近 7 天没有创建报价。', ta: 'கடந்த 7 நாட்களில் எந்த மேற்கோளும் உருவாக்கப்படவில்லை.' },
@@ -59,6 +61,7 @@ const S = {
   appearance: { en: 'Appearance', ms: 'Penampilan', zh: '外观', ta: 'தோற்றம்' },
   theme: { en: 'Theme', ms: 'Tema', zh: '主题', ta: 'தீம்' },
   light: { en: 'Light', ms: 'Cerah', zh: '浅色', ta: 'ஒளி' },
+  system: { en: 'Match my device', ms: 'Ikut peranti saya', zh: '跟随设备', ta: 'என் சாதனத்தைப் பின்பற்று' },
   dark: { en: 'Dark', ms: 'Gelap', zh: '深色', ta: 'இருண்டது' },
   remembered: { en: 'Remembered on this device.', ms: 'Diingati pada peranti ini.', zh: '会记住在此设备上。', ta: 'இந்தச் சாதனத்தில் நினைவில் வைக்கப்படும்.' },
   settings: { en: 'Settings', ms: 'Tetapan', zh: '设置', ta: 'அமைப்புகள்' },
@@ -167,9 +170,10 @@ function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) =>
       </fieldset>
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
         <legend className="px-1 text-sm font-semibold">{t(S.appearance)}</legend>
-        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-2 gap-2 sm:max-w-xs">
-          {([[S.light, false], [S.dark, true]] as const).map(([n, d]) => <button key={n.en} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={dark === d}
-            onClick={() => { document.documentElement.dataset.theme = d ? 'dark' : 'light'; try { localStorage.setItem('theme', d ? 'dark' : 'light') } catch { /* storage blocked: lasts for this visit */ } setDark(d) }}>{t(n)}</button>)}
+        <div role="group" aria-label={t(S.theme)} data-dark={String(dark)} className="grid grid-cols-3 gap-2 sm:max-w-md">
+          {([[S.light, 'light'], [S.dark, 'dark'], [S.system, 'system']] as const).map(([n, m]) => <button key={m} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={pref() === m}
+            onClick={() => { const eff = m === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : m; document.documentElement.dataset.theme = eff
+              try { if (m === 'system') localStorage.removeItem('theme'); else localStorage.setItem('theme', m) } catch { /* storage blocked: lasts for this visit */ } setDark(eff === 'dark') }}>{t(n)}</button>)}
         </div>
         <p className="text-sm text-muted">{t(S.remembered)}</p>
       </fieldset>
@@ -417,6 +421,7 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   search: { render: c => <SearchView q={safeDecode(c.arg)} /> },
   track: { render: () => <TrackView /> },
   jobs: { render: c => <JobsView me={c.me} /> },
+  deals: { render: c => <DealsView owner={c.owner} arg={c.arg} /> },
   settings: { render: c => <SettingsView owner={c.owner} dark={c.dark} setDark={c.setDark} /> },
   team: { render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   privacy: { render: () => <PrivacyView /> },

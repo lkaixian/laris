@@ -164,7 +164,7 @@ export function AreaBento({ d, owner }: { d: AreaData; owner: boolean }) {
           ]} />
           {(n(d.jobs_overdue) > 0 || n(tr.overdue) > 0) && <p className="mt-3 flex flex-wrap gap-2 text-sm">
             {n(d.jobs_overdue) > 0 && <a className="chip heat-stale" href="#/jobs?overdue">{t({ en: `${d.jobs_overdue} overdue ${d.jobs_overdue === 1 ? 'job' : 'jobs'}`, ms: `${d.jobs_overdue} kerja lewat tempoh`, zh: `${d.jobs_overdue} 个逾期工单`, ta: `${d.jobs_overdue} காலம் கடந்த வேலைகள்` })}</a>}
-            {n(tr.overdue) > 0 && <a className="chip heat-late" href="#/track?overdue=1">{t({ en: `${tr.overdue} overdue on Track`, ms: `${tr.overdue} lewat tempoh di Jejak`, zh: `进度中 ${tr.overdue} 项逾期`, ta: `நிலையில் ${tr.overdue} காலம் கடந்தவை` })}</a>}
+            {n(tr.overdue) > 0 && <a className="chip heat-late" href="#/track?overdue=1">{t({ en: `${tr.overdue} overdue on Schedule`, ms: `${tr.overdue} lewat tempoh di Jadual`, zh: `日程中 ${tr.overdue} 项逾期`, ta: `அட்டவணையில் ${tr.overdue} காலம் கடந்தவை` })}</a>}
           </p>}
         </section>
 

@@ -12,7 +12,7 @@ import { t, useLang } from './i18n'
 // the count text carries the meaning. A tile without href is plain text. `cols` overrides the grid-cols classes.
 export function StatStrip({ label, cols = 'grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))]', children }: { label: string; cols?: string; children: ReactNode }) {
   return (
-    <section aria-label={label} className={`grid ${cols} overflow-hidden rounded-card border border-hairline bg-surface`}>{children}</section>
+    <section aria-label={label} className={`grid ${cols} overflow-hidden glass-lite`}>{children}</section>
   )
 }
 export function StatTile({ title, value, href, hint, warn }: { title: string; value: number | string; href?: string; hint?: string; warn?: boolean }) {
@@ -74,7 +74,7 @@ export function FilterBar({ label, search, children, right, chips, onClear }: {
 }) {
   return (
     <div className="mb-4">
-      <form role="search" aria-label={label} onSubmit={e => e.preventDefault()} className="flex flex-wrap items-center gap-2 rounded-card border border-hairline bg-surface-2 p-2">
+      <form role="search" aria-label={label} onSubmit={e => e.preventDefault()} className="flex flex-wrap items-center gap-2 glass-lite-2 p-2">
         {search && <input type="search" className="input min-w-[220px] flex-1" maxLength={100} placeholder={search.label} aria-label={search.label} value={search.value} onChange={e => search.onChange(e.target.value)} />}
         {children}
         {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
@@ -105,11 +105,11 @@ export function ToggleChip({ pressed, onClick, children, warn }: { pressed: bool
 // Tab strip with an underline for the selected tab (and bold text: never colour alone). Counts are optional.
 export function Tabs({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string; count?: number }[]; onChange: (v: string) => void }) {
   return (
-    <div role="group" aria-label={label} className="mb-3 flex max-w-full gap-4 overflow-x-auto border-b border-hairline">
+    <div role="group" aria-label={label} className="glass-lite mb-4 inline-flex max-w-full gap-1 overflow-x-auto rounded-full p-1">
       {options.map(o => (
         <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}
-          className={`-mb-px inline-flex min-h-(--control-h) shrink-0 items-center gap-1.5 border-b-2 px-1 text-sm hover:text-ink ${value === o.value ? 'border-accent font-semibold text-ink' : 'border-transparent text-muted'}`}>
-          {o.label}{o.count != null && <span className="tabular-nums text-muted">{o.count}</span>}
+          className={`inline-flex min-h-(--control-h-sm) shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm ${value === o.value ? 'bg-accent font-semibold text-on-accent' : 'text-ink-2 hover:bg-tint hover:text-ink'}`}>
+          {o.label}{o.count != null && <span className={`tabular-nums ${value === o.value ? 'text-on-accent' : 'text-muted'}`}>{o.count}</span>}
         </button>
       ))}
     </div>
@@ -152,7 +152,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, danger, onConfi
     if (!open && d.open) d.close()
   }, [open, danger])
   return (
-    <dialog ref={ref} aria-labelledby="cd-title" onCancel={e => { e.preventDefault(); onCancel() }} className="m-auto w-[calc(100%-2rem)] max-w-[440px] rounded-card bg-surface p-5 text-ink shadow-3 backdrop:bg-ink/50">
+    <dialog ref={ref} aria-labelledby="cd-title" onCancel={e => { e.preventDefault(); onCancel() }} className="m-auto w-[calc(100%-2rem)] max-w-[440px] glass-dialog p-5 text-ink shadow-3 backdrop:bg-ink/50">
       <h2 id="cd-title" className="text-md font-semibold">{title}</h2>
       <div className="mt-2 text-base text-ink-2">{body}</div>
       <div className="mt-5 flex justify-end gap-2">

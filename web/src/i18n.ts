@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 // Four languages: English, Bahasa Melayu, Chinese (simplified, as used in Malaysia) and Tamil.
 // Older text pairs carry only { en, ms }: in Chinese or Tamil they show in English until someone adds zh and ta.
-// The shell, menus, status labels and the Jobs, Follow-ups, Track, Activity and Assistant screens are fully translated (strings.ts).
+// The shell, menus, status labels and the Jobs, Follow-ups, Schedule, Activity and Assistant screens are fully translated (strings.ts).
 export type Lang = 'en' | 'ms' | 'zh' | 'ta'
 export interface Text { en: string; ms: string; zh?: string; ta?: string }
 export const LANGS: [Lang, string, string][] = [['en', 'English', 'en-MY'], ['ms', 'Bahasa Melayu', 'ms-MY'], ['zh', '中文', 'zh-Hans-MY'], ['ta', 'தமிழ்', 'ta-MY']]

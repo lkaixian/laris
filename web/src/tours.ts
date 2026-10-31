@@ -17,6 +17,8 @@ export interface Step {
   /** "Do it" step: moves on when the person opens this route, or clicks the highlighted element. */
   doRoute?: string
   doClick?: boolean
+  /** Click this once when the target is not on screen yet (a tab that is not open, say). */
+  reveal?: () => HTMLElement | null | undefined
   /** Show the card centred instead of skipping the step when the target is missing. */
   soft?: boolean
   /** Permission the person must hold, else the step is dropped. */
@@ -50,6 +52,7 @@ const OWNER: Step[] = [
     body: { en: 'Click Settings. Set your business name, logo, margin floor and the details printed on your quotes.',
       ms: 'Klik Tetapan. Tetapkan nama perniagaan, logo, margin minimum dan butiran yang dicetak pada sebut harga anda.' } },
   { id: 'channels', route: 'settings', sel: '[data-tour="bot-create"] || [data-tour="bot-card"]', doClick: true,
+    reveal: () => document.querySelectorAll<HTMLElement>('[data-guide="st-tabs"] button')[3],
     title: { en: 'Connect your customer bot', ms: 'Sambungkan bot pelanggan anda' },
     body: { en: 'Customers message this Telegram bot to ask for quotes. Press Create my bot in Telegram, tap Create there, then come back.',
       ms: 'Pelanggan menghantar mesej kepada bot Telegram ini untuk meminta sebut harga. Tekan Create my bot in Telegram, tekan Create di sana, kemudian kembali ke sini.' } },
@@ -71,8 +74,8 @@ const OWNER: Step[] = [
       ms: 'Dalam kotak Decision tekan Approve quote, kemudian Send quote to customer. Hanya pemilik boleh meluluskan.' } },
   { id: 'follow', sel: `${nav('track')} || ${nav('followups')} || ${nav('jobs')}`,
     title: { en: 'Follow it through', ms: 'Ikuti sehingga selesai' },
-    body: { en: 'Track follows each item, Follow-ups lists quotes with no reply, and Jobs takes over after a customer says yes.',
-      ms: 'Track mengikuti setiap item, Follow-ups menyenaraikan sebut harga tanpa balasan, dan Jobs mengambil alih selepas pelanggan setuju.' } },
+    body: { en: 'Schedule follows each item, Follow-ups lists quotes with no reply, and Jobs takes over after a customer says yes.',
+      ms: 'Jadual mengikuti setiap item, Follow-ups menyenaraikan sebut harga tanpa balasan, dan Jobs mengambil alih selepas pelanggan setuju.' } },
   help,
   { id: 'bot', bot: true,
     title: { en: 'Set up your customer bot now?', ms: 'Sediakan bot pelanggan anda sekarang?' },
@@ -110,7 +113,7 @@ export interface Ctx { can: (k: string) => boolean; canOpen: (route: string) => 
 export function buildSteps(kind: TourKind, c: Ctx): Step[] {
   return (kind === 'owner' ? OWNER : STAFF)
     .filter(s => !(s.need && !c.can(s.need)) && ![s.route, s.doRoute].some(r => r && !c.canOpen(r)) && !(s.bot && c.bot))
-    .map(s => (s.sim && c.bot ? { ...s, sim: false, sel: '#Sent' } : s.sim ? { ...s, sel: '#Sent ~ details || #Sent' } : s))
+    .map(s => (s.sim && c.bot ? { ...s, sim: false, sel: '#Sent' } : s.sim ? { ...s, sel: '[data-guide="tk-sim"] || #Sent' } : s))
 }
 
 export const kindFor = (owner: boolean, canCosts: boolean): TourKind => (owner || canCosts ? 'owner' : 'staff')

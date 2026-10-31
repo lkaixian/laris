@@ -5,7 +5,7 @@ import { useFetch, Async } from './ui'
 import { PageHeader } from './ui'
 import { t, useLang, getLang } from './i18n'
 import { Metric } from './dash'
-import { bot } from './bot'
+import { bot } from './botBus'
 
 type Nums = { sales: number; sales_prev: number; margin_pct: number; margin_prev: number; quotes_sent: number; quotes_accepted: number; quotes_accepted_prev: number
   waiting: number; late_count: number; late_amount: number; supplier_spend: number; supplier_spend_prev: number }

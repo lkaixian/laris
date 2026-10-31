@@ -144,7 +144,7 @@ export default function DeliverySign({ token }: { token: string }) {
   }
 
   const shell = (children: ReactNode) => (
-    <main id="main" className="mx-auto grid min-h-screen max-w-3xl content-start gap-5 px-4 py-6">
+    <main id="main" data-plain className="mx-auto grid min-h-screen max-w-3xl content-start gap-5 px-4 py-6">
       <div className="flex flex-wrap justify-end gap-2">{LANGS.filter(l => l[0] !== lang).map(l => <button key={l[0]} type="button" lang={l[0]} className="btn" onClick={() => setLang(l[0])}>{l[1]}</button>)}</div>
       {children}
     </main>
@@ -206,7 +206,7 @@ export default function DeliverySign({ token }: { token: string }) {
             onChange={e => { setName(e.target.value); setErrs(p => ({ ...p, name: '' })) }} /></label>
         {errs.name && <p id="d-name-err" role="alert" className="text-sm text-warn">{errs.name}</p>}
         <label className="flex min-h-11 items-center gap-2 font-semibold">
-          <input type="checkbox" checked={agree} aria-invalid={!!errs.agree || undefined} aria-describedby={errs.agree ? 'd-agree-err' : undefined}
+          <input type="checkbox" className="size-6 shrink-0 accent-(--accent)" checked={agree} aria-invalid={!!errs.agree || undefined} aria-describedby={errs.agree ? 'd-agree-err' : undefined}
             onChange={e => { setAgree(e.target.checked); setErrs(p => ({ ...p, agree: '' })) }} /> {T('agree')}</label>
         {errs.agree && <p id="d-agree-err" role="alert" className="text-sm text-warn">{errs.agree}</p>}
         <label className="flex flex-col gap-1 text-sm font-semibold">{T('problems')}

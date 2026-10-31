@@ -25,6 +25,7 @@ import { SearchView } from './Search'
 import { AssistantView, AssistantWidget } from './Assistant'
 import { GuidePanel } from './Guide'
 import { HomeView } from './Home'
+import { RevenueView } from './Revenue'
 import { TrackView } from './Track'
 import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
@@ -439,6 +440,7 @@ function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => { useLang(); return <><PageHeader title={t(S.notFound)} /><EmptyState title={t(S.notExist)} action={{ label: t(S.openTracker), href: '#/tracker' }} /></> }
 const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   home: { render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
+  revenue: { render: () => <RevenueView /> },
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
   tracker: { render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },

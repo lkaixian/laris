@@ -9,7 +9,7 @@ END $$;
 GRANT USAGE ON SCHEMA public TO laris_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO laris_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_log, payments, delivery_signatures FROM laris_app;
-REVOKE DELETE, TRUNCATE ON deal_docs FROM laris_app;
+REVOKE DELETE, TRUNCATE ON deal_docs, expenses FROM laris_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON doc_transitions FROM laris_app;  -- shared rule data: the app only reads it
 REVOKE TRUNCATE, TRIGGER, REFERENCES ON ALL TABLES IN SCHEMA public FROM laris_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO laris_app;

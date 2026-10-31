@@ -83,7 +83,7 @@ def test_text_passes_aa_over_every_backdrop(theme):
         ("ink on surface", "--ink", ["--surface-glass"]), ("ink-2 on surface", "--ink-2", ["--surface-glass"]),
         ("muted on surface", "--muted", ["--surface-glass"]), ("accent on surface", "--accent", ["--surface-glass"]),
         ("accent-hover on surface", "--accent-hover", ["--surface-glass"]), ("warn on surface", "--warn", ["--surface-glass"]),
-        ("ink on tint", "--ink", ["--surface-glass", "--tint"]), ("accent on tint", "--accent", ["--surface-glass", "--tint"]),
+        ("ink on warn-bg (revenue notes)", "--ink", ["--surface-glass", "--warn-bg"]), ("ink on tint", "--ink", ["--surface-glass", "--tint"]), ("accent on tint", "--accent", ["--surface-glass", "--tint"]),
         ("muted on table header", "--muted", ["--surface-glass", "--surface-2"]), ("warn on warn-bg", "--warn", ["--surface-glass", "--warn-bg"]),
         ("ink on strong tile", "--ink", ["--glass-fill-strong"]), ("muted on strong tile", "--muted", ["--glass-fill-strong"]),
         ("accent on strong tile", "--accent", ["--glass-fill-strong"]),

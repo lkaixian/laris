@@ -52,6 +52,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
   ] },
   { label: 'Insight', items: [
+    { key: 'revenue', label: 'Revenue', icon: 'revenue' },
     { key: 'alerts', label: 'Stale costs', icon: 'alerts' },
   ] },
   // Ask Laris (the assistant) is the floating button on every page, so it has no sidebar entry; #/assistant still opens it full page.

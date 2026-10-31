@@ -57,6 +57,8 @@ REQ = {
     ("POST", "/api/payments/propose-from-slip"): {"files": {"image": ("s.jpg", JPEG, "image/jpeg")}},
     ("POST", "/api/payments/{pid}/reverse"): {"json": {"reason": "wrong amount"}},
     ("POST", "/api/deal-docs/{doc_id}/void"): {"json": {"reason": "wrong amount"}},
+    ("POST", "/api/expenses"): {"json": {"spent_on": "2026-01-01", "category": "rent", "amount": "1.00"}},
+    ("POST", "/api/expenses/{expense_id}/void"): {"json": {"reason": "typed twice"}},
     ("PUT", "/api/settings/doc-layout/{kind}"): {"json": {}},
     ("POST", "/api/field-proposals/{pid}/decide"): {"json": {"decision": "ignore"}},
     ("POST", "/api/enquiries/simulate"): {"json": {"channel": "web", "text": "x"}},

@@ -8,7 +8,7 @@ import { useToast } from './Toast'
 import { Icon } from './icons'
 import { tx, txOr } from './strings'
 import { useLang } from './i18n'
-import { bot } from './bot'
+import { bot } from './botBus'
 import { Bot } from './Bot'
 
 // Look-up assistant. The server lets the model pick what to look up; the answer is built from your data. For two safe actions (move a job,

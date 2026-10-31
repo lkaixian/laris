@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BOT_EVENT } from './bot'
-import type { BotHole, BotMsg } from './bot'
+import { BOT_EVENT } from './botBus'
+import type { BotHole, BotMsg } from './botBus'
 import { hasGuide, startGuide } from './Guide'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'

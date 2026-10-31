@@ -21,7 +21,7 @@ r = APIRouter(prefix="/api")
 ORDERS = """
 select j.id, coalesce(q.doc_no, j.title) as ref, coalesce(pq.name, pj.name) as customer,
        (j.created_at at time zone 'Asia/Kuala_Lumpur')::date as "on",
-       case when j.quote_id is null then coalesce(j.amount, j.order_total, 0) else coalesce(l.sales, 0) end as sales,
+       case when j.quote_id is null then coalesce(j.amount, j.order_total, 0) else coalesce(l.sales, 0) end - coalesce(cn.net, 0) as sales,  -- less credit notes, without their SST
        case when j.quote_id is null then null else l.cost end as cost,
        case when j.quote_id is null then false else coalesce(l.complete, false) end as cost_complete,
        coalesce(j.order_total, case when j.quote_id is null then j.amount else l.sales end, 0) as owed,
@@ -35,6 +35,7 @@ left join lateral (
   from document_lines dl left join v_quote_margin vm on vm.line_id = dl.id
   where dl.document_id = j.quote_id and not dl.is_header and dl.qty is not null and dl.unit_price is not null) l on true
 left join (select job_id, sum(case when reverses_payment_id is null then amount else -amount end) as paid from payments where tenant_id = %s group by job_id) pay on pay.job_id = j.id
+left join (select job_id, sum(total - coalesce(tax_total, 0)) as net from deal_docs where tenant_id = %s and kind = 'credit_note' and status <> 'void' group by job_id) cn on cn.job_id = j.id
 where j.tenant_id = %s and (j.created_at at time zone 'Asia/Kuala_Lumpur')::date between %s and %s
 """
 PAYMENTS = """select paid_on as "on", case when reverses_payment_id is null then amount else -amount end as amount
@@ -54,7 +55,7 @@ def revenue_report(start: date = Query(alias="from"), end: date = Query(alias="t
         raise ApiError(422, e.code, str(e)) from e
     before_start, before_end = revenue.previous_period(start, end)
     c, t = ctx.conn, ctx.tenant_id
-    orders = c.execute(ORDERS, (t, t, before_start, end)).fetchall()
+    orders = c.execute(ORDERS, (t, t, t, before_start, end)).fetchall()
     payments = c.execute(PAYMENTS, (t, before_start, end)).fetchall()
     expenses = c.execute(EXPENSES, (t, before_start, end)).fetchall()
     out = revenue.summarise(orders, payments, expenses, start, end)

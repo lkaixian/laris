@@ -186,6 +186,8 @@ def void_doc(doc_id: UUID, body: VoidIn, ctx: Ctx = Depends(write_ctx)):
     paid, dep = _net(c, d["job_id"])
     if d["kind"] == "proforma" and paid > 0 or d["kind"] == "invoice" and paid - dep > 0:  # an invoice outlives a deposit, not a balance payment
         raise ApiError(409, "has_payments", "money has been received on this order; reverse the payment first")
+    if d["kind"] == "invoice" and c.execute("select 1 from deal_docs where job_id=%s and kind='credit_note' and status <> 'void'", (d["job_id"],)).fetchone():
+        raise ApiError(409, "has_credit_notes", "this invoice has credit notes against it; void them first")
     with guarded():
         c.execute("update deal_docs set status='void', void_reason=%s, voided_at=now(), voided_by=%s where id=%s", (body.reason.strip(), ctx.user_id, doc_id))
         if d["kind"] == "credit_note":  # the credit is withdrawn: the customer owes that amount again
@@ -256,9 +258,12 @@ def issue_credit_note(job_id: UUID, body: CreditIn, ctx: Ctx = Depends(write_ctx
     if total - body.amount < paid:
         raise ApiError(409, "already_paid", f"{_rm(paid)} has been paid, so at most {_rm(total - paid)} can be credited; any refund is made outside LARIS")
     reason = body.reason.strip()
-    line = {"no": 1, "description": f"Credit: {reason}", "qty": "1", "uom": "lot", "unit_price": str(body.amount), "discount_pct": None, "tax_rate": None,
-            "is_header": False, "amount": str(body.amount)}
-    m = {"lines": [line], "subtotal": body.amount, "tax_total": None, "total": body.amount}
+    om = _order_model(ctx, j)  # the credit carries the same SST share as the order it reduces (none when the order has no SST line)
+    tax = (body.amount * om["tax_total"] / om["total"]).quantize(Decimal("0.01"), ROUND_HALF_UP) if om["tax_total"] and om["total"] else None
+    net = body.amount - (tax or Decimal(0))
+    line = {"no": 1, "description": f"Credit: {reason}", "qty": "1", "uom": "lot", "unit_price": str(net), "discount_pct": None, "tax_rate": None,
+            "is_header": False, "amount": str(net)}
+    m = {"lines": [line], "subtotal": net, "tax_total": tax, "total": body.amount}
     with guarded():
         d = _issue(ctx, job_id, "credit_note", m, {"invoice_id": str(inv["id"]), "invoice_no": inv["doc_no"], "reason": reason, "total_before": total, "total_after": total - body.amount})
         c.execute("update jobs set order_total = order_total - %s where id=%s", (body.amount, job_id))

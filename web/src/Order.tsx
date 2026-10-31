@@ -58,7 +58,7 @@ const O = {
   noPerm: { en: 'You do not have permission for this step. Ask the owner.', ms: 'Anda tiada kebenaran untuk langkah ini. Tanya pemilik.', zh: '您没有此步骤的权限，请询问老板。', ta: 'இந்தப் படிக்கு உங்களுக்கு அனுமதி இல்லை. உரிமையாளரிடம் கேளுங்கள்.' },
   pctL: { en: 'Deposit %', ms: 'Deposit %', zh: '订金 %', ta: 'முன்பண %' },
   pctHint: { en: 'Filled in from the quote. Change it if you agreed something else.', ms: 'Diisi daripada sebut harga. Ubah jika anda bersetuju lain.', zh: '取自报价，如另有约定请修改。', ta: 'மேற்கோளிலிருந்து நிரப்பப்பட்டது. வேறு ஒப்புக்கொண்டிருந்தால் மாற்றவும்.' },
-  pctNone: { en: 'The quote has no deposit percentage. Type one.', ms: 'Sebut harga tiada peratus deposit. Taip satu.', zh: '报价没有订金百分比，请输入。', ta: 'மேற்கோளில் முன்பண சதவீதம் இல்லை. ஒன்றை உள்ளிடவும்.' },
+  pctNone: { en: 'The quote has no deposit percentage, so 50% is suggested. Change it if you agreed something else.', ms: 'Sebut harga tiada peratus deposit, jadi 50% dicadangkan. Ubah jika anda bersetuju sebaliknya.', zh: '报价没有订金百分比，因此建议 50%。如有其他约定，请修改。', ta: 'மேற்கோளில் முன்பண சதவீதம் இல்லை, எனவே 50% பரிந்துரைக்கப்படுகிறது. வேறு ஒப்பந்தம் இருந்தால் மாற்றுங்கள்.' },
   issuePf: { en: 'Issue proforma', ms: 'Keluarkan proforma', zh: '开具形式发票', ta: 'புரோஃபார்மா வழங்கு' },
   pfDone: { en: 'Proforma issued', ms: 'Proforma dikeluarkan', zh: '已开具形式发票', ta: 'புரோஃபார்மா வழங்கப்பட்டது' },
   payDep: { en: 'Record the deposit', ms: 'Rekod deposit', zh: '记录订金', ta: 'முன்பணத்தைப் பதிவு செய்' }, payBal: { en: 'Record a payment', ms: 'Rekod bayaran', zh: '记录付款', ta: 'பணத்தைப் பதிவு செய்' },
@@ -178,7 +178,7 @@ function CreditForm({ c, run, busy }: { c: Chain; run: Run; busy: boolean }) {
 
 function NextStep({ c, owner, run, busy, onLink }: { c: Chain; owner: boolean; run: Run; busy: boolean; onLink: (id: string, url: string) => void }) {
   const ok = (k: string) => owner || can(k)
-  const [pct, setPct] = useState(c.job.quote_deposit_pct ? String(Number(c.job.quote_deposit_pct)) : '')
+  const [pct, setPct] = useState(c.job.quote_deposit_pct ? String(Number(c.job.quote_deposit_pct)) : '50')  // 50 = the server's default when nothing is agreed (DEFAULT_DEPOSIT_PCT)
   const [due, setDue] = useState('')
   const [why, setWhy] = useState('')
   const hasPf = c.documents.some(d => d.kind === 'proforma' && d.status !== 'void')

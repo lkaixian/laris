@@ -4,7 +4,8 @@ from uuid import uuid4
 
 from support.fixtures import env, pg_url  # noqa: F401
 from test_chain import go, mk
-from test_chain_api import chain_of, err, hand_job, pay, pdf_of, proforma
+from test_chain_api import chain_of, err, hand_job, pay, pdf_of, proforma, quote_job
+from test_revenue_api import WIN, report
 
 
 def credit(e, job, amount="100.00", reason="Failed reprint of the bracket", who=None):
@@ -106,3 +107,36 @@ def test_goods_received_rules(env):
     assert receive(e, spo["id"], []).status_code == 422
     assert e.sql("select count(*) n from chain_docs where kind='grn'")[0]["n"] == 0  # every refusal left nothing behind
     err(receive(e, mk(e, "so").json()["id"], [{"no": 1, "qty": 1}]), 409, "not_a_supplier_po")
+
+
+def test_a_credit_note_carries_the_orders_share_of_sst(env):
+    e = env
+    j = quote_job(e)
+    e.sql("update document_lines set tax_rate=8 where document_id=(select quote_id from jobs where id=%s)", (j,))
+    e.sql("update tenants set sst_registered=true, sst_no='W10-1234567-89'")
+    assert e.c.post(f"/api/jobs/{j}/invoice", json={"override_reason": "collected by hand"}, headers=e.O).status_code == 201
+    total = Decimal(chain_of(e, j)["total"])
+    cn = credit(e, j, str((total / 10).quantize(Decimal("0.01")))).json()
+    assert cn["tax_total"] is not None and Decimal(cn["tax_total"]) > 0
+    assert Decimal(cn["subtotal"]) + Decimal(cn["tax_total"]) == Decimal(cn["total"])
+    assert abs(Decimal(cn["tax_total"]) / Decimal(cn["total"]) - Decimal("0.08") / Decimal("1.08")) < Decimal("0.001")  # the same share as the order's SST
+    assert credit(e, invoiced(e), "100.00").json()["tax_total"] is None  # no SST on the order, none on the credit
+
+
+def test_an_invoice_with_a_live_credit_note_cannot_be_voided_until_the_credit_note_is(env):
+    e = env
+    j = invoiced(e)
+    cn = credit(e, j).json()
+    inv = next(d for d in chain_of(e, j)["documents"] if d["kind"] == "invoice")
+    err(e.c.post(f"/api/deal-docs/{inv['id']}/void", json={"reason": "wrong customer"}, headers=e.O), 409, "has_credit_notes")
+    assert e.c.post(f"/api/deal-docs/{cn['id']}/void", json={"reason": "withdrawn"}, headers=e.O).status_code == 200
+    assert e.c.post(f"/api/deal-docs/{inv['id']}/void", json={"reason": "wrong customer"}, headers=e.O).status_code == 200
+
+
+def test_the_revenue_page_counts_sales_less_credit_notes(env):
+    e = env
+    j = invoiced(e)
+    assert Decimal(report(e, *WIN).json()["sales"]) == Decimal("1000.00")
+    assert credit(e, j, "150.00").status_code == 201
+    r = report(e, *WIN).json()
+    assert Decimal(r["sales"]) == Decimal("850.00") and Decimal(r["to_collect"]) == Decimal("850.00")

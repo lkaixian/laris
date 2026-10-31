@@ -77,3 +77,5 @@ Points to check:
 
 ## Credit notes, goods received, folding menu
 All **A: drafted by the assistant, needs a native reader.** Terms to check: "Credit note" (Malay *Nota kredit*, Chinese 贷项通知单, Tamil கிரெடிட் நோட்; some Malaysian businesses say 退款单 or just "credit note"), "Goods received" (Malay *Barang diterima*, Chinese 收货, Tamil பெற்ற பொருட்கள்), the sentence that LARIS does not refund money, and "Fold / Show {group}" on the menu group buttons. The PDF title strings are in `src/doc_layout.py`.
+
+- `web/src/Order.tsx` `pctNone` (ms, zh, ta): the proforma deposit hint now says 50% is suggested when the quote has no deposit percentage. Machine translation, unreviewed.

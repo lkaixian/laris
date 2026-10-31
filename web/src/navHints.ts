@@ -12,6 +12,7 @@ export const NAV_HINTS: Record<string, Text> = {
   contacts: h('Your customers and suppliers in one book.', 'Pelanggan dan pembekal anda dalam satu buku.', '客户和供应商通讯录。', 'வாடிக்கையாளர்கள், சப்ளையர்கள் ஒரே புத்தகத்தில்.'),
   ask: h('Send a photo to suppliers and get a price back.', 'Hantar gambar kepada pembekal dan dapatkan harga.', '把照片发给供应商，获取报价。', 'சப்ளையர்களுக்குப் படம் அனுப்பி விலை பெறுங்கள்.'),
   catalog: h('Turn product photos into priced items to quote from.', 'Tukar gambar produk kepada item berharga untuk disebut harga.', '把产品照片变成可报价的商品。', 'பொருள் படங்களை விலையுள்ள பொருட்களாக மாற்றுங்கள்.'),
+  revenue: h('Money in and out, and the profit you keep, for any period.', 'Wang masuk dan keluar, serta untung yang anda simpan, bagi mana-mana tempoh.', '任意时间段的收入、支出和您留下的利润。', 'எந்தக் காலத்துக்கும் வரும், போகும் பணமும் உங்கள் லாபமும்.'),
   alerts: h('Quotes whose cost has changed since you priced them.', 'Sebut harga yang kosnya berubah sejak dinilai.', '定价后成本已变化的报价。', 'விலை நிர்ணயித்த பிறகு செலவு மாறிய மேற்கோள்கள்.'),
   activity: h('Who did what and when, day by day.', 'Siapa buat apa dan bila, hari demi hari.', '谁在何时做了什么，按天查看。', 'யார் எப்போது என்ன செய்தார், நாள் வாரியாக.'),
   team: h('Add people and link their Telegram.', 'Tambah orang dan pautkan Telegram mereka.', '添加成员并绑定其 Telegram。', 'நபர்களைச் சேர்த்து Telegram இணையுங்கள்.'),

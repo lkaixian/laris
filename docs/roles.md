@@ -14,6 +14,8 @@ Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEF
 |---|---|---|---|
 | `view_costs` | Costs and prices | no | Supplier prices, cost items, margins, stale alerts, supplier chat text. Without it every response is scrubbed of them |
 | `view_reports` | Costs and prices | no | Margin report (cost and margin figures in it also need `view_costs`) |
+| `view_revenue` | Costs and prices | no | The Revenue page: money in and out, untung kasar and untung bersih (also needs `view_costs`: it shows costs) |
+| `record_expenses` | Costs and prices | no | Add rent, wages and bills (running costs) to the Revenue page; voiding one is the owner's |
 | `edit_supplier_contacts` | Contacts | no | Change a supplier's name or number |
 | `manage_contacts` | Contacts | yes | Create and edit contacts |
 | `upload_documents` | Documents | yes | Ingest a supplier file or text, key a document in |
@@ -67,6 +69,9 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/jobs/{id}/delivery-orders`, `POST /api/deal-docs/{id}/delivery-link` | `issue_delivery` (an `override_reason` on the first is owner only) |
 | `POST /api/jobs/{id}/proforma`, `POST /api/jobs/{id}/invoice`, `POST /api/deal-docs/{id}/void`, `POST /api/payments/{id}/reverse`, `PUT/GET /api/settings/doc-layout/{kind}` | owner |
 | `POST /api/chain`, `POST /api/chain/from-quote/{id}`, `POST /api/chain/{id}/convert`, `POST /api/chain/{id}/transition`, `POST /api/chain/buy/*` | `manage_contacts` (customer PO, sales order, supplier PO only). Moves to `so:cancelled`, `cpo:confirmed` and `spo:sent` are owner only; cancelling an order that has payments is refused (409). These routes never touch money or delivery: proforma, delivery order, invoice, receipt and payments exist only on the routes above, so `record_payments` and `issue_delivery` cannot be bypassed through `/api/chain` |
+| `GET /api/revenue` | `view_revenue` and `view_costs` (403 `permission_required` without both) |
+| `POST /api/expenses` | `record_expenses` |
+| `POST /api/expenses/{id}/void` | owner |
 | `POST /api/contacts` | `manage_contacts`; `role: supplier` also `edit_supplier_contacts` |
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |

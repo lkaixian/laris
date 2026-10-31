@@ -131,6 +131,103 @@ header.bg-surface, aside.bg-surface { border-color: var(--glass-border); }
 .bento-shell[data-dragging] { user-select: none; -webkit-user-select: none; cursor: grabbing; }
 .bento-tray { margin-top: 16px; padding: 14px 16px; border-radius: 18px; background: var(--surface); border: 1px dashed var(--line); }
 
+/* ---- Compatibility with the glass classes upstream added in theme.css (.glass-pane, .glass-lite, .glass-dialog, glass .card, .input, .btn, .toast, ...).
+   They were written for an opaque --surface and mix it with "transparent" (78 to 88 percent). With the frosted --surface that multiplies to roughly
+   55 percent and breaks the contrast tests/test_glass_contrast.py proves. These rules point them at the tested surface instead. Floating things
+   (dialogs, tooltips, toasts, the guide panel) use the firmer --surface-solid. If a new theme.css rule mixes --surface with transparency, add it here
+   (a test counts them and fails until you do). ---- */
+:root[data-theme] .card, :root[data-theme] .glass-lite, :root[data-theme] .glass-stage fieldset { background-color: var(--surface); background-image: var(--glass-highlight); }
+:root[data-theme] .glass-pane::before { background: var(--surface); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter); }
+:root[data-theme] .glass-dialog, :root[data-theme] .nav-tip, :root[data-theme] .toast { background: var(--surface-solid); }
+:root[data-theme] .input { background: var(--surface); }
+:root[data-theme] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-danger) { background-color: var(--surface); background-image: none; }
+:root[data-theme] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-danger):hover { background-color: var(--surface); background-image: linear-gradient(var(--tint), var(--tint)); }
+:root[data-theme] .guide-panel { background: var(--surface-solid) !important; }
+:root[data-theme] .orb-node circle.orb-disc { fill: var(--surface-solid); }
+
+/* ---- Revenue page (Revenue.tsx). Money in is solid accent; anything that costs money is striped, so colour is never the only signal. ---- */
+.rev-periods { display: flex; flex-wrap: wrap; gap: 8px; }
+.rev-delta { font-size: 0.8125rem; color: var(--muted); }
+.rev-delta-good { color: var(--accent); font-weight: 600; }
+.rev-delta-bad { color: var(--warn); font-weight: 600; }
+
+.rev-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; list-style: none; margin: 0; padding: 0; }
+@media (min-width: 1024px) { .rev-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rev-card { position: relative; display: grid; gap: 6px; align-content: start; width: 100%; min-height: 9.5rem; padding: 16px; text-align: left; cursor: pointer; border-radius: 18px;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--glass-border); box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-glow);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter); transition: transform 0.2s var(--ease-tile), border-color 0.2s;
+  animation: tile-in 480ms var(--ease-tile) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.rev-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; border-radius: 18px 18px 0 0; background: var(--accent); }
+.rev-card[data-tone="money_out"]::before { background: repeating-linear-gradient(45deg, var(--amber) 0 5px, transparent 5px 9px); }
+.rev-card:hover { transform: translateY(-2px); }
+.rev-card[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--shadow-glow); }
+.rev-num { font-size: 1.75rem; font-weight: 650; line-height: 1.15; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rev-how { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+
+.rev-note { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 14px; font-size: 0.875rem; color: var(--ink); background: var(--warn-bg); border: 1px solid var(--hairline); }
+.rev-note > svg { margin-top: 2px; color: var(--warn); }
+.rev-note-info { background: var(--tint); }
+.rev-note-info > svg { color: var(--accent); }
+
+.rev-rm1 { display: grid; gap: 8px; margin-top: 14px; }
+.rev-rm1-bar { display: flex; gap: 3px; height: 28px; border-radius: 14px; overflow: hidden; }
+.rev-seg { min-width: 5px; transform-origin: left; animation: rev-grow-x 800ms var(--ease-tile) both; animation-delay: calc(var(--i, 0) * 120ms); }
+.rev-seg-goods { background: repeating-linear-gradient(45deg, var(--amber) 0 4px, var(--tint) 4px 9px); }
+.rev-seg-run { background: repeating-linear-gradient(-45deg, var(--amber) 0 2px, var(--tint) 2px 7px); }
+.rev-seg-kept { background: var(--accent); }
+.rev-rm1-key { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
+.rev-swatch { display: inline-block; width: 14px; height: 14px; margin-right: 6px; border-radius: 4px; vertical-align: -2px; }
+.rev-swatch-in { background: var(--accent); }
+.rev-swatch-out { background: repeating-linear-gradient(45deg, var(--amber) 0 3px, var(--tint) 3px 6px); border: 1px solid var(--amber); }
+.rev-swatch-left { height: 3px; margin-bottom: 4px; border-radius: 2px; background: var(--ink-2); vertical-align: middle; }
+
+.rev-bridge { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.rev-row { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; text-align: left; cursor: pointer;
+  border-radius: 12px; color: var(--ink); background: transparent; border: 1px solid transparent; transition: background-color 0.15s, border-color 0.15s; }
+.rev-row:hover { background: var(--surface-2); }
+.rev-row[aria-expanded="true"] { border-color: var(--accent); background: var(--tint); }
+.rev-row-label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.rev-op { display: inline-grid; place-items: center; width: 1.25rem; font-size: 1.1rem; color: var(--muted); }
+.rev-row-value { font-weight: 650; text-align: right; white-space: nowrap; }
+.rev-row-value small { font-weight: 400; color: var(--muted); }
+@media (max-width: 639px) {
+  .rev-row { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .rev-track { grid-column: 1 / -1; grid-row: 2; }
+}
+.rev-track { position: relative; height: 20px; border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+.rev-bar { position: absolute; top: 0; bottom: 0; border-radius: 10px; transform-origin: left; animation: rev-grow-x 700ms var(--ease-tile) both; animation-delay: calc(var(--i, 0) * 90ms); }
+.rev-bar-in, .rev-bar-keep { background: var(--accent); }
+.rev-bar-out { background: repeating-linear-gradient(45deg, var(--amber) 0 4px, var(--tint) 4px 9px); outline: 1px solid var(--amber); outline-offset: -1px; }
+.rev-bar-loss { background: repeating-linear-gradient(-45deg, var(--warn) 0 4px, var(--warn-bg) 4px 9px); outline: 1px solid var(--warn); outline-offset: -1px; }
+
+.rev-chart { position: relative; }
+.rev-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.rev-axis { font-size: 11px; fill: var(--muted); }
+.rev-grid { stroke: var(--hairline); stroke-width: 1; }
+.rev-zero { stroke: var(--line); stroke-width: 1.2; }
+.rev-hatch-bg { fill: var(--tint); }
+.rev-hatch-fg { fill: var(--amber); }
+.rev-b { transform-box: fill-box; transform-origin: bottom; animation: rev-grow-y 600ms var(--ease-tile) both; animation-delay: calc(var(--i, 0) * 18ms); }
+.rev-b-in { fill: var(--accent); }
+.rev-b-out { fill: url(#rev-hatch); stroke: var(--amber); stroke-width: 1; }
+.rev-left { stroke: var(--ink-2); stroke-width: 1.6; stroke-linejoin: round; }
+.rev-dot { fill: var(--ink-2); }
+.rev-dot-neg { fill: var(--warn); }
+.rev-tip { position: absolute; top: 0; z-index: 5; display: grid; gap: 2px; min-width: 11rem; padding: 8px 12px; transform: translateX(-50%); pointer-events: none; font-size: 0.8125rem;
+  color: var(--ink); background: var(--surface-solid); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--elev-2); }
+.rev-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.8125rem; }
+
+.rev-explain { animation: tile-in 320ms var(--ease-tile) both; scroll-margin-top: 5rem; }
+.rev-eq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.rev-eq-box { display: grid; gap: 2px; padding: 8px 14px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--hairline); }
+.rev-eq-box small { font-size: 0.75rem; color: var(--muted); }
+.rev-eq-box b { font-size: 1.1rem; }
+.rev-eq-strong { background: var(--tint); border-color: var(--accent); }
+.rev-eq-op { font-size: 1.3rem; color: var(--muted); }
+.rev-form { display: grid; gap: 12px; padding: 14px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--hairline); }
+@media (min-width: 640px) { .rev-form { grid-template-columns: repeat(3, minmax(0, 1fr)); } .rev-form > h3 { grid-column: 1 / -1; } }
+@keyframes rev-grow-x { from { transform: scaleX(0); } }
+@keyframes rev-grow-y { from { transform: scaleY(0); } }
 /* ---- Customer-facing public pages (quote accept, delivery sign: <main data-plain>): plain skin, opaque panels, no moving background, no blur. ---- */
 body:has([data-plain]) { background: var(--surface-solid); }
 body:has([data-plain])::before, body:has([data-plain])::after { display: none; }

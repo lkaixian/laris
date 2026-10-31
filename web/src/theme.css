@@ -496,3 +496,10 @@
   @media (prefers-reduced-motion: reduce) { .rep-line, .rep-area, .rep-dot, .rep-bt i, .rep-kpi, .rep-card { animation: none !important; stroke-dashoffset: 0; opacity: unset; } .rep-dot { opacity: 1 } .rep-area { opacity: .14 } }
 }
 @layer components { @media (max-width: 639px) { .bot-bubble .bot-sub, .bot-bubble .bot-ask { display: none; } .bot-bubble { max-width: min(13rem, calc(100vw - 32px)); } } }
+@layer components {
+  .rep-kpi, .rep-card, .rep-story, .rep-tools { animation: tile-in 480ms var(--ease-tile, ease-out) both; }
+  .rep-kpis > :nth-child(2), .rep-grid > :nth-child(2) { animation-delay: 60ms; } .rep-kpis > :nth-child(3), .rep-grid > :nth-child(3) { animation-delay: 120ms; }
+  .rep-kpis > :nth-child(4), .rep-grid > :nth-child(4) { animation-delay: 180ms; } .rep-kpis > :nth-child(5), .rep-grid > :nth-child(5) { animation-delay: 240ms; }
+  .rep-kpi, .rep-card { transition: transform .2s var(--ease-tile, ease-out); } .rep-kpi:hover, .rep-card:hover { transform: translateY(-2px); }
+  @media (prefers-reduced-motion: reduce) { .rep-kpi, .rep-card, .rep-story, .rep-tools { animation: none; transition: none; } }
+}

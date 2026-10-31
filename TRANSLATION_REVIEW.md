@@ -8,7 +8,7 @@ Status key: **A** drafted, needs native review. **B** reused from existing LARIS
 
 | Key | English | Malay | Chinese | Tamil | Status |
 |---|---|---|---|---|---|
-| system | System | Sistem | 跟随系统 | சாதனம் | A. Tamil: consider "கணினி/சாதன அமைப்பு"; the short word may be too vague |
+| system | Match my device | Ikut peranti saya | 跟随设备 | என் சாதனத்தைப் பின்பற்று | B. Upstream added this same label independently; after the merge the app uses upstream's wording and my "System" draft was dropped |
 | reduceTransparency | Reduce transparency | Kurangkan kelutsinaran | 减少透明效果 | ஒளிஊடுருவலைக் குறைக்கவும் | A |
 | reduceTransparencyHint | Solid panels instead of frosted glass. Also on when your device asks for less transparency. | Panel pepejal, bukan kaca berfros. Turut aktif jika peranti anda meminta kurang kelutsinaran. | 用实色面板代替磨砂玻璃。当设备要求减少透明效果时也会自动启用。 | (see file) | A. "Frosted glass" is a design metaphor: check it reads naturally in each language |
 | liteVisuals | Lite visuals | Visual ringan | 精简视觉效果 | எளிய காட்சிகள் | A |
@@ -52,3 +52,25 @@ The glossary in the brief (Quotation, Purchase Order, Proforma, Delivery Order, 
 | help | Help | Bantuan | 帮助 | உதவி | A |
 | showTutorial | Show the Tutorial button | Tunjukkan butang Tutorial | 显示“教程”按钮 | “பயிற்சி” பொத்தானைக் காட்டு | A. Reuses the app's existing word for the button (`guide.button`: Tutorial / 教程 / பயிற்சி) |
 | showTutorialHint | The Tutorial button beside page titles, and the ? beside each menu item. Turn it off if you do not need it; turn it on again here any time. | Butang Tutorial di sebelah tajuk halaman, dan tanda ? di sebelah setiap item menu. Matikan jika anda tidak memerlukannya; hidupkan semula di sini pada bila-bila masa. | 页面标题旁的“教程”按钮，以及每个菜单项旁的“?”。不需要时可以关闭，随时可在此重新开启。 | (see file) | A |
+
+## Revenue page (`web/src/Revenue.tsx`, menu entry, permission labels)
+
+All of it is **A: drafted by the assistant, needs a native reader.** About 90 strings in all four languages; the file is the source. The terms that matter most and are easiest to get subtly wrong:
+
+| Concept | English | Malay | Chinese | Tamil |
+|---|---|---|---|---|
+| Menu and page | Revenue | Hasil | 收入 | வருவாய் |
+| Gross profit | Gross profit (untung kasar) | Untung kasar | 毛利 | மொத்த லாபம் |
+| Net profit | Net profit (untung bersih) | Untung bersih | 净利润 | நிகர லாபம் |
+| Cost of goods | Cost of goods | Kos barang | 商品成本 | பொருள் செலவு |
+| Running costs | Running costs | Kos operasi | 经营开支 | இயக்கச் செலவுகள் |
+| Money in / out | Money in / Money out | Wang masuk / Wang keluar | 收到的钱 / 支出的钱 | வரும் பணம் / போகும் பணம் |
+| A loss | making a loss (rugi) | rugi | 亏损 | நஷ்டம் (rugi) |
+
+Points to check:
+- **"Hasil" for Revenue.** In Malay accounting "hasil" means revenue or income, but an SME owner may say "jualan" or "pendapatan". If the owner prefers another word, change `nav.revenue` in `strings.ts` and `S.title` in `Revenue.tsx`.
+- **"Kos operasi" for running costs.** Some Malaysian SMEs say "perbelanjaan" or "overhead". "Kos operasi" is the textbook term; confirm it reads naturally.
+- **The Malay terms inside other languages.** `untung kasar` and `untung bersih` are written in brackets after the Chinese and Tamil names, because the owner asked for those words. Confirm a Chinese or Tamil reader finds that helpful and not clutter.
+- **"sen" in "Every RM1 you sold ... 50 sen".** Chinese uses 仙 (the common Malaysian form of cents) and Tamil சென்; please confirm.
+- **Sentences built from numbers** (the headline, the "N more than the period before" lines) have different word order per language; check each reads naturally with a real figure in it.
+- **Chart text and table headers** are short, but Tamil is the longest; layout was seen in Tamil at desktop width only.

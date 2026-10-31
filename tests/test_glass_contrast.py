@@ -83,7 +83,7 @@ def test_text_passes_aa_over_every_backdrop(theme):
         ("ink on surface", "--ink", ["--surface-glass"]), ("ink-2 on surface", "--ink-2", ["--surface-glass"]),
         ("muted on surface", "--muted", ["--surface-glass"]), ("accent on surface", "--accent", ["--surface-glass"]),
         ("accent-hover on surface", "--accent-hover", ["--surface-glass"]), ("warn on surface", "--warn", ["--surface-glass"]),
-        ("ink on tint", "--ink", ["--surface-glass", "--tint"]), ("accent on tint", "--accent", ["--surface-glass", "--tint"]),
+        ("ink on warn-bg (revenue notes)", "--ink", ["--surface-glass", "--warn-bg"]), ("ink on tint", "--ink", ["--surface-glass", "--tint"]), ("accent on tint", "--accent", ["--surface-glass", "--tint"]),
         ("muted on table header", "--muted", ["--surface-glass", "--surface-2"]), ("warn on warn-bg", "--warn", ["--surface-glass", "--warn-bg"]),
         ("ink on strong tile", "--ink", ["--glass-fill-strong"]), ("muted on strong tile", "--muted", ["--glass-fill-strong"]),
         ("accent on strong tile", "--accent", ["--glass-fill-strong"]),
@@ -144,3 +144,19 @@ def test_orb_opacity_is_capped_so_text_always_has_room():
     for name, t in THEMES.items():
         for i in (1, 2, 3):
             assert float(t[f"--orb-{i}-peak"]) <= 0.65, (name, i)
+
+
+THEME_CSS = (Path(__file__).resolve().parent.parent / "web" / "src" / "theme.css").read_text(encoding="utf-8")
+KNOWN_SURFACE_MIXES = 15   # rules in theme.css that mix --surface with transparency; each has a counterpart in glass.css (see its "Compatibility" block)
+
+
+def test_upstream_glass_rules_use_the_tested_surface():
+    """theme.css rules that do color-mix(var(--surface) NN%, transparent) assume an opaque surface. Under the frosted surface they would stack to
+    about 55% opacity and the contrast proof above would no longer describe what is on screen. Each known one is overridden in glass.css."""
+    mixes = len(re.findall(r"color-mix\(in srgb, var\(--surface\) \d+%, transparent\)", THEME_CSS))
+    assert mixes == KNOWN_SURFACE_MIXES, (
+        f"theme.css now has {mixes} rules mixing --surface with transparency (known: {KNOWN_SURFACE_MIXES}). Add a compatibility override for the new one "
+        "in glass.css (Compatibility block), then raise KNOWN_SURFACE_MIXES.")
+    for sel in (".glass-pane::before", ".glass-dialog", ".nav-tip", ".toast", ".input", ".card", ".glass-lite", ".glass-stage fieldset", ".guide-panel", ".orb-disc", ".btn:not("):
+        assert sel in CSS, f"glass.css does not override {sel}"
+    assert CSS.count("var(--surface-solid)") >= 5   # floating panels use the firm surface

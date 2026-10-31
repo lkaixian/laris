@@ -53,6 +53,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
   ] },
   { label: 'Insight', items: [
+    { key: 'revenue', label: 'Revenue', icon: 'revenue' },
     { key: 'reports', label: 'Business report', icon: 'tracker' },
     { key: 'alerts', label: 'Stale costs', icon: 'alerts' },
   ] },

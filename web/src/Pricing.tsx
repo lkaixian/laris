@@ -41,18 +41,22 @@ const S = {
   statusNote: { en: 'This page asks the server whether it is running. It does not show details about any business.', ms: 'Halaman ini bertanya kepada pelayan sama ada ia berjalan. Ia tidak menunjukkan butiran mana-mana perniagaan.', zh: '本页只询问服务器是否在运行，不显示任何企业的信息。' },
 }
 
+// Weekly AI allowance per plan. Keep in step with PLANS in src/license.py (ai_week, photos_week).
+const AI_WEEK = { starter: [200, 20], standard: [1000, 100], pro: [4000, 400] } as const
+const aiLine = (k: Key): Text => { const [m, p] = AI_WEEK[k]; return { en: `${m.toLocaleString()} AI messages and ${p} photo reads a week`, ms: `${m.toLocaleString()} mesej AI dan ${p} bacaan foto seminggu`, zh: `每周 ${m.toLocaleString()} 次 AI 消息和 ${p} 次照片识别` } }
+
 const PLANS: { key: Key; name: string; seats: number; pop?: boolean; pts: Text[] }[] = [
-  { key: 'starter', name: 'LARIS Lite', seats: 3, pts: [
+  { key: 'starter', name: 'LARIS Lite', seats: 3, pts: [aiLine('starter'),
     { en: 'Quote from Telegram text and voice notes', ms: 'Sebut harga dari teks dan nota suara Telegram', zh: '用 Telegram 文字和语音报价' },
     { en: 'Rules pricing with your margin floor', ms: 'Harga ikut peraturan dengan lantai margin anda', zh: '规则定价，守住您的最低利润率' },
     { en: 'Quote tracker and follow-ups', ms: 'Penjejak sebut harga dan tindakan susulan', zh: '报价追踪与跟进' },
     { en: 'PDF, XLSX and CSV export', ms: 'Eksport PDF, XLSX dan CSV', zh: '导出 PDF、XLSX、CSV' }] },
-  { key: 'standard', name: 'LARIS Standard', seats: 10, pop: true, pts: [
+  { key: 'standard', name: 'LARIS Standard', seats: 10, pop: true, pts: [aiLine('standard'),
     { en: 'Roles and permissions per staff member', ms: 'Peranan dan kebenaran bagi setiap staf', zh: '按员工设定角色与权限' },
     { en: 'Activity log with CSV and PDF download', ms: 'Log aktiviti dengan muat turun CSV dan PDF', zh: '活动记录，可下载 CSV 与 PDF' },
     { en: 'Job board from accepted quotes', ms: 'Papan kerja daripada sebut harga diterima', zh: '由已接受报价生成工作看板' },
     { en: 'Catalog photos and price list import', ms: 'Foto katalog dan import senarai harga', zh: '目录照片与价目表导入' }] },
-  { key: 'pro', name: 'LARIS Pro', seats: 25, pts: [
+  { key: 'pro', name: 'LARIS Pro', seats: 25, pts: [aiLine('pro'),
     { en: 'Suppliers: directory, price comparison, contracts', ms: 'Pembekal: direktori, perbandingan harga, kontrak', zh: '供应商：名录、比价、合同' },
     { en: 'API access for your own tools', ms: 'Akses API untuk alat anda sendiri', zh: '为自有系统开放 API' },
     { en: 'Ask LARIS assistant', ms: 'Pembantu Tanya LARIS', zh: '问 LARIS 助手' },

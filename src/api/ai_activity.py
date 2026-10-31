@@ -2,7 +2,7 @@
 the question, the answer and the hidden values are never stored (src/ai_log.py)."""
 from fastapi import APIRouter, Depends, Query
 
-from .. import rag
+from .. import ai_quota, rag
 from .deps import Ctx, read_ctx, reply
 
 r = APIRouter(prefix="/api")
@@ -23,6 +23,12 @@ def activity(days: int = Query(30, ge=1, le=90), ctx: Ctx = Depends(read_ctx)):
     return reply(ctx, {"scope": "own" if own else "all", "days": days,
                        "totals": {"calls": tot["n"], "failed": tot["failed"], "median_ms": tot["median_ms"], "masked": masked},
                        "by_kind": by_kind, "recent": [dict(x) for x in recent]})
+
+
+@r.get("/ai/usage")
+def ai_usage(ctx: Ctx = Depends(read_ctx)):
+    """This week's AI messages and photo reads against the plan's allowance (the same for everyone in the business)."""
+    return reply(ctx, ai_quota.usage(ctx.conn, ctx.tenant_id))
 
 
 @r.get("/ai/passages")

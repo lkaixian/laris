@@ -18,7 +18,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
-from .. import availability, db, pipeline, tgbots
+from .. import ai_quota, availability, db, pipeline, tgbots
 from .. import license as lic
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -257,6 +257,10 @@ def _handle(conn, s, m):
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
         if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
+            try:
+                ai_quota.check(conn, tid, "photos")
+            except ApiError as e:
+                return e.message
             throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
             data, _ = _dl(s, m)
             return Catalog(tid, actor, p["id"], data, m)  # the model runs after this transaction has closed (see _catalog)
@@ -292,6 +296,8 @@ def _handle(conn, s, m):
     try:
         res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
     except ApiError as e:
+        if e.code == "ai_limit":
+            return T[lang]["limit"]
         if e.code not in CLARIFY:  # anything else (no cost on file, AI down) is our problem, not the customer's
             raise
         return _clarify(conn, tid, lang)

@@ -71,6 +71,8 @@ export function CustomersView({ owner, arg }: { owner: boolean; arg?: string }) 
   const flow = useFetch<{ stages: FlowStage[] }>('/customers/flow')
   const stage: Stage = (STAGES as string[]).includes(arg ?? '') ? (arg as Stage) : 'purchase_order'
   const docs = useFetch<Row[]>(`/customers/docs?stage=${stage}&limit=100`)
+  const orders = useFetch<{ id: string; label: string; customer: string | null; total: string | null; status: 'todo' | 'doing' | 'done' }[]>('/jobs?limit=100')
+  const open = (orders.data ?? []).filter(o => o.status !== 'done')
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState('')
   const by = Object.fromEntries((flow.data?.stages ?? []).map(s => [s.stage, s])) as Partial<Record<Stage, FlowStage>>
@@ -85,6 +87,10 @@ export function CustomersView({ owner, arg }: { owner: boolean; arg?: string }) 
     <>
       <PageHeader title={t(C.title)} description={t(C.desc)}
         actions={kind ? <button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? t(C.close) : `${t(C.add)}: ${t(STAGE_NAME[stage])}`}</button> : undefined} />
+      {open.length > 0 && <section aria-label={t(C.orders)} className="card mb-4 grid gap-2" data-guide="customers-orders"><h2 className="text-lg font-semibold">{t(C.orders)}</h2>
+        <ul className="grid gap-1 text-sm">{open.map(o => <li key={o.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <a className="font-semibold" href={`#/deals/${o.id}`}>{o.label}</a><span className="text-muted">{o.customer ?? ''}</span><span className="tabular-nums">{rm(o.total)}</span>
+          <span className="chip">{t(o.status === 'doing' ? { en: 'In progress', ms: 'Sedang berjalan', zh: '进行中', ta: 'நடந்து கொண்டிருக்கிறது' } : { en: 'To do', ms: 'Untuk dibuat', zh: '待办', ta: 'செய்ய' })}</span></li>)}</ul></section>}
       <nav aria-label={t(C.flow)} className="mb-4 overflow-x-auto" data-guide="customers-flow">
         <ol className="flex min-w-max items-stretch gap-1">
           {STAGES.map((s, i) => {

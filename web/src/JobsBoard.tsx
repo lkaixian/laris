@@ -5,7 +5,7 @@ import { Async, OverdueChip, PageHeader, TableRegion, msg, rm, useFetch } from '
 import { FilterBar, FilterSelect, ToggleChip } from './kit'
 import { useToast } from './Toast'
 import { flagOn, hashParams } from './Track'
-import { locale } from './i18n'
+import { locale, t } from './i18n'
 import { tx, txOr } from './strings'
 
 // Jobs page: Board (todo / doing / done) and Agenda (one week). Edits go through POST /api/jobs/{id} and send only what changed.
@@ -145,6 +145,7 @@ function JobCard({ j, people, me, compact, onChanged }: { j: Job; people: Assign
       <p className="break-words font-semibold">{j.quote_id ? <a className="text-ink underline-offset-2 hover:underline" href={`#/doc/${j.quote_id}`}>{jl(j)}</a> : jl(j)}
         {j.customer && <span className="font-normal">{tx('jobs.for', j.customer)}</span>}{j.manual && <span className="badge ml-2 font-normal">{tx('jobs.byHand')}</span>}</p>
       {j.summary && <p className="mt-1 break-words text-sm">{j.summary}</p>}
+      {!j.manual && <p className="mt-1 text-sm"><a className="link" href={`#/deals/${j.id}`}>{t({ en: 'Open order (proforma, delivery, invoice)', ms: 'Buka pesanan (proforma, penghantaran, invois)', zh: '打开订单（形式发票、送货、发票）', ta: 'ஆர்டரைத் திற' })}</a></p>}
       {j.total != null && <p className="mt-1 text-sm text-muted">{tx('jobs.total', rm(j.total))}</p>}
       <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">{dueBand(j) && dueBand(j) !== 'stale' ? <span className={`chip heat-${dueBand(j)}`}>{txOr(`jobs.band.${dueBand(j)}`, '')}</span> : null}{due.text}{due.late && <OverdueChip />}</p>
       <p className="mt-1 flex flex-wrap items-center gap-1 text-sm">

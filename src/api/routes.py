@@ -304,10 +304,13 @@ def edit_line(doc_id: UUID, line_id: UUID, body: LineEdit, ctx: Ctx = Depends(wr
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     if d["direction"] == "out":
+        # Only the owner, and only until the quote is approved: a final price typed by hand is recorded as owner_override (a person's price, never AI).
+        if not ctx.owner or not set(sets) <= {"needs_review", "unit_price"}:
+            raise ApiError(403, "rules_only", "out lines are rules-engine output; only the owner may set the final price or clear needs_review")
         if "unit_price" in sets:
-            raise ApiError(403, "rules_only", "out-line prices are set by the pricing rules, not by hand")
-        if set(sets) != {"needs_review"} or not ctx.owner:
-            raise ApiError(403, "rules_only", "out lines are rules-engine output; only the owner may clear needs_review")
+            if d["status"] != "draft":
+                raise ApiError(409, "locked", f"quote is {d['status']}; the price can only be set while it is a draft")
+            sets["price_source"] = "owner_override"
     elif d["status"] not in REVIEWABLE:
         raise ApiError(409, "locked", f"document is {d['status']}; lines can only be edited while received/parsed")
     old = ctx.conn.execute("select * from document_lines where id=%s and document_id=%s for update", (line_id, doc_id)).fetchone()

@@ -43,3 +43,18 @@ def test_the_unit_locks_with_the_rest_of_the_line_once_reviewed(env):
     e.sql("update documents set status='reviewed' where id=%s", (doc,))
     r = e.c.post(url, json={"uom": "kg"}, headers=e.O)
     assert r.status_code == 409 and r.json()["error"]["code"] == "locked"
+
+
+def test_the_owner_sets_the_final_price_on_a_draft_customer_quote_only(env):
+    from test_quotes import draft, tr
+    e = env
+    doc = draft(e)
+    lid = e.c.get(f"/api/documents/{doc}", headers=e.O).json()["lines"][0]["id"]
+    url = f"/api/documents/{doc}/lines/{lid}"
+    assert e.c.post(url, json={"unit_price": "80"}, headers=e.S).status_code == 403                # staff cannot
+    assert e.c.post(url, json={"qty": "2"}, headers=e.O).status_code == 403                        # only the price, not the rules' other output
+    assert e.c.post(url, json={"unit_price": "80"}, headers=e.O).status_code == 200
+    row = e.sql("select unit_price, price_source from document_lines where id=%s", (lid,))[0]
+    assert (str(row["unit_price"]), row["price_source"]) == ("80.0000", "owner_override")
+    assert tr(e, doc, "approved").status_code == 200
+    assert e.c.post(url, json={"unit_price": "90"}, headers=e.O).status_code == 409               # locked once approved

@@ -80,11 +80,12 @@ function cell(f: Field, v: unknown): ReactNode {
   return `${String(v)}${f.unit ? ' ' + f.unit : ''}`
 }
 
-function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: (n: number) => void }) {
+function LineRow({ docId, l, cols, edit, showPrice, onSaved, docOut = false, docStatus = '', isOwner = false }: { docId: string; l: Line; cols: Field[]; edit: boolean; showPrice: boolean; onSaved: (n: number) => void; docOut?: boolean; docStatus?: string; isOwner?: boolean }) {
   useLang()
   // `edit` = the document is still reviewable; the permission only decides whether the inputs are there (the server stays the authority).
+  const final = !edit && docOut && docStatus === 'draft' && isOwner && l.unit_price !== null  // a draft customer quote: the owner types the final price
   const editable = edit && can('upload_documents')
-  const priceEdit = editable && can('view_costs') && l.unit_price !== null
+  const priceEdit = (editable && can('view_costs') && l.unit_price !== null) || final
   const [key, setKey] = useState(l.item_key ?? '')
   const [qty, setQty] = useState(l.qty ? String(Number(l.qty)) : '')
   const [price, setPrice] = useState(l.unit_price !== null ? String(Number(l.unit_price)) : '')
@@ -102,8 +103,8 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
     setBusy(true); setErr('')
     try {
       const changed = priceEdit && price !== '' && Number(price) !== Number(l.unit_price)
-      const unitChanged = priceEdit && uom.trim() !== '' && uom.trim() !== (l.uom ?? '')
-      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty, ...(changed ? { unit_price: price } : {}), ...(unitChanged ? { uom: uom.trim() } : {}) })
+      const unitChanged = !final && priceEdit && uom.trim() !== '' && uom.trim() !== (l.uom ?? '')
+      await api('POST', `/documents/${docId}/lines/${l.id}`, final ? { unit_price: price } : { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty, ...(changed ? { unit_price: price } : {}), ...(unitChanged ? { uom: uom.trim() } : {}) })
       onSaved(l.line_no)
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
@@ -133,7 +134,7 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
               onChange={e => { setDraft(e.target.value); const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setPrice(String(+(v / (nQty * (1 - disc / 100))).toFixed(6))) }} onBlur={() => setDraft(null)} />
           : <span className="font-semibold tabular-nums">{rm(total.toFixed(2))}</span>}<span className="block text-xs text-muted tabular-nums">{nQty} × {rm(nPrice.toFixed(2))} {t(S.perUnit)} {uom || l.uom}</span></> : <span className="text-muted">–</span>}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
-      {editable && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? t(S.saving) : t({ en: `Save line ${l.line_no}`, ms: `Simpan baris ${l.line_no}`, zh: `保存第 ${l.line_no} 行`, ta: `வரி ${l.line_no} ஐச் சேமி` })}</button></td>}
+      {(editable || final) && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? t(S.saving) : t({ en: `Save line ${l.line_no}`, ms: `Simpan baris ${l.line_no}`, zh: `保存第 ${l.line_no} 行`, ta: `வரி ${l.line_no} ஐச் சேமி` })}</button></td>}
     </tr>
   )
 }
@@ -209,9 +210,9 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
                     <th scope="col" className="text-right">{t(d.doc.direction === 'in' ? S.thCost : S.thPrice)}</th>
                     <th scope="col" className="text-right">{t(S.thTotal)}</th>
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
-                    {edit && can('upload_documents') && <th scope="col">{t(S.thAction)}</th>}
+                    {((edit && can('upload_documents')) || (d.doc.direction === 'out' && d.doc.status === 'draft' && owner)) && <th scope="col">{t(S.thAction)}</th>}
                   </tr></thead>
-                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { toast(t({ en: `Line ${n} saved.`, ms: `Baris ${n} disimpan.`, zh: `第 ${n} 行已保存。`, ta: `வரி ${n} சேமிக்கப்பட்டது.` })); s.reload() }} />)}</tbody>
+                  <tbody>{d.lines.map(l => <LineRow key={l.id} docId={id} l={l} cols={cols} edit={edit} docOut={d.doc.direction === 'out'} docStatus={d.doc.status} isOwner={owner} showPrice={costs || d.doc.direction === 'out' || REVIEWABLE.includes(d.doc.status)} onSaved={n => { toast(t({ en: `Line ${n} saved.`, ms: `Baris ${n} disimpan.`, zh: `第 ${n} 行已保存。`, ta: `வரி ${n} சேமிக்கப்பட்டது.` })); s.reload() }} />)}</tbody>
                 </table>
               </TableRegion>
             )}

@@ -148,6 +148,7 @@ export function AssistantView() {
 export function AssistantWidget({ hidden, name, uid }: { hidden?: boolean; name?: string; uid?: string }) {
   useLang()  // redraw in the chosen language (the widget is outside the page that is redrawn)
   const [open, setOpen] = useState(false)
+  useEffect(() => { const o = () => { setWarm(true); setOpen(true) }; addEventListener('laris:open-ask', o); return () => removeEventListener('laris:open-ask', o) }, [])
   const [warm, setWarm] = useState(false)  // the chat is mounted from the first hover, focus or touch of the button, so its suggestions are loaded before the click
   const btn = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)

@@ -149,11 +149,11 @@ function GuideButton() {
   const show = useShowTutorialButton()   // Settings > Help can turn the button off
   const key = (location.hash.split('/')[1] || 'home').split('?')[0]
   if (!show || !hasGuide(key)) return null
-  return <button type="button" className="btn min-h-8 gap-1 rounded-full px-3 text-sm" data-guide="how-to" onClick={() => openGuide(key)}><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-accent text-xs font-bold text-on-accent">?</span>{tx('guide.button')}</button>
+  return <button type="button" className="guide-q" data-guide="how-to" aria-label={tx('guide.button')} title={tx('guide.button')} onClick={() => openGuide(key)}><span aria-hidden="true">?</span></button>
 }
 
 const ROUTE_ICON: Record<string, IconName> = { home: 'home', revenue: 'revenue', tracker: 'tracker', track: 'pipeline', jobs: 'jobs', deals: 'tracker', followups: 'clock', contacts: 'contacts', contact: 'contacts',
-  ask: 'ask', catalog: 'camera', alerts: 'alerts', activity: 'activity', team: 'team', roles: 'roles', settings: 'settings', privacy: 'roles', 'api-access': 'key', 'ai-settings': 'ask',
+  ask: 'ask', catalog: 'camera', alerts: 'alerts', reports: 'tracker', activity: 'activity', team: 'team', roles: 'roles', settings: 'settings', privacy: 'roles', 'api-access': 'key', 'ai-settings': 'ask',
   status: 'warn', licence: 'key', issuer: 'key', purchase: 'key', doc: 'tracker', assistant: 'ask', account: 'team', help: 'ask', search: 'ask' }
 const routeNow = () => (location.hash.split('/')[1] || 'home').split('?')[0]
 

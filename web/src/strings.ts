@@ -29,6 +29,8 @@ const D = {
   'nav.contracts': { en: 'Contracts', ms: 'Kontrak', zh: '合同', ta: 'ஒப்பந்தங்கள்' },
   'nav.ask': { en: 'Ask suppliers', ms: 'Tanya pembekal', zh: '询问供应商', ta: 'சப்ளையர்களிடம் கேள்' },
   'nav.catalog': { en: 'Catalog photos', ms: 'Foto katalog', zh: '目录照片', ta: 'பட்டியல் படங்கள்' },
+  'nav.reports': { en: 'Business report', ms: 'Laporan perniagaan', zh: '业务报告', ta: 'வணிக அறிக்கை' },
+  'act.tools': { en: 'Summary and download', ms: 'Ringkasan dan muat turun', zh: '摘要与下载', ta: 'சுருக்கம் மற்றும் பதிவிறக்கம்' },
   'nav.revenue': { en: 'Revenue', ms: 'Hasil', zh: '收入', ta: 'வருவாய்' },
   'nav.alerts': { en: 'Stale costs', ms: 'Kos lapuk', zh: '过时成本', ta: 'பழைய செலவுகள்' },
   'nav.activity': { en: 'Audit log', ms: 'Log audit', zh: '审计日志', ta: 'தணிக்கைப் பதிவு' },

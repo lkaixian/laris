@@ -1,4 +1,6 @@
 import { DealsView } from './Deals'
+import { ReportsView } from './Reports'
+import { HelloBanner } from './HelloBanner'
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ReactNode } from 'react'
@@ -442,6 +444,7 @@ function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => { useLang(); return <><PageHeader title={t(S.notFound)} /><EmptyState title={t(S.notExist)} action={{ label: t(S.openTracker), href: '#/tracker' }} /></> }
 const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   home: { render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
+  reports: { render: () => <ReportsView /> },
   revenue: { render: () => <RevenueView /> },
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
@@ -615,7 +618,7 @@ function AppShell() {
   return (
     <LicenseProvider value={{ lic, readOnly: !!lic?.enforced && lic.read_only, reload: () => setLicTries(t => t + 1) }}>
     <OrgCtx value={orgName}>
-      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /><HealthBanner owner={owner && !!me} hash={hash} /></>}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><HelloBanner /><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /><HealthBanner owner={owner && !!me} hash={hash} /></>}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>{t(S.noMe)} {meErr}</p>

@@ -19,6 +19,9 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
                       "AI reading, email and hosting process it for us, and some of them are outside Malaysia.{dpo}\n"
                       "Your choices: send /mydata for a copy of your data, /forget to ask us to erase it, or tell us here to correct it or to limit how we use it. "
                       "Send /privacy to read this again.",
+            "ask_profile": "Before we prepare your quote, please reply with your name and phone number, for example: Ah Seng 012-3456789",
+            "ask_profile_again": "Sorry, we could not find a phone number. Please reply with your name and phone number, for example: Ah Seng 012-3456789",
+            "profile_ok": "Thank you, {name}.",
             "dpo": " For questions, contact our data protection contact: {who}.",
             "agree": "To continue, reply YES.", "agreed": "Thank you. Please send your request.",
             "forget": "We received your request. The business will confirm after checking quotes it must keep.",
@@ -42,6 +45,9 @@ T = {"en": {"welcome": HELP, "help": HELP, "sorry": SORRY, "voice": VOICE_SORRY,
                       "bagi pihak kami, dan sebahagiannya berada di luar Malaysia.{dpo}\n"
                       "Pilihan anda: hantar /mydata untuk salinan data anda, /forget untuk meminta kami memadamnya, atau beritahu kami di sini untuk membetulkannya "
                       "atau menghadkan cara kami menggunakannya. Hantar /privacy untuk baca semula.",
+            "ask_profile": "Sebelum kami sediakan sebut harga, sila balas dengan nama dan nombor telefon anda, contohnya: Ah Seng 012-3456789",
+            "ask_profile_again": "Maaf, kami tidak jumpa nombor telefon. Sila balas dengan nama dan nombor telefon anda, contohnya: Ah Seng 012-3456789",
+            "profile_ok": "Terima kasih, {name}.",
             "dpo": " Untuk pertanyaan, hubungi pegawai perlindungan data kami: {who}.",
             "agree": "Untuk meneruskan, balas YA.", "agreed": "Terima kasih. Sila hantar permintaan anda.",
             "forget": "Kami telah menerima permintaan anda. Perniagaan akan mengesahkan selepas menyemak sebut harga yang mesti disimpan.",

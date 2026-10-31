@@ -158,7 +158,7 @@ def file(stage: str, doc_id: UUID, format: Literal["auto", "pdf"] = "auto", ctx:
         title = (layout.get("title") or {}).get(lang) or (layout.get("title") or {}).get("en") or stage
         vals, items = values_for(m, stage, title, reference)
         try:
-            body = doc_template.fill(bytes(tpl["content"]), vals, items)
+            body = doc_template.fill(bytes(tpl["content"]), vals, items, m["issuer"].get("logo_url"))
             return Response(body, media_type=DOCX, headers={"Content-Disposition": f'attachment; filename="{name}.docx"', "X-Doc-Source": "template"})
         except doc_template.TemplateError:
             warn = {"X-Doc-Warning": "template-unusable"}  # a stored file that no longer fills: give the standard PDF rather than nothing

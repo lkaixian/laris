@@ -196,3 +196,15 @@ def test_a_stored_template_that_no_longer_fills_falls_back_to_the_standard_pdf(e
     e.sql("update doc_templates set content = %s where stage = 'invoice'", (b"PK-broken",))
     r = get_file(e, "invoice", ids["invoice"])
     assert r.status_code == 200 and r.content[:4] == b"%PDF" and r.headers["x-doc-warning"] == "template-unusable"
+
+
+def test_the_business_logo_fills_the_slot_in_the_starter_template_and_no_logo_leaves_it_empty(env):
+    from test_quotes import png
+    e = env
+    ids = build_all(e)
+    assert upload(e, "invoice", starter(e, "invoice")).status_code == 201
+    bare = zipfile.ZipFile(io.BytesIO(get_file(e, "invoice", ids["invoice"]).content))
+    assert "Company logo" not in bare.read("word/document.xml").decode() and "word/media/company-logo.png" not in bare.namelist()
+    assert e.c.post("/api/settings", json={"logo_data_url": png(400, 100)}, headers=e.O).status_code == 200
+    z = zipfile.ZipFile(io.BytesIO(get_file(e, "invoice", ids["invoice"]).content))
+    assert z.read("word/media/company-logo.png")[1:4] == b"PNG" and "Company logo" in z.read("word/document.xml").decode()

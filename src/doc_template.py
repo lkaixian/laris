@@ -6,9 +6,12 @@ holds {{line.description}} (or any other {{line.*}}) is repeated once per item. 
 copied through unchanged. A placeholder LARIS does not know is left as typed, so a typo is visible instead of silently blank.
 Safe by construction: macro files, embedded objects and remote templates are refused, the zip is size-checked before it is read, and every XML
 part goes through defusedxml (no DTDs, no entity tricks) before and after filling."""
+import base64
+import hashlib
 import io
 import re
 import zipfile
+from pathlib import Path
 from xml.sax.saxutils import escape, unescape
 
 from defusedxml import ElementTree as safe_xml
@@ -142,80 +145,84 @@ def _fill_part(xml: str, values: dict[str, str], lines: list[dict[str, str]]) ->
     return out
 
 
-def fill(data: bytes, values: dict[str, str], lines: list[dict[str, str]]) -> bytes:
-    """The template with every known {{placeholder}} replaced; {{line.*}} rows repeat once per line. Returns a .docx."""
+def fill(data: bytes, values: dict[str, str], lines: list[dict[str, str]], logo: str | None = None) -> bytes:
+    """The template with every known {{placeholder}} replaced; {{line.*}} rows repeat once per line. Returns a .docx.
+    `logo` is the business's stored logo (a data URL). The starter files carry a blank "Company logo" picture: it becomes the logo, or, with no logo, the
+    empty slot is dropped so only the company name shows. A picture the owner put there themselves is never touched."""
     z = _zip(data)
+    files = {info.filename: z.read(info.filename) for info in z.infolist()}
+    for n in files:
+        if PART.match(n):
+            files[n] = _fill_part(files[n].decode("utf-8"), values, lines).encode("utf-8")
+    _logo_slot(files, _logo_png(logo))
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as w:
-        for info in z.infolist():
-            raw = z.read(info.filename)
-            if PART.match(info.filename):
-                raw = _fill_part(raw.decode("utf-8"), values, lines).encode("utf-8")
-            w.writestr(info.filename, raw)
+        for n, raw in files.items():
+            w.writestr(n, raw)
     return out.getvalue()
 
 
-# ---------------------------------------------------------------- the starter file
-def _p(text: str, bold=False, size: int | None = None, right=False) -> str:
-    rpr = ("<w:b/>" if bold else "") + (f'<w:sz w:val="{size * 2}"/>' if size else "")
-    ppr = '<w:pPr><w:jc w:val="right"/></w:pPr>' if right else ""
-    return f'<w:p>{ppr}<w:r>{"<w:rPr>" + rpr + "</w:rPr>" if rpr else ""}<w:t xml:space="preserve">{escape(text)}</w:t></w:r></w:p>'
+# ---------------------------------------------------------------- the company logo slot
+SLOT_SHA = "d18553c11022"      # start of the sha256 of the blank picture the starter files hold in the slot
+SLOT_BOX = (1371600, 514350)   # EMU: the room the logo gets (1.5 x 0.56 inch, about 3:1)
+LOGO_MAX_PIXELS = 16_000_000
+SLOT = re.compile(r"<w:p[ >](?:(?!</w:p>).)*?<w:drawing>(?:(?!</w:drawing>).)*?<wp:docPr[^>]*name=\"Company logo\"(?:(?!</w:drawing>).)*?r:embed=\"([^\"]+)\".*?</w:p>", re.S)
 
 
-def _tc(text: str, w: int, bold=False, right=False) -> str:
-    return f'<w:tc><w:tcPr><w:tcW w:w="{w}" w:type="dxa"/></w:tcPr>{_p(text, bold, right=right)}</w:tc>'
+def _logo_png(url: str | None):
+    """(png bytes, width, height) from a stored data URL, or None. Never raises: a bad logo means no logo, not a failed document."""
+    m = re.fullmatch(r"data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})", url or "")
+    if not m:
+        return None
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(base64.b64decode(m.group(1), validate=True)))
+        w, h = im.size
+        if not (0 < w * h <= LOGO_MAX_PIXELS):
+            return None
+        im.thumbnail((1200, 450))
+        buf = io.BytesIO()
+        im.convert("RGBA").save(buf, "PNG")
+        return buf.getvalue(), im.size[0], im.size[1]
+    except Exception:
+        return None
 
 
-def _table(rows: list[list[str]], widths: list[int], header=True) -> str:
-    border = "".join(f'<w:{s} w:val="single" w:sz="4" w:space="0" w:color="999999"/>' for s in ("top", "left", "bottom", "right", "insideH", "insideV"))
-    body = "".join("<w:tr>" + "".join(_tc(c, widths[i], bold=header and n == 0, right=i >= 2 and n >= 0 and widths[i] < 1500) for i, c in enumerate(r)) + "</w:tr>" for n, r in enumerate(rows))
-    return f'<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>{border}</w:tblBorders></w:tblPr>{body}</w:tbl>'
+def _logo_slot(files: dict[str, bytes], logo) -> None:
+    doc = files.get("word/document.xml")
+    rels = files.get("word/_rels/document.xml.rels")
+    if doc is None or rels is None:
+        return
+    xml, rx = doc.decode("utf-8"), rels.decode("utf-8")
+    m = SLOT.search(xml)
+    if not m:
+        return
+    rel = re.search(r'<Relationship\b[^>]*\bId="%s"[^>]*>' % re.escape(m.group(1)), rx)
+    target = re.search(r'Target="(media/[^"/]+)"', rel.group(0)) if rel else None
+    if not target:
+        return
+    pic = files.get("word/" + target.group(1))
+    if pic is None or hashlib.sha256(pic).hexdigest()[:12] != SLOT_SHA:
+        return  # the owner already put their own picture in the slot
+    if not logo:
+        files["word/document.xml"] = (xml[:m.start()] + xml[m.end():]).encode("utf-8")
+        return
+    png, w, h = logo
+    k = min(SLOT_BOX[0] / w, SLOT_BOX[1] / h)
+    cx, cy = max(1, int(w * k)), max(1, int(h * k))
+    para = re.sub(r'(<wp:extent cx=")\d+(" cy=")\d+"', rf'\g<1>{cx}\g<2>{cy}"', m.group(0))
+    para = re.sub(r'(<a:ext cx=")\d+(" cy=")\d+"', rf'\g<1>{cx}\g<2>{cy}"', para)
+    files["word/document.xml"] = (xml[:m.start()] + para + xml[m.end():]).encode("utf-8")
+    files["word/media/company-logo.png"] = png
+    files["word/_rels/document.xml.rels"] = rx.replace(rel.group(0), rel.group(0).replace(target.group(1), "media/company-logo.png")).encode("utf-8")
 
 
-_TITLES = {"purchase_order": "Purchase Order", "sales_order": "Sales Order", "proforma": "Proforma Invoice", "delivery_order": "Delivery Order", "invoice": "Invoice", "receipt": "Receipt"}
+# ---------------------------------------------------------------- the starter files
+STARTERS = Path(__file__).parent / "starter_templates"
 
 
 def starter(stage: str) -> bytes:
-    """A ready-to-edit .docx for the stage, already carrying the right placeholders, so an owner can restyle it in Word and upload it back."""
+    """A ready-to-edit .docx for the stage (letterhead, logo slot, the right placeholders): restyle it in Word and upload it back."""
     if stage not in STAGES:
         raise TemplateError("unknown document type")
-    priced = stage != "delivery_order"
-    body = [_p("{{company_name}}", bold=True, size=16), _p("{{company_address}}"), _p("SSM {{company_ssm}}   {{company_email}}   {{company_phone}}"),
-            _p(_TITLES[stage].upper(), bold=True, size=20), _p("No: {{doc_no}}"), _p("Date: {{date}}")]
-    if stage in ("purchase_order", "sales_order", "delivery_order", "invoice"):
-        body.append(_p("Your PO no: {{reference}}"))
-    if stage == "invoice":
-        body.append(_p("Due date: {{due_date}}"))
-    body += [_p("Customer", bold=True), _p("{{customer_name}}"), _p("{{customer_address}}")]
-    if stage == "receipt":
-        body += [_p("Received with thanks", bold=True), _p("Amount received: {{currency}} {{amount_paid}}"), _p("Paid by: {{payment_method}}   Reference: {{payment_reference}}"),
-                 _p("Balance still to pay: {{currency}} {{balance_due}}")]
-    else:
-        cols = [("No", 600), ("Description", 4200), ("Qty", 800), ("Unit", 800)] + ([("Unit price", 1300), ("Amount", 1300)] if priced else [])
-        heads = [c[0] for c in cols]
-        row = ["{{line.no}}", "{{line.description}}", "{{line.qty}}", "{{line.uom}}"] + (["{{line.unit_price}}", "{{line.amount}}"] if priced else [])
-        body.append(_table([heads, row], [c[1] for c in cols]))
-        if priced:
-            body += [_p("Total before tax: {{currency}} {{subtotal}}", right=True), _p("SST: {{currency}} {{tax}}", right=True), _p("Total: {{currency}} {{total}}", bold=True, right=True)]
-        if stage == "proforma":
-            body.append(_p("Deposit ({{deposit_percent}}%): {{currency}} {{deposit_amount}}", bold=True))
-        if stage == "invoice":
-            body += [_p("Deposit already paid: {{currency}} {{deposit_paid}}"), _p("Balance to pay: {{currency}} {{balance_due}}", bold=True)]
-        if stage == "delivery_order":
-            body.append(_p("Received in good order by: {{signed_by}}   {{signed_at}}"))
-        body += [_p("Payment terms: {{payment_terms}}"), _p("{{terms}}")]
-        if stage in ("proforma", "invoice"):
-            body.append(_p("{{bank_details}}"))
-    ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-    doc = f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {ns}><w:body>{"".join(body)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>'
-    types = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-             '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
-             '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
-    rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
-    out = io.BytesIO()
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", types)
-        z.writestr("_rels/.rels", rels)
-        z.writestr("word/document.xml", doc)
-    return out.getvalue()
+    return (STARTERS / f"{stage}-template.docx").read_bytes()

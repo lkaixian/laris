@@ -1,5 +1,7 @@
 """The owner's Word template: what is accepted, what is refused, and how it is filled. Pure; no database."""
+import base64
 import io
+import re
 import zipfile
 
 import pytest
@@ -33,13 +35,17 @@ def test_every_starter_is_a_valid_template_that_knows_all_its_placeholders(stage
     assert r["unknown"] == [] and r["placeholders"] and (r["repeats_lines"] or stage == "receipt")
 
 
+def out_rows_before(stage):
+    return text_of(dt.starter(stage)).count("<w:tr>")
+
+
 @pytest.mark.parametrize("stage", dt.STAGES)
 def test_filling_a_starter_replaces_every_placeholder(stage):
     out = text_of(dt.fill(dt.starter(stage), VALUES, LINES))
     assert "{{" not in out
     assert "V_doc_no" in out and "V_company_name" in out
     if stage != "receipt":
-        assert out.count("Bracket &amp; clip") == 1 and out.count("<w:tr>") == 1 + len(LINES)  # header row + one row per item, escaped
+        assert out.count("Bracket &amp; clip") == 1 and out.count("<w:tr>") == out_rows_before(stage) + len(LINES) - 1  # one row per item, escaped
 
 
 def test_a_row_is_repeated_per_line_and_removed_when_there_are_none():
@@ -102,3 +108,58 @@ def test_headers_and_footers_are_filled_too_and_other_parts_pass_through_untouch
     t = docx("<w:p><w:r><w:t>x</w:t></w:r></w:p>", {"word/header1.xml": hdr, "word/media/logo.png": b"\x89PNG-bytes"})
     z = zipfile.ZipFile(io.BytesIO(dt.fill(t, {"company_name": "Kedai Jaya"}, [])))
     assert b"Kedai Jaya" in z.read("word/header1.xml") and z.read("word/media/logo.png") == b"\x89PNG-bytes"
+
+
+# ---------------------------------------------------------------- the company logo slot
+def logo_url(w=300, h=100, fmt="PNG"):
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (200, 30, 30)).save(buf, fmt)
+    return f"data:image/{fmt.lower().replace('jpg', 'jpeg')};base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def parts(data: bytes) -> dict:
+    z = zipfile.ZipFile(io.BytesIO(data))
+    return {n: z.read(n) for n in z.namelist()}
+
+
+@pytest.mark.parametrize("stage", dt.STAGES)
+def test_the_logo_goes_into_the_slot_of_every_starter(stage):
+    out = parts(dt.fill(dt.starter(stage), VALUES, LINES, logo_url(300, 100)))
+    assert out["word/media/company-logo.png"][1:4] == b"PNG"
+    assert b"media/company-logo.png" in out["word/_rels/document.xml.rels"]
+    doc = out["word/document.xml"].decode()
+    assert doc.count("Company logo") == 3 and "V_company_name" in doc
+    assert 'cx="1371600" cy="457200"' in doc  # 3:1 logo fills the width, aspect kept
+    assert dt.check(dt.fill(dt.starter(stage), VALUES, LINES, logo_url()))["placeholders"] is not None
+
+
+@pytest.mark.parametrize("stage", dt.STAGES)
+def test_without_a_logo_the_slot_is_empty_and_only_the_company_name_shows(stage):
+    for none in (None, "", "data:image/png;base64,not-an-image", "javascript:alert(1)"):
+        out = parts(dt.fill(dt.starter(stage), VALUES, LINES, none))
+        doc = out["word/document.xml"].decode()
+        assert "Company logo" not in doc and "<w:drawing>" not in doc and "V_company_name" in doc
+        assert "word/media/company-logo.png" not in out
+
+
+def test_a_tall_logo_is_scaled_to_fit_the_height():
+    doc = parts(dt.fill(dt.starter("invoice"), VALUES, LINES, logo_url(100, 300, "JPEG")))["word/document.xml"].decode()
+    assert 'cx="171450" cy="514350"' in doc
+
+
+def test_a_picture_the_owner_put_in_the_slot_is_left_alone():
+    mine = parts(dt.starter("invoice"))
+    rels = mine["word/_rels/document.xml.rels"].decode()
+    name = re.search(r'Id="rId8"[^>]*Target="([^"]+)"', rels).group(1)
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 40), (0, 0, 255)).save(buf, "PNG")
+    mine["word/" + name] = buf.getvalue()
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as w:
+        for n, raw in mine.items():
+            w.writestr(n, raw)
+    for logo in (None, logo_url()):
+        res = parts(dt.fill(out.getvalue(), VALUES, LINES, logo))
+        assert res["word/" + name] == buf.getvalue() and "Company logo" in res["word/document.xml"].decode()

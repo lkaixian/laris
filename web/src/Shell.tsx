@@ -6,6 +6,7 @@ import { LANGS, setLang, t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { tx, txOr } from './strings'
 import { hasGuide, startGuide } from './Guide'
+import { useShowTutorialButton } from './helpPrefs'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
 import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
@@ -79,6 +80,7 @@ const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) ==
 
 function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: ReturnType<typeof visibleNav>; route: string; collapsed?: boolean; idp: string; onNavigate?: (href: string) => void }) {
   const here = PARENT[route] ?? route
+  const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
   return (
     <nav aria-label={tx('nav.main')} className="px-2 pb-2">
       <ul>
@@ -88,11 +90,11 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
                 <li key={i.key} className="group relative">
-                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : hasGuide(i.key) || articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>
-                  {!collapsed && (hasGuide(i.key) ? (
+                  {!collapsed && help && (hasGuide(i.key) ? (
                     <button type="button" aria-label={tx('guide.open', txOr(`nav.${i.key}`, i.label))} onClick={() => { onNavigate?.(`#/${i.key}`); startGuide(i.key) }}
                       className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                       <span aria-hidden="true">?</span>

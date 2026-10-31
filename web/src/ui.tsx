@@ -5,6 +5,7 @@ import { tx, txOr } from './strings'
 import { t, useLang, locale } from './i18n'
 import type { Text } from './i18n'
 import { hasGuide, openGuide } from './Guide'
+import { useShowTutorialButton } from './helpPrefs'
 import type { Me } from './api'
 import { Icon } from './icons'
 
@@ -143,8 +144,9 @@ export const OrgCtx = createContext('LARIS')
 export interface Crumb { href?: string; label: string }
 // "? How to" beside a page title: opens the step-by-step guide for this page, when it has one.
 function GuideButton() {
+  const show = useShowTutorialButton()   // Settings > Help can turn the button off
   const key = (location.hash.split('/')[1] || 'home').split('?')[0]
-  if (!hasGuide(key)) return null
+  if (!show || !hasGuide(key)) return null
   return <button type="button" className="btn min-h-8 gap-1 rounded-full px-3 text-sm" data-guide="how-to" onClick={() => openGuide(key)}><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-accent text-xs font-bold text-on-accent">?</span>{tx('guide.button')}</button>
 }
 

@@ -31,6 +31,7 @@ import { CatalogView } from './Listings'
 import { LANGS, setLang, useLang, t } from './i18n'
 import type { Text } from './i18n'
 import { tx, txOr } from './strings'
+import { setShowTutorialButton, useShowTutorialButton } from './helpPrefs'
 import { liteVisuals, reduceTransparency, setLiteVisuals, setReduceTransparency, setThemePref, themePref } from './skin'
 import type { ThemePref } from './skin'
 const txOrReason = (r: string) => txOr(`why.${r}`, r)
@@ -65,6 +66,9 @@ const S = {
   system: { en: 'System', ms: 'Sistem', zh: '跟随系统', ta: 'சாதனம்' },
   reduceTransparency: { en: 'Reduce transparency', ms: 'Kurangkan kelutsinaran', zh: '减少透明效果', ta: 'ஒளிஊடுருவலைக் குறைக்கவும்' },
   reduceTransparencyHint: { en: 'Solid panels instead of frosted glass. Also on when your device asks for less transparency.', ms: 'Panel pepejal, bukan kaca berfros. Turut aktif jika peranti anda meminta kurang kelutsinaran.', zh: '用实色面板代替磨砂玻璃。当设备要求减少透明效果时也会自动启用。', ta: 'பனிக்கண்ணாடிக்குப் பதிலாக திடமான பலகைகள். உங்கள் சாதனம் குறைந்த ஒளிஊடுருவலைக் கேட்டாலும் இது இயங்கும்.' },
+  help: { en: 'Help', ms: 'Bantuan', zh: '帮助', ta: 'உதவி' },
+  showTutorial: { en: 'Show the Tutorial button', ms: 'Tunjukkan butang Tutorial', zh: '显示“教程”按钮', ta: '“பயிற்சி” பொத்தானைக் காட்டு' },
+  showTutorialHint: { en: 'The Tutorial button beside page titles, and the ? beside each menu item. Turn it off if you do not need it; turn it on again here any time.', ms: 'Butang Tutorial di sebelah tajuk halaman, dan tanda ? di sebelah setiap item menu. Matikan jika anda tidak memerlukannya; hidupkan semula di sini pada bila-bila masa.', zh: '页面标题旁的“教程”按钮，以及每个菜单项旁的“?”。不需要时可以关闭，随时可在此重新开启。', ta: 'பக்கத் தலைப்புகளின் அருகிலுள்ள “பயிற்சி” பொத்தானும், ஒவ்வொரு மெனு உருப்படியின் அருகிலுள்ள “?” குறியும். தேவையில்லையெனில் அணைக்கவும்; எப்போது வேண்டுமானாலும் இங்கே மீண்டும் இயக்கலாம்.' },
   liteVisuals: { en: 'Lite visuals', ms: 'Visual ringan', zh: '精简视觉效果', ta: 'எளிய காட்சிகள்' },
   liteVisualsHint: { en: 'Stops the moving background and softens the blur. Helps on older phones.', ms: 'Hentikan latar bergerak dan kurangkan kabur. Membantu pada telefon lama.', zh: '停止动态背景并减弱模糊效果，适合较旧的手机。', ta: 'நகரும் பின்னணியை நிறுத்தி மங்கலைக் குறைக்கும். பழைய தொலைபேசிகளுக்கு உதவும்.' },
   remembered: { en: 'Remembered on this device.', ms: 'Diingati pada peranti ini.', zh: '会记住在此设备上。', ta: 'இந்தச் சாதனத்தில் நினைவில் வைக்கப்படும்.' },
@@ -166,6 +170,7 @@ function GeneralTab({ setDark }: { setDark: (d: boolean) => void }) {
   const [pref, setPref] = useState<ThemePref>(themePref)
   const [calm, setCalm] = useState(reduceTransparency)
   const [lite, setLite] = useState(liteVisuals)
+  const showTut = useShowTutorialButton()
   return (
     <div className="grid max-w-xl gap-4">
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3" data-guide="st-general">
@@ -188,6 +193,14 @@ function GeneralTab({ setDark }: { setDark: (d: boolean) => void }) {
         <label className="flex items-start gap-3 py-1 text-sm">
           <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-(--accent)" checked={lite} onChange={e => { setLite(e.target.checked); setLiteVisuals(e.target.checked) }} />
           <span><span className="block font-semibold">{t(S.liteVisuals)}</span><span className="block text-muted">{t(S.liteVisualsHint)}</span></span>
+        </label>
+        <p className="text-sm text-muted">{t(S.remembered)}</p>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
+        <legend className="px-1 text-sm font-semibold">{t(S.help)}</legend>
+        <label className="flex items-start gap-3 py-1 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-(--accent)" checked={showTut} onChange={e => setShowTutorialButton(e.target.checked)} />
+          <span><span className="block font-semibold">{t(S.showTutorial)}</span><span className="block text-muted">{t(S.showTutorialHint)}</span></span>
         </label>
         <p className="text-sm text-muted">{t(S.remembered)}</p>
       </fieldset>

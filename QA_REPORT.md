@@ -41,3 +41,8 @@ The contrast test found two real failures in the brief's starter tokens (error t
 3. The mock-mode warning banner sticks to the top and overlaps scrolled content (existing behaviour).
 4. The print-time model is a documented heuristic with an assumed accuracy of about plus or minus 20%. It has **not been compared with a real slicer**. The shipped prices, densities and speeds in `config/print3d.yaml` are invented placeholders.
 5. The price engine packs copies on a plate by a simple area rule and does not model stacking, nesting or mixed jobs on one plate.
+
+## Addendum: Tutorial button switch
+One switch (Settings, General, Help) controls the page-title "Tutorial" pill and the "?" beside main-menu items. Checked in the browser (mock mode): with it off there are 0 menu "?" buttons, no page pill and none of the extra menu spacing; turning it on restores all 18 menu "?" buttons, the pill and the spacing and clears the stored value; turning it off again removes them again; it updates at once and survives a reload. Automated: 3 web tests on the stored preference (default on, off and on, unknown value, blocked storage).
+Corrected: an earlier version of this addendum said guides stay reachable from "Take the tour". That is a different feature; see DECISIONS.md D-15.
+Not checked: the menu visually with the switch off (the check was by counting elements, and the test tab was phone-width so the menu was a closed drawer); the Help Center article "?" links (this mock data has none, so that branch is covered by code reading only); other languages visually; a second browser tab; the in-memory fallback when storage is blocked.

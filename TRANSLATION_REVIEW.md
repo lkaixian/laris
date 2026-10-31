@@ -44,3 +44,11 @@ The glossary in the brief (Quotation, Purchase Order, Proforma, Delivery Order, 
 - Done: all four languages are present for every new key (TypeScript requires `Text` objects; `tests/test_strings.py` still passes).
 - Not done: native-speaker review, and a 40% text-expansion layout check (the edit toolbar wraps, which was seen at phone width in English only).
 - Not done: Noto Sans fonts for Tamil and Chinese on the web page (the PDF already embeds them; the web app uses the system font stack).
+
+## Tutorial button switch (Settings, Help; `web/src/App.tsx`)
+
+| Key | English | Malay | Chinese | Tamil | Status |
+|---|---|---|---|---|---|
+| help | Help | Bantuan | 帮助 | உதவி | A |
+| showTutorial | Show the Tutorial button | Tunjukkan butang Tutorial | 显示“教程”按钮 | “பயிற்சி” பொத்தானைக் காட்டு | A. Reuses the app's existing word for the button (`guide.button`: Tutorial / 教程 / பயிற்சி) |
+| showTutorialHint | The Tutorial button beside page titles, and the ? beside each menu item. Turn it off if you do not need it; turn it on again here any time. | Butang Tutorial di sebelah tajuk halaman, dan tanda ? di sebelah setiap item menu. Matikan jika anda tidak memerlukannya; hidupkan semula di sini pada bila-bila masa. | 页面标题旁的“教程”按钮，以及每个菜单项旁的“?”。不需要时可以关闭，随时可在此重新开启。 | (see file) | A |

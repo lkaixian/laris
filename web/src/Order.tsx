@@ -17,7 +17,10 @@ interface Doc { id: string; kind: 'proforma' | 'delivery_order' | 'invoice' | 'r
 interface Pay { id: string; amount: string; method: string; reference: string | null; paid_on: string; purpose: string; reverses_payment_id: string | null; reversed: boolean }
 interface Sig { name: string; at: string; problems: string | null; has_mark: boolean }
 interface DO { id: string; doc_no: string; status: string; issued_at: string; override_reason: string | null; signature: Sig | null }
+interface DepLink { status: 'open' | 'paid' | 'expired' | 'failed'; amount: string; url: string; created_at: string; paid_at: string | null }
+interface Sent { status: 'sent' | 'failed' | 'skipped'; detail: string | null; at: string }
 interface Chain {
+  deposit_link?: DepLink | null; stripe_on?: boolean; sent?: Record<string, Sent>
   job: { id: string; title: string; quote_id: string | null; customer: string | null; quote_deposit_pct: string | null }
   total: string | null; paid: string; balance: string | null; credited?: string; deposit: { pct: string; amount: string; paid: string } | null; stage: Stage; overdue: string | null
   delivery: { lines: { no: number; ordered: string; issued: string; signed: string }[]; complete: boolean }
@@ -240,6 +243,48 @@ function Delivery({ c, owner, run, links, onLink }: { c: Chain; owner: boolean; 
   )
 }
 
+const D = {
+  h: { en: 'Deposit payment', ms: 'Bayaran deposit', zh: '订金付款', ta: 'முன்பண கட்டணம்' },
+  open: { en: 'Waiting for the customer to pay', ms: 'Menunggu pelanggan membayar', zh: '等待客户付款', ta: 'வாடிக்கையாளர் செலுத்த காத்திருக்கிறது' },
+  paid: { en: 'Deposit paid and recorded', ms: 'Deposit dibayar dan direkod', zh: '订金已付并入账', ta: 'முன்பணம் செலுத்தப்பட்டு பதிவானது' },
+  expired: { en: 'Link expired: send a new one', ms: 'Pautan tamat: hantar yang baharu', zh: '链接已过期：请重新发送', ta: 'இணைப்பு காலாவதி: புதியதை அனுப்பு' },
+  send: { en: 'Send payment link on Telegram', ms: 'Hantar pautan bayaran melalui Telegram', zh: '通过 Telegram 发送付款链接', ta: 'Telegram மூலம் கட்டண இணைப்பை அனுப்பு' },
+  check: { en: 'Check now', ms: 'Semak sekarang', zh: '立即检查', ta: 'இப்போது சரிபார்' },
+  sendDoc: { en: 'Send', ms: 'Hantar', zh: '发送', ta: 'அனுப்பு' },
+  again: { en: 'Send again', ms: 'Hantar semula', zh: '再次发送', ta: 'மீண்டும் அனுப்பு' },
+  sent: { en: 'Sent', ms: 'Dihantar', zh: '已发送', ta: 'அனுப்பப்பட்டது' },
+  failed: { en: 'Not sent', ms: 'Tidak dihantar', zh: '未发送', ta: 'அனுப்பப்படவில்லை' },
+  skipped: { en: 'Customer not on Telegram', ms: 'Pelanggan tiada Telegram', zh: '客户未使用 Telegram', ta: 'வாடிக்கையாளர் Telegram இல் இல்லை' },
+  done: { en: 'Done.', ms: 'Siap.', zh: '完成。', ta: 'முடிந்தது.' },
+} satisfies Record<string, Text>
+
+function DepositCard({ c, run, busy }: { c: Chain; run: Run; busy: boolean }) {
+  const l = c.deposit_link
+  if (!c.stripe_on || !c.deposit) return null
+  const pay = () => void run(async () => { const r = await api<{ sent: Sent }>('POST', `/jobs/${c.job.id}/deposit-link`); return r.sent.status === 'sent' ? t(D.done) : (r.sent.detail ?? t(D.failed)) })
+  const check = () => void run(async () => { await api('POST', `/jobs/${c.job.id}/deposit/check`); return t(D.done) })
+  return (
+    <section className="card mb-4 flex flex-wrap items-center gap-3" aria-label={t(D.h)}>
+      <h2 className="text-lg font-semibold">{t(D.h)}</h2>
+      <span className={`chip ${l?.status === 'paid' ? 'chip-accepted' : 'chip-approved'}`}>{t(l ? D[l.status === 'failed' ? 'expired' : l.status] : D.expired)}</span>
+      {l?.status !== 'paid' && <>
+        <button className="btn" disabled={busy} onClick={pay}>{t(D.send)}</button>
+        {l && <button className="btn" disabled={busy} onClick={check}>{t(D.check)}</button>}
+      </>}
+    </section>
+  )
+}
+
+function SendCell({ d, sent, run, busy }: { d: Doc; sent?: Sent; run: Run; busy: boolean }) {
+  if (d.status === 'void') return null
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-sm">
+      {sent && <span className={sent.status === 'sent' ? 'text-muted' : 'text-warn'} title={sent.detail ?? undefined}>{t(D[sent.status])}</span>}
+      <button className="btn btn-sm" disabled={busy} onClick={() => void run(async () => { const r = await api<Sent>('POST', `/deal-docs/${d.id}/send`); return r.status === 'sent' ? t(D.done) : (r.detail ?? t(D.failed)) })}>{t(sent ? D.again : D.sendDoc)}</button>
+    </span>
+  )
+}
+
 export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
   useLang()
   const s = useFetch<Chain>(`/jobs/${id}/chain`)
@@ -283,6 +328,7 @@ export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
               <dt className="text-muted">{TT('balance')}</dt><dd className="text-right font-semibold">{rm(c.balance)}</dd>
             </dl>
           </section>
+          <DepositCard c={c} run={run} busy={busy} />
           <NextStep c={c} owner={owner} run={run} busy={busy} onLink={onLink} />
           <Delivery c={c} owner={owner} run={run} links={links} onLink={onLink} />
           {owner && c.invoice && Number(c.balance) > 0 && <CreditForm c={c} run={run} busy={busy} />}
@@ -297,7 +343,8 @@ export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
               { key: 'k', head: TT('type'), mobile: 'sub', cell: d => TT(d.kind) },
               { key: 'st', head: TT('st'), mobile: 'badge', cell: d => <Status v={d.status} /> },
               { key: 'tot', head: TT('total'), num: true, mobile: 'meta', cell: d => rm(d.total) },
-              { key: 'pdf', head: TT('pdf'), mobile: 'meta', cell: d => <button className="btn btn-sm" onClick={() => void download(`/deal-docs/${d.id}/pdf`, `${d.doc_no}.pdf`).catch(e => toast(msg(e)))}>{TT('pdf')}</button> }]} />
+              { key: 'pdf', head: TT('pdf'), mobile: 'meta', cell: d => <button className="btn btn-sm" onClick={() => void download(`/deal-docs/${d.id}/pdf`, `${d.doc_no}.pdf`).catch(e => toast(msg(e)))}>{TT('pdf')}</button> },
+              { key: 'tg', head: 'Telegram', mobile: 'meta', cell: d => d.kind === 'credit_note' ? null : <SendCell d={d} sent={c.sent?.[d.id]} run={run} busy={busy} /> }]} />
           </section>
           {c.payments.length > 0 && <section aria-label={TT('pays')} className="card mb-4"><h2 className="mb-2 text-lg font-semibold">{TT('pays')}</h2>
             <ul className="grid gap-1 text-sm">{c.payments.map(p => <li key={p.id} className="tabular-nums">{[p.paid_on, `${p.reverses_payment_id ? '-' : ''}${rm(p.amount)}`, p.method, p.reference].filter(Boolean).join(' · ')}{p.reversed ? ` (${TT('reversed')})` : ''}</li>)}</ul></section>}

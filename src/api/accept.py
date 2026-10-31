@@ -14,6 +14,7 @@ from .. import auth, clock, db, logsetup, mailer, pipeline, quote_doc
 from ..errors import ApiError
 from .deps import JR, Ctx, require_owner, throttle, write_ctx
 from .routes import _out_doc
+from . import deposits
 
 log = logging.getLogger("laris")
 r = APIRouter(prefix="/api")
@@ -122,6 +123,8 @@ def _decide(request: Request, token: str, decision: str, name: str | None, reaso
             return JR({"status": "accepted" if decision == "accepted" else "rejected", **({"job_created": True} if decision == "accepted" else {}), "simulated": True})
         return _err(409, "already_decided", "This quotation has already been decided.",
                     decided={"decision": res["decision"], "at": res["decided_at"], "name": res["signer_name"]})
+    if decision == "accepted":
+        deposits.on_accepted(request.app.state.svc, res["quote_id"])  # the proforma, the Stripe deposit link and both on Telegram; never raises
     return JR({"status": "accepted", "job_created": True, "simulated": True} if decision == "accepted" else {"status": "rejected", "simulated": True})
 
 

@@ -71,7 +71,7 @@ def test_payments_are_append_only_for_the_app_role_and_for_the_owner(env, pg_url
     e = env
     j = hand_job(e, "1000.00")
     p = pay(e, j, "300.00", key="dep-key-0001").json()["payment"]["id"]
-    for q in ("update payments set amount = 1", "delete from payments", "truncate payments, deal_docs, delivery_signatures, delivery_links"):
+    for q in ("update payments set amount = 1", "delete from payments", "truncate payments, deal_docs, delivery_signatures, delivery_links, deposit_links, deal_doc_sends"):
         with pytest.raises(psycopg.Error):
             e.sql(q)  # the app role has no UPDATE / DELETE / TRUNCATE
         with pytest.raises(psycopg.errors.RaiseException, match="payments is append-only"):

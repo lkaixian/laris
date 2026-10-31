@@ -681,6 +681,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (Q.get('helper') === 'off') throw new ApiError(409, 'helper_not_configured', 'helper bot not configured')
     return { url: 'https://t.me/laris_helper_bot?start=7Hk2mQ9xPz', code: '7Hk2mQ9xPz', expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }
   }
+  if (p === '/settings/stripe') { need(); return { configured: false } }  // demo: not connected
   if (p === '/settings/channels') {
     need()
     if (method === 'POST') {

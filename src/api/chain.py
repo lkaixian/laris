@@ -144,14 +144,22 @@ class ProformaIn(BaseModel, extra="forbid"):
 
 
 @r.post("/jobs/{job_id}/proforma")
-def issue_proforma(job_id: UUID, body: ProformaIn = ProformaIn(), ctx: Ctx = Depends(write_ctx)):
-    """Freeze the order's lines into a proforma. Deposit = pct of the order total, rounded half up to the cent. Owner only; one live proforma per order."""
+def issue_proforma(job_id: UUID, request: Request, body: ProformaIn = ProformaIn(), ctx: Ctx = Depends(write_ctx)):
+    """Freeze the order's lines into a proforma. Deposit = pct of the order total, rounded half up to the cent. Owner only; one live proforma per order.
+    The proforma then goes to the customer on Telegram, with a Stripe payment link for the deposit when the business has connected Stripe."""
     require_owner(ctx)
+    d = make_proforma(ctx, job_id, body.deposit_pct)
+    from . import deposits  # local: deposits imports this module
+    deposits.after_proforma(ctx, svc(request), d)  # never raises: the proforma is issued whatever happens to the message
+    return reply(ctx, d, 201)
+
+
+def make_proforma(ctx: Ctx, job_id: UUID, pct) -> dict:
+    """Issue the order's proforma (no permission check: the caller decides who may). pct None = the quote's own deposit percentage."""
     c = ctx.conn
     j = _job(ctx, job_id, lock=True)
     if c.execute("select 1 from deal_docs where job_id=%s and kind='proforma' and status <> 'void'", (job_id,)).fetchone():
         raise ApiError(409, "already_issued", "this order already has a proforma; void it first to issue another")
-    pct = body.deposit_pct
     if pct is None and j["quote_id"]:
         pct = c.execute("select deposit_pct from documents where id=%s", (j["quote_id"],)).fetchone()["deposit_pct"]
     if pct is None:
@@ -164,7 +172,7 @@ def issue_proforma(job_id: UUID, body: ProformaIn = ProformaIn(), ctx: Ctx = Dep
     amount = money(j["order_total"] * pct / 100)
     d = _issue(ctx, job_id, "proforma", m, {"deposit_pct": pct, "deposit_amount": amount})
     audit(ctx, "jobs", job_id, f"proforma {d['doc_no']} issued, deposit {_rm(amount)} ({pct:g}%)", None, {"deal_doc_id": d["id"]})
-    return reply(ctx, d, 201)
+    return d
 
 
 class VoidIn(BaseModel, extra="forbid"):
@@ -300,7 +308,7 @@ def _pay_out(c, p: dict) -> dict:
 
 
 @r.post("/jobs/{job_id}/payments")
-def record_payment(job_id: UUID, body: PaymentIn, ctx: Ctx = Depends(write_ctx)):
+def record_payment(job_id: UUID, request: Request, body: PaymentIn, ctx: Ctx = Depends(write_ctx)):
     """Record money received (the owner checks the bank first) and issue its receipt; a deposit receipt says it is not a tax invoice.
     Locks the job row, so a replayed key and two racing payments are both decided one at a time."""
     require_perm(ctx, "record_payments")
@@ -313,19 +321,28 @@ def record_payment(job_id: UUID, body: PaymentIn, ctx: Ctx = Depends(write_ctx))
         return reply(ctx, _pay_out(c, old))
     if body.paid_on > pipeline.today_my():
         raise ApiError(422, "future_date", "paid_on cannot be in the future")
+    p, rc = make_payment(ctx, j, body.amount, body.method, body.reference, body.paid_on, body.purpose, body.idempotency_key, body.extraction)
+    from . import deposits  # local: deposits imports this module
+    deposits.after_receipt(ctx, svc(request), rc)  # the receipt goes to the customer on Telegram; never raises
+    return reply(ctx, _pay_out(c, p), 201)
+
+
+def make_payment(ctx: Ctx, j: dict, amount, method: str, reference, paid_on, purpose: str, key: str, extraction=None):
+    """Record money received and issue its receipt (no permission or replay check: the caller did them). -> (payment row, receipt row)."""
+    c, job_id = ctx.conn, j["id"]
     total = _freeze_total(ctx, j)
     with guarded():
         p = c.execute(f"""insert into payments(tenant_id, job_id, amount, method, reference, paid_on, purpose, recorded_by, idempotency_key, extraction)
                           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning {PAY_COLS}""",
-                      (ctx.tenant_id, job_id, body.amount, body.method, (body.reference or "").strip() or None, body.paid_on, body.purpose, ctx.user_id,
-                       body.idempotency_key, _json(body.extraction.model_dump()) if body.extraction else None)).fetchone()
+                      (ctx.tenant_id, job_id, amount, method, (reference or "").strip() or None, paid_on, purpose, ctx.user_id,
+                       key, _json(extraction.model_dump()) if extraction else None)).fetchone()
     balance = total - _net(c, job_id)[0]
     m = {"lines": [], "subtotal": p["amount"], "tax_total": None, "total": p["amount"]}
     inv = c.execute("select id, doc_no from deal_docs where job_id=%s and kind='invoice' and status <> 'void'", (job_id,)).fetchone()
     rc = _issue(ctx, job_id, "receipt", m, {"balance": balance, **({"invoice_id": inv["id"], "invoice_no": inv["doc_no"]} if inv else {})}, p["id"])  # the receipt names its invoice
     audit(ctx, "jobs", job_id, f"payment of {_rm(p['amount'])} recorded ({p['purpose']}, {p['method']}); receipt {rc['doc_no']} issued, {_rm(balance)} left to pay",
           None, {"payment_id": p["id"]})
-    return reply(ctx, _pay_out(c, p), 201)
+    return p, rc
 
 
 class ReverseIn(BaseModel, extra="forbid"):
@@ -425,7 +442,10 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
     due = date.fromisoformat(inv["extra"]["due_on"]) if inv and inv["extra"].get("due_on") else None
     st = stage(total, paid, dep_due, dep_paid, inv is not None, bool(dl) and all(x["signed"] >= x["ordered"] for x in dl))
     since = pf["issued_at"] if st == "awaiting_deposit" and pf else inv["issued_at"] if st == "awaiting_payment" else None
+    from . import deposits  # local: deposits imports this module
+    extras = deposits.order_extras(c, ctx.tenant_id, job_id, [d["id"] for d in docs])
     return reply(ctx, {
+        **extras,
         "job": {"id": j["id"], "title": j["title"], "quote_id": j["quote_id"], "status": j["status"], "customer": party,
                 "quote_deposit_pct": c.execute("select deposit_pct from documents where id=%s", (j["quote_id"],)).fetchone()["deposit_pct"] if j["quote_id"] else None},
         "total": total, "paid": paid, "balance": total - paid if total is not None else None,

@@ -25,6 +25,7 @@ from .api import accept, ai_activity, ai_guide, assistant, audit, auth_routes, c
 from .api import customers as customers_routes
 from .api import revenue as revenue_routes
 from .api import reports as reports_routes
+from .api import deposits as deposits_routes
 from .api.deps import JR, Services
 from .errors import ApiError
 
@@ -65,6 +66,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in os.environ.
 app.include_router(auth_routes.r)
 app.include_router(catalog.r)
 app.include_router(reports_routes.r)
+app.include_router(deposits_routes.r)
 app.include_router(signup.r)
 app.include_router(invites.r)
 app.include_router(license_routes.r)

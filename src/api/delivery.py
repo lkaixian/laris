@@ -39,7 +39,7 @@ class DeliveryIn(BaseModel, extra="forbid"):
 
 
 @r.post("/jobs/{job_id}/delivery-orders")
-def issue_delivery_order(job_id: UUID, body: DeliveryIn = DeliveryIn(), ctx: Ctx = Depends(write_ctx)):
+def issue_delivery_order(job_id: UUID, request: Request, body: DeliveryIn = DeliveryIn(), ctx: Ctx = Depends(write_ctx)):
     """Freeze (part of) the order into a delivery order. Never more than ordered across the live delivery orders (the database enforces it under
     a lock). The proforma deposit must be recorded, else only the owner with override_reason (stored on the document, audited). Prices on the
     paper follow the layout's show_prices, off by default; this response never carries them."""
@@ -70,6 +70,8 @@ def issue_delivery_order(job_id: UUID, body: DeliveryIn = DeliveryIn(), ctx: Ctx
     with guarded():  # ponytail: the totals are the delivered goods before SST; the invoice carries the tax
         d = _issue(ctx, job_id, "delivery_order", {"lines": lines, "subtotal": sub, "tax_total": None, "total": sub}, {"override_reason": why} if why else {})
     audit(ctx, "jobs", job_id, f"delivery order {d['doc_no']} issued" + (f" (deposit not recorded, override: {why})" if why else ""), None, {"deal_doc_id": d["id"]})
+    from . import deposits  # local: deposits imports chain
+    deposits.after_receipt(ctx, request.app.state.svc, d)  # the delivery order goes to the customer on Telegram; never raises
     return reply(ctx, {"id": d["id"], "doc_no": d["doc_no"], "status": d["status"], "issued_at": d["issued_at"], "override": bool(why),
                        "lines": [{k: x[k] for k in ("no", "description", "qty", "uom")} for x in lines]}, 201)
 

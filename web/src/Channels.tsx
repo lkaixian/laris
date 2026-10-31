@@ -5,6 +5,7 @@ import { ConfirmDialog } from './kit'
 import { Icon } from './icons'
 import { useToast } from './Toast'
 import { BotSettings } from './BotSettings'
+import { StripeCard } from './StripeCard'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 
@@ -178,6 +179,7 @@ function TelegramCards() {
         )}
       </section>
       {b && (b.connected || b.source === 'environment') && <BotSettings />}
+      <StripeCard />
       <section className="card mt-8 max-w-xl" aria-labelledby="tgh">
         <h2 id="tgh" className="text-md font-semibold">{t({ en: 'LARIS helper bot (for you and your staff)', ms: 'Bot pembantu LARIS (untuk anda dan kakitangan anda)', zh: 'LARIS 助手机器人（供你和员工使用）', ta: 'LARIS உதவி bot (உங்களுக்கும் உங்கள் ஊழியர்களுக்கும்)' })}</h2>
         <p className="mb-3 text-sm text-muted">{t({ en: 'You and your staff link your own account to this bot. Then you can send product photos with /catalog and supplier price lists straight from Telegram. Link people on the Team page, or yours on the Account page.', ms: 'Anda dan kakitangan anda memautkan akaun sendiri kepada bot ini. Kemudian anda boleh menghantar gambar produk dengan /catalog dan senarai harga pembekal terus dari Telegram. Pautkan orang di halaman Pasukan, atau akaun anda di halaman Akaun.', zh: '你和员工把各自的账户链接到此机器人后，就可以直接在 Telegram 里用 /catalog 发送产品照片和供应商价格表。在“团队”页面链接成员，或在“账户”页面链接你自己的账户。', ta: 'நீங்களும் உங்கள் ஊழியர்களும் உங்கள் சொந்தக் கணக்கை இந்த bot உடன் இணைக்கிறீர்கள். பின்னர் Telegram இலிருந்தே /catalog மூலம் பொருள் புகைப்படங்களையும் சப்ளையர் விலைப் பட்டியல்களையும் அனுப்பலாம். குழு பக்கத்தில் நபர்களை இணைக்கவும், உங்களுடையதை கணக்கு பக்கத்தில் இணைக்கவும்.' })}</p>

@@ -305,7 +305,9 @@ export const heatRows = (): [Heat, string, string][] => HEAT_BANDS.map(h => [h, 
 export const heatName = (h: Heat) => txOr(`heat.${h}`, h)
 const dayWord = (n: number) => tx('common.days', n)
 export const HeatChip = ({ heat, days }: { heat?: Heat | null; days: number }) =>
-  heat ? <span className={`chip heat-${heat} tabular-nums`}>{`${heatName(heat)}, ${dayWord(days)}`}</span> : <span className="text-muted tabular-nums">{dayWord(days)}</span>
+  // The legend above the list already names each colour, so a row shows only its dot (the colour and shape come from .chip.heat-*) and the days.
+  // The name stays as the hover title and is read out to screen readers.
+  heat ? <span className={`chip heat-${heat} tabular-nums`} title={heatName(heat)}><span className="sr-only">{heatName(heat)}, </span>{dayWord(days)}</span> : <span className="text-muted tabular-nums">{dayWord(days)}</span>
 export function HeatLegend({ counts }: { counts?: Partial<Record<Heat, number>> }) {
   useLang()
   return (

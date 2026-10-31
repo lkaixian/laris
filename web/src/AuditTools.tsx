@@ -9,7 +9,7 @@ import { useToast } from './Toast'
 
 interface Entry { id: number; at: string; actor: string; entity: string; entity_id: string; event: string; action: string }
 interface Full extends Entry { before: Record<string, unknown> | null; after: Record<string, unknown> | null }
-const TZ = 'Asia/Kuala_Lumpur', CAP = 1000, DETAIL_CAP = 300
+const TZ = 'Asia/Kuala_Lumpur', CAP = 1000, DETAIL_CAP = CAP  // the full-details file covers every entry pulled (it used to stop at 300)
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ })
 
 const S = {
@@ -91,7 +91,7 @@ export function AuditTools({ people, module, action, q }: { people: string; modu
     setBusy('full'); setErr('')
     try {
       const ids = es.slice(0, DETAIL_CAP).map(e => e.id), got: Full[] = []
-      for (let i = 0; i < ids.length; i += 8) got.push(...await Promise.all(ids.slice(i, i + 8).map(id => api<Full>('GET', `/audit/${id}`))))
+      for (let i = 0; i < ids.length; i += 16) got.push(...await Promise.all(ids.slice(i, i + 16).map(id => api<Full>('GET', `/audit/${id}`))))
       const head = ['id', 'time (Malaysia)', 'who', 'module', 'record', 'action', 'event', 'field', 'before', 'after'], out = [head.join(',')]
       for (const e of got) {
         const keys = [...new Set([...Object.keys(e.before ?? {}), ...Object.keys(e.after ?? {})])]

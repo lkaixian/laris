@@ -5,6 +5,7 @@ import { FilterBar, FilterSelect } from './kit'
 import { useToast } from './Toast'
 import { tx, txOr } from './strings'
 import { locale } from './i18n'
+import { AuditTools } from './AuditTools'
 
 // Audit log: grouped by Malaysian calendar day. The page shows only the days (simple buttons with a count); select a day to see its
 // entries, select an entry to see its details (who, when, what changed). Filters sit behind one Filters button. Tick entries to
@@ -43,6 +44,7 @@ export function ActivityView() {
   const [f, setF] = useState<Filters>(EMPTY)
   const [qd, setQd] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [showTools, setShowTools] = useState(false)
   const [days, setDays] = useState<Day[]>([])
   const [byDay, setByDay] = useState<Record<string, Entry[]>>({})  // filled when a day is opened (or all at once when filtering)
   const [open, setOpen] = useState('')
@@ -147,8 +149,10 @@ export function ActivityView() {
         actions={<div className="flex flex-wrap gap-2" data-guide="act-filters">
           <button type="button" className={`btn ${showFilters || active ? 'btn-primary' : ''}`} aria-expanded={showFilters} aria-controls="act-filters" onClick={() => setShowFilters(!showFilters)}>
             {tx('act.filtersBtn')}{active ? ` (${chips.length})` : ''}</button>
+          <button type="button" className={`btn ${showTools ? 'btn-primary' : ''}`} aria-expanded={showTools} aria-controls="act-tools" onClick={() => setShowTools(!showTools)}>{tx('act.tools')}</button>
           <button type="button" className="btn" onClick={() => void load()}>{tx('act.refresh')}</button>
         </div>} />
+      {showTools && <div id="act-tools" className="mb-4"><AuditTools people={f.actor} module={f.module} action={f.action} q={f.q} /></div>}
 
       {(showFilters || active) && <div id="act-filters">
         <FilterBar label={tx('act.filters')} search={{ value: f.q, onChange: v => set({ q: v }), label: tx('act.search') }} chips={chips} onClear={active ? clear : undefined}>

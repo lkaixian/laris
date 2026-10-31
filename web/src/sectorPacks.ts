@@ -25,53 +25,8 @@ export interface SectorPack {
 
 export const PACKS: SectorPack[] = [
   {
-    id: 'catering', name: { en: 'Food and beverage: Catering', ms: 'Makanan dan minuman: Katering' },
-    tagline: { en: 'Event quotes by head count, deposits to confirm, ingredients to order.', ms: 'Sebut harga acara ikut bilangan pax, deposit untuk sahkan, bahan untuk dibeli.' },
-    accent: '#0f766e',
-    terms: { customer: { en: 'Client', ms: 'Pelanggan' }, order: { en: 'Event booking', ms: 'Tempahan acara' }, item: { en: 'Menu package', ms: 'Pakej menu' }, delivery: { en: 'Event delivery', ms: 'Penghantaran acara' } },
-    docs: ['cpo', 'so', 'pf', 'do', 'inv', 'rcp', 'spo'],
-    docNames: { so: { en: 'Event Booking', ms: 'Tempahan Acara' }, pf: { en: 'Deposit Request', ms: 'Permintaan Deposit' }, do: { en: 'Event Run-sheet Delivery Order', ms: 'Pesanan Penghantaran Acara' } },
-    defaults: { depositPct: 30, sstRate: 0, round5: true, creditDays: 14 },
-    kpis: [{ id: 'open', label: { en: 'Upcoming events', ms: 'Acara akan datang' } }, { id: 'deposits', label: { en: 'Deposits pending', ms: 'Deposit belum terima' } },
-      { id: 'approval', label: { en: 'Needs approval', ms: 'Perlu kelulusan' } }, { id: 'owed', label: { en: 'Still owed', ms: 'Masih terhutang' } }],
-    workflow: {
-      trigger: { en: 'A client messages "need lunch for 120 pax, 14 Dec"', ms: 'Pelanggan mesej "perlu makan tengah hari 120 pax, 14 Dis"' },
-      data: { en: 'Menu packages, per-head prices and the client\'s past bookings', ms: 'Pakej menu, harga seorang dan tempahan lepas pelanggan' },
-      rules: { en: 'Pax x per-head price, halal and dietary add-ons, 30% deposit to confirm', ms: 'Pax x harga seorang, tambahan halal dan diet, deposit 30% untuk sahkan' },
-      approval: { en: 'Owner approves quotes and any supplier PO for ingredients', ms: 'Pemilik meluluskan sebut harga dan PO pembekal untuk bahan' },
-      outcome: { en: 'Booking confirmed, deposit receipt, ingredient PO draft, entry in the audit log', ms: 'Tempahan disahkan, resit deposit, draf PO bahan, rekod dalam log audit' },
-    },
-    quickActions: [{ to: 'so', label: { en: 'New event booking', ms: 'Tempahan acara baharu' } }, { to: 'spo', label: { en: 'Order ingredients', ms: 'Pesan bahan' } }],
-    sampleLines: [{ description: 'Nasi minyak set (per pax)', qty: 120, uom: 'pax', unit_price: 18 }, { description: 'Air sirap and teh tarik', qty: 120, uom: 'pax', unit_price: 2.5 }, { description: 'Setup and serving crew', qty: 1, uom: 'event', unit_price: 350 }],
-    questions: [{ id: 'deposit', text: { en: 'Do you take a deposit to confirm events?', ms: 'Adakah anda ambil deposit untuk sahkan acara?' }, enables: ['pf'] },
-      { id: 'deliver', text: { en: 'Do you deliver to the venue?', ms: 'Adakah anda hantar ke tempat acara?' }, enables: ['do'] },
-      { id: 'suppliers', text: { en: 'Do you buy ingredients from suppliers?', ms: 'Adakah anda beli bahan daripada pembekal?' }, enables: ['spo'] }],
-  },
-  {
-    id: 'salon', name: { en: 'Services: Beauty and personal care', ms: 'Perkhidmatan: Kecantikan dan penjagaan diri' },
-    tagline: { en: 'Services and packages, paid at the chair. Invoices and receipts first.', ms: 'Perkhidmatan dan pakej, bayar di kaunter. Invois dan resit diutamakan.' },
-    accent: '#a1457a',
-    terms: { customer: { en: 'Guest', ms: 'Tetamu' }, order: { en: 'Appointment', ms: 'Temujanji' }, item: { en: 'Service', ms: 'Perkhidmatan' }, delivery: { en: 'Service done', ms: 'Perkhidmatan selesai' } },
-    docs: ['so', 'pf', 'inv', 'rcp', 'spo'],
-    docNames: { so: { en: 'Appointment', ms: 'Temujanji' }, pf: { en: 'Package Deposit', ms: 'Deposit Pakej' }, spo: { en: 'Product Restock PO', ms: 'PO Stok Produk' } },
-    defaults: { depositPct: 50, sstRate: 6, round5: true, creditDays: 0 },
-    kpis: [{ id: 'open', label: { en: 'Appointments booked', ms: 'Temujanji ditempah' } }, { id: 'deposits', label: { en: 'Package deposits pending', ms: 'Deposit pakej belum terima' } },
-      { id: 'approval', label: { en: 'Needs approval', ms: 'Perlu kelulusan' } }, { id: 'owed', label: { en: 'Unpaid bills', ms: 'Bil belum bayar' } }],
-    workflow: {
-      trigger: { en: 'A guest messages "cut and colour Saturday afternoon?"', ms: 'Tetamu mesej "potong dan warna petang Sabtu?"' },
-      data: { en: 'Service menu with durations, stylist availability, visit history', ms: 'Menu perkhidmatan dengan tempoh, kekosongan stylist, sejarah lawatan' },
-      rules: { en: 'Service price x stylist time, package bundles, no-show deposit', ms: 'Harga perkhidmatan x masa stylist, pakej, deposit tidak hadir' },
-      approval: { en: 'Staff book; the owner approves discounts and voids a receipt', ms: 'Staf menempah; pemilik meluluskan diskaun dan membatalkan resit' },
-      outcome: { en: 'Appointment held, receipt on payment, rebook reminder draft', ms: 'Temujanji disimpan, resit semasa bayaran, draf peringatan tempah semula' },
-    },
-    quickActions: [{ to: 'so', label: { en: 'New appointment', ms: 'Temujanji baharu' } }, { to: 'inv', label: { en: 'Bill a guest', ms: 'Bil tetamu' } }],
-    sampleLines: [{ description: 'Cut and blow dry', qty: 1, uom: 'visit', unit_price: 55 }, { description: 'Hair colour (short)', qty: 1, uom: 'visit', unit_price: 180 }, { description: 'Treatment add-on', qty: 1, uom: 'visit', unit_price: 45 }],
-    questions: [{ id: 'package', text: { en: 'Do you sell prepaid packages?', ms: 'Adakah anda jual pakej prabayar?' }, enables: ['pf'] },
-      { id: 'retail', text: { en: 'Do you restock retail products?', ms: 'Adakah anda tambah stok produk runcit?' }, enables: ['spo'] }],
-  },
-  {
-    id: 'general', name: { en: 'General business', ms: 'Perniagaan am' },
-    tagline: { en: 'The full quote-to-cash chain with plain words. Use this if your trade is not listed.', ms: 'Rantaian sebut harga hingga bayaran penuh dengan bahasa mudah. Guna jika bidang anda tiada dalam senarai.' },
+    id: 'product', name: { en: 'Product', ms: 'Produk' },
+    tagline: { en: 'You make or sell goods: quote, deposit, deliver, invoice and get paid.', ms: 'Anda buat atau jual barang: sebut harga, deposit, hantar, invois dan terima bayaran.' },
     accent: '#3f5f8a',
     terms: { customer: { en: 'Customer', ms: 'Pelanggan' }, order: { en: 'Order', ms: 'Pesanan' }, item: { en: 'Item', ms: 'Barang' }, delivery: { en: 'Delivery', ms: 'Penghantaran' } },
     docs: ['cpo', 'so', 'pf', 'do', 'inv', 'rcp', 'spo'],
@@ -90,9 +45,31 @@ export const PACKS: SectorPack[] = [
     questions: [{ id: 'deposit', text: { en: 'Do you ask for a deposit?', ms: 'Adakah anda minta deposit?' }, enables: ['pf'] },
       { id: 'deliver', text: { en: 'Do you deliver goods?', ms: 'Adakah anda hantar barang?' }, enables: ['do'] }],
   },
+  {
+    id: 'service', name: { en: 'Service', ms: 'Perkhidmatan' },
+    tagline: { en: 'You do work for customers: book, quote the job, invoice and get paid. No delivery step.', ms: 'Anda buat kerja untuk pelanggan: tempah, sebut harga, invois dan terima bayaran. Tiada langkah penghantaran.' },
+    accent: '#a1457a',
+    terms: { customer: { en: 'Customer', ms: 'Pelanggan' }, order: { en: 'Job', ms: 'Kerja' }, item: { en: 'Service', ms: 'Perkhidmatan' }, delivery: { en: 'Job done', ms: 'Kerja selesai' } },
+    docs: ['so', 'pf', 'inv', 'rcp', 'spo'],
+    docNames: { so: { en: 'Job Order', ms: 'Pesanan Kerja' }, pf: { en: 'Deposit Request', ms: 'Permintaan Deposit' }, spo: { en: 'Materials PO', ms: 'PO Bahan' } },
+    defaults: { depositPct: 50, sstRate: 6, round5: true, creditDays: 0 },
+    kpis: [{ id: 'open', label: { en: 'Open jobs', ms: 'Kerja terbuka' } }, { id: 'deposits', label: { en: 'Deposits pending', ms: 'Deposit belum terima' } },
+      { id: 'approval', label: { en: 'Needs approval', ms: 'Perlu kelulusan' } }, { id: 'owed', label: { en: 'Unpaid bills', ms: 'Bil belum bayar' } }],
+    workflow: {
+      trigger: { en: 'A customer messages "can you fix my aircon on Saturday?"', ms: 'Pelanggan mesej "boleh baiki aircond hari Sabtu?"' },
+      data: { en: 'Service menu with durations, stylist availability, visit history', ms: 'Menu perkhidmatan dengan tempoh, kekosongan stylist, sejarah lawatan' },
+      rules: { en: 'Service price x stylist time, package bundles, no-show deposit', ms: 'Harga perkhidmatan x masa stylist, pakej, deposit tidak hadir' },
+      approval: { en: 'Staff book; the owner approves discounts and voids a receipt', ms: 'Staf menempah; pemilik meluluskan diskaun dan membatalkan resit' },
+      outcome: { en: 'Job booked, receipt on payment, follow-up reminder draft', ms: 'Kerja ditempah, resit semasa bayaran, draf peringatan susulan' },
+    },
+    quickActions: [{ to: 'so', label: { en: 'New job', ms: 'Kerja baharu' } }, { to: 'inv', label: { en: 'Bill a customer', ms: 'Bil pelanggan' } }],
+    sampleLines: [{ description: 'Cut and blow dry', qty: 1, uom: 'visit', unit_price: 55 }, { description: 'Hair colour (short)', qty: 1, uom: 'visit', unit_price: 180 }, { description: 'Treatment add-on', qty: 1, uom: 'visit', unit_price: 45 }],
+    questions: [{ id: 'package', text: { en: 'Do you sell prepaid packages?', ms: 'Adakah anda jual pakej prabayar?' }, enables: ['pf'] },
+      { id: 'retail', text: { en: 'Do you restock retail products?', ms: 'Adakah anda tambah stok produk runcit?' }, enables: ['spo'] }],
+  },
 ]
 
-export const packById = (id: string | null | undefined) => PACKS.find(p => p.id === id) ?? PACKS[2]
+export const packById = (id: string | null | undefined) => PACKS.find(p => p.id === id) ?? PACKS[0]
 export const say = (l: L) => (getLang() === 'ms' ? l.ms : l.en)  // Chinese and Tamil fall back to English until translated
 
 export const DOC_NAME: Record<DocKind, L> = {

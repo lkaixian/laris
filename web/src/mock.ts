@@ -513,7 +513,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return d.doc
   }
   if ((m = p.match(/^\/documents\/([^/]+)\/lines\/([^/]+)$/)) && method === 'POST') {
-    perm('upload_documents'); if (body.unit_price !== undefined) perm('view_costs')
+    perm('upload_documents'); if (body.unit_price !== undefined || body.uom !== undefined) perm('view_costs')
     const d = docs[m[1]]; const l = d?.lines.find(x => x.id === m![2])
     if (!l) throw new ApiError(404, 'not_found', 'Line not found.')
     if (d.doc.direction === 'out') throw new ApiError(403, 'rules_only', 'out lines are rules-engine output; only the owner may clear needs_review')
@@ -521,6 +521,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     if (body.item_key !== undefined) l.item_key = body.item_key
     if (body.qty !== undefined) l.qty = money(Number(body.qty))
     if (body.unit_price !== undefined) l.unit_price = money(Number(body.unit_price))
+    if (body.uom !== undefined) { const u = String(body.uom).trim(); if (!u) throw new ApiError(422, 'bad_uom', 'the unit cannot be empty (for example kg, 100g or pcs)'); l.uom = u }
     l.needs_review = body.needs_review ?? (l.qty === null || !l.item_key)
     d.doc.flags.needs_review = d.lines.some(x => x.needs_review)
     log(who, d.doc.id, `${d.doc.doc_no}: line ${l.line_no} edited`)

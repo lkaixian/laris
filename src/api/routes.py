@@ -280,6 +280,7 @@ class LineEdit(BaseModel, extra="forbid"):
     item_key: str | None = Field(None, pattern=r"^[a-z][a-z0-9_]{0,60}$")
     qty: Decimal | None = Field(None, gt=0, lt=Decimal(10) ** 10)
     unit_price: Decimal | None = Field(None, ge=0, lt=Decimal(10) ** 10)
+    uom: str | None = Field(None, max_length=20)  # the unit the price is per ("100g", "kg", "pcs"); fixes a price that was read against the wrong unit
     needs_review: bool | None = None
 
 
@@ -288,8 +289,12 @@ def edit_line(doc_id: UUID, line_id: UUID, body: LineEdit, ctx: Ctx = Depends(wr
     require_perm(ctx, "upload_documents")
     d = get_doc(ctx, doc_id, lock=True)
     sets = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
-    if "unit_price" in sets:
-        require_perm(ctx, "view_costs")  # a role that cannot see costs must not change them blindly
+    if "uom" in sets:
+        sets["uom"] = " ".join(sets["uom"].split())
+        if not sets["uom"]:
+            raise ApiError(422, "bad_uom", "the unit cannot be empty (for example kg, 100g or pcs)")
+    if "unit_price" in sets or "uom" in sets:
+        require_perm(ctx, "view_costs")  # a role that cannot see costs must not change them blindly (a different unit changes what the price means)
     if not sets:
         raise ApiError(422, "empty", "nothing to change")
     if d["direction"] == "out":

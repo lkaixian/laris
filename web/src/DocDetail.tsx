@@ -49,6 +49,8 @@ const S = {
   thKey: { en: 'Item key', ms: 'Kunci item', zh: '物料代码', ta: 'பொருள் குறியீடு' },
   thQty: { en: 'Qty', ms: 'Kuantiti', zh: '数量', ta: 'அளவு' },
   thUnit: { en: 'Unit', ms: 'Unit', zh: '单位', ta: 'அலகு' },
+  thTotal: { en: 'Line total', ms: 'Jumlah baris', zh: '行合计', ta: 'வரி மொத்தம்' },
+  perUnit: { en: 'per', ms: 'setiap', zh: '每', ta: 'ஒவ்வொரு' },
   thCost: { en: 'Unit cost', ms: 'Kos seunit', zh: '单位成本', ta: 'அலகு செலவு' },
   thPrice: { en: 'Unit price', ms: 'Harga seunit', zh: '单价', ta: 'அலகு விலை' },
   thAction: { en: 'Action', ms: 'Tindakan', zh: '操作', ta: 'செயல்' },
@@ -84,6 +86,10 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
   const [key, setKey] = useState(l.item_key ?? '')
   const [qty, setQty] = useState(l.qty ? String(Number(l.qty)) : '')
   const [price, setPrice] = useState(l.unit_price !== null ? String(Number(l.unit_price)) : '')
+  const [uom, setUom] = useState(l.uom ?? '')
+  // The total follows what is typed, so a price per 100g with a quantity in kg shows up at once (5 x RM8.00 per 100g is RM40.00, not 5 kg of it).
+  const nQty = Number(qty), nPrice = Number(priceEdit ? price : l.unit_price ?? ''), disc = Number(l.discount_pct ?? 0)
+  const total = qty !== '' && Number.isFinite(nQty) && l.unit_price !== null && Number.isFinite(nPrice) ? nQty * nPrice * (1 - disc / 100) : null
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const errId = `line-err-${l.id}`
@@ -93,11 +99,12 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
     setBusy(true); setErr('')
     try {
       const changed = priceEdit && price !== '' && Number(price) !== Number(l.unit_price)
-      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty, ...(changed ? { unit_price: price } : {}) })
+      const unitChanged = priceEdit && uom.trim() !== '' && uom.trim() !== (l.uom ?? '')
+      await api('POST', `/documents/${docId}/lines/${l.id}`, { item_key: key.trim() || undefined, qty: qty === '' ? undefined : qty, ...(changed ? { unit_price: price } : {}), ...(unitChanged ? { uom: uom.trim() } : {}) })
       onSaved(l.line_no)
     } catch (e) { setErr(msg(e)) } finally { setBusy(false) }
   }
-  if (l.is_header) return <tr><th colSpan={6 + cols.length} scope="colgroup" className="bg-soft text-ink">{l.description}</th></tr>
+  if (l.is_header) return <tr><th colSpan={7 + cols.length} scope="colgroup" className="bg-soft text-ink">{l.description}</th></tr>
   const unmapped = Object.entries(l.attrs_unmapped)
   return (
     <tr>
@@ -114,10 +121,11 @@ function LineRow({ docId, l, cols, edit, showPrice, onSaved }: { docId: string; 
       <td className="num">
         {editable ? <input className="input w-24" type="number" min="0" step="any" inputMode="decimal" aria-label={t({ en: `Quantity for line ${l.line_no}`, ms: `Kuantiti untuk baris ${l.line_no}`, zh: `第 ${l.line_no} 行的数量`, ta: `வரி ${l.line_no} இன் அளவு` })} value={qty} onChange={e => setQty(e.target.value)} {...bad} /> : l.qty ? Number(l.qty) : <span className="text-muted">{t(S.notSet)}</span>}
       </td>
-      <td>{l.uom}</td>
+      <td>{priceEdit ? <input className="input w-24" maxLength={20} value={uom} onChange={e => setUom(e.target.value)} aria-label={t({ en: `Unit for line ${l.line_no}, the unit the cost is per`, ms: `Unit untuk baris ${l.line_no}, unit yang dikenakan kos`, zh: `第 ${l.line_no} 行的单位（成本所对应的单位）`, ta: `வரி ${l.line_no} இன் அலகு (செலவு எந்த அலகுக்கானது)` })} /> : l.uom}</td>
       <td className="num">{!showPrice ? <span className="text-muted">{t(S.hidden)}</span>
         : priceEdit ? <input className="input w-28" type="number" min="0" step="any" inputMode="decimal" aria-label={t({ en: `Unit cost for line ${l.line_no}`, ms: `Kos seunit untuk baris ${l.line_no}`, zh: `第 ${l.line_no} 行的单位成本`, ta: `வரி ${l.line_no} இன் அலகு செலவு` })} value={price} onChange={e => setPrice(e.target.value)} {...bad} />
         : rm(l.unit_price)}</td>
+      <td className="num">{showPrice && total !== null ? <><span className="font-semibold tabular-nums">{rm(total.toFixed(2))}</span><span className="block text-xs text-muted tabular-nums">{nQty} × {rm(nPrice.toFixed(2))} {t(S.perUnit)} {uom || l.uom}</span></> : <span className="text-muted">–</span>}</td>
       {cols.map(f => <td key={f.key}>{cell(f, l.attrs[f.key])}</td>)}
       {editable && <td><button className="btn" aria-disabled={busy || undefined} onClick={save}>{busy ? t(S.saving) : t({ en: `Save line ${l.line_no}`, ms: `Simpan baris ${l.line_no}`, zh: `保存第 ${l.line_no} 行`, ta: `வரி ${l.line_no} ஐச் சேமி` })}</button></td>}
     </tr>
@@ -190,6 +198,7 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
                   <thead><tr>
                     <th scope="col">{t(S.thNo)}</th><th scope="col">{t(S.thDesc)}</th><th scope="col">{t(S.thKey)}</th><th scope="col" className="text-right">{t(S.thQty)}</th><th scope="col">{t(S.thUnit)}</th>
                     <th scope="col" className="text-right">{t(d.doc.direction === 'in' ? S.thCost : S.thPrice)}</th>
+                    <th scope="col" className="text-right">{t(S.thTotal)}</th>
                     {cols.map(c => <th key={c.key} scope="col">{c.label}</th>)}
                     {edit && can('upload_documents') && <th scope="col">{t(S.thAction)}</th>}
                   </tr></thead>

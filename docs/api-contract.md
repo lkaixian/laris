@@ -13,7 +13,7 @@ Provenance (owner only): {line_id, cost_item_id, supplier, source_doc_id, source
 - GET  /api/tracker -> {received:[DocSummary], sent:[DocSummary]}   (two lanes, shared states)
 - GET  /api/documents/{id} -> {doc:DocSummary+terms, lines:[Line], provenance?:[Provenance] (owner), messages:[{direction,channel,body,at}]}
 - POST /api/documents/{id}/transition {to:status, reason?} -> DocSummary   (owner for approve/accept/reject; 403 otherwise; 409 if transition not allowed)
-- POST /api/documents/{id}/lines/{lineId} {item_key?, qty?, unit_price?, needs_review?} -> Line   (review step for 'in' docs; unit_price on 'out' lines is rules-engine only, 403)
+- POST /api/documents/{id}/lines/{lineId} {item_key?, qty?, unit_price?, uom?, needs_review?} -> Line   (review step for 'in' docs; unit_price on 'out' lines is rules-engine only, 403)
 - GET  /api/alerts/stale-costs (owner) -> [{quote_id, quote_no, customer, item_key, old_cost, current_cost, margin_delta, status}]
 - GET  /api/cost-items (owner) -> [{id,item_key,uom,unit_cost,supplier,source_doc_no,effective_date}]
 - GET  /api/fields -> [{key,label,type,unit,options,show_in_grid,sort_order}]  (staff: owner_only removed)

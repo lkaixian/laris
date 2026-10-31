@@ -59,7 +59,7 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | Route | Gate |
 |---|---|
 | `POST /api/documents/ingest`, `POST /api/documents/manual` | `upload_documents` |
-| `POST /api/documents/{id}/lines/{lid}` | `upload_documents`; sending `unit_price` also needs `view_costs` |
+| `POST /api/documents/{id}/lines/{lid}` | `upload_documents`; sending `unit_price` or `uom` (the unit the price is per) also needs `view_costs` |
 | `POST /api/documents/{id}/transition` | owner-class moves: owner (database guard); any other caller needs `upload_documents` |
 | `POST /api/listings`, `PATCH /api/listings/{id}/items/{iid}`, the cut-out routes, `POST /api/catalog/...` (categories, move, accept suggestions) | `manage_catalog` (a `price` in the patch also needs `view_costs`) |
 | `GET /api/reports`, `GET /api/reports/targets` | `view_business_report`, `view_costs` and `view_revenue` |

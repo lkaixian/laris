@@ -118,15 +118,15 @@ function UploadQuote({ onDone, open, onToggle }: { onDone: () => void; open: boo
   return (
     <details data-guide="tk-form" className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(S.uploadSup)}</summary>
-      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+      <form className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.quoteFile)}
-          <input id="quote-file" ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input py-2 font-normal" />
+          <input id="quote-file" ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input w-full py-2 font-normal" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.orPaste)}
-          <textarea className="input min-h-24 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
+          <textarea className="input min-h-24 w-full py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.supName)}
-          <input className="input font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} />
+          <input className="input w-full font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} />
         </label>
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
         <div><button type="submit" className="btn btn-primary" aria-disabled={a.busy || undefined}>{a.busy ? t(S.reading) : t(S.readAdd)}</button></div>
@@ -191,15 +191,15 @@ function ImportSent({ onDone }: { onDone: () => void }) {
     <details data-guide="tk-import" className="card mt-3">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(IS.title)}</summary>
       <p className="mt-1 text-sm text-muted">{t(IS.intro)}</p>
-      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+      <form className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(IS.customer)}
-          <input className="input font-normal" maxLength={120} value={customer} onChange={e => setCustomer(e.target.value)} />
+          <input className="input w-full font-normal" maxLength={120} value={customer} onChange={e => setCustomer(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.quoteFile)}
-          <input ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input py-2 font-normal" />
+          <input ref={file} type="file" accept=".pdf,.xlsx,.docx,.csv,.txt,image/*" className="input w-full py-2 font-normal" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.orPaste)}
-          <textarea className="input min-h-20 py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
+          <textarea className="input min-h-20 w-full py-2 font-normal" value={text} onChange={e => setText(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(IS.sentOn)}
           <input type="date" className="input w-fit font-normal" max={new Date().toISOString().slice(0, 10)} value={sentOn} onChange={e => setSentOn(e.target.value)} />
@@ -239,14 +239,14 @@ function SimulateEnquiry({ open, onToggle }: { open: boolean; onToggle: (o: bool
   return (
     <details data-guide="tk-sim" className="card mt-3" open={open} onToggle={e => onToggle(e.currentTarget.open)}>
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(S.simulate)}</summary>
-      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+      <form className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.arrived)}
           <select className="input w-fit font-normal" value={channel} onChange={e => setChannel(e.target.value)}>
             {CHANNELS.map(([k, name]) => <option key={k} value={k}>{t(name)}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.enquiryText)}
-          <textarea id="enquiry-text" className="input min-h-24 py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
+          <textarea id="enquiry-text" className="input min-h-24 w-full py-2 font-normal" maxLength={4000} value={text} onChange={e => setText(e.target.value)} />
         </label>
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}
         {!can('manage_contacts') && <p id="sim-why" className="text-sm text-muted">{why('manage_contacts')}{t(S.simNeeds)}</p>}
@@ -349,9 +349,9 @@ function ManualQuote({ onDone }: { onDone: () => void }) {
   return (
     <details className="card mt-3">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-accent">{t(S.keyIn)}</summary>
-      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
+      <form className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-3" onSubmit={e => { e.preventDefault(); submit() }}>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.supNameReq)}
-          <input className="input font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} /></label>
+          <input className="input w-full font-normal" value={supplier} onChange={e => setSupplier(e.target.value)} /></label>
         <label className="flex flex-col gap-1 text-sm font-semibold">{t(S.supDocNo)}
           <input className="input font-normal" value={docNo} onChange={e => setDocNo(e.target.value)} /></label>
         {rows.map((r, i) => (

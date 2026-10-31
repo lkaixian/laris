@@ -7,7 +7,6 @@ import { MoreMenu } from './kit'
 import { CountUp, Metric, Pipeline, Ring, StatRows, Tile, TileHead, TileIcon } from './dash'
 import { Icon } from './icons'
 import { areaTiles } from './Areas'
-import { LiveOrbit } from './TradeOrbit'
 import { BentoGrid } from './Bento'
 import type { BentoPreset, BentoTile } from './Bento'
 import { t, useLang } from './i18n'
@@ -20,7 +19,6 @@ const N = {
   replies: { en: 'customer replies to record', ms: 'balasan pelanggan untuk direkod', zh: '条客户回复待记录', ta: 'பதிவு செய்ய வேண்டிய வாடிக்கையாளர் பதில்கள்' },
   chase: { en: 'quotes waiting for a reply', ms: 'sebut harga menunggu balasan', zh: '份报价等待回复', ta: 'பதிலுக்காகக் காத்திருக்கும் விலைப்புள்ளிகள்' },
   late: { en: 'jobs are overdue', ms: 'kerja lewat tempoh', zh: '项工单已逾期', ta: 'வேலைகள் காலம் கடந்துள்ளன' },
-  orbit: { en: 'Trade Orbit', ms: 'Orbit Dagangan', zh: '贸易轨道', ta: 'வர்த்தக சுற்றுப்பாதை' },
   go: { en: 'Open', ms: 'Buka', zh: '打开', ta: 'திற' },
   clear: { en: 'All clear. Nothing needs you right now.', ms: 'Semua jelas. Tiada yang perlukan anda sekarang.', zh: '一切就绪，目前没有需要您处理的事项。', ta: 'எல்லாம் சரி. இப்போது எதுவும் தேவையில்லை.' },
 }
@@ -203,23 +201,22 @@ export function HomeView({ me, owner }: { me: Me; owner: boolean }) {
 // Home = a bento (Bento.tsx) of tiles: the four areas (Areas.tsx) and the number tiles below. Which are shown, their order and size, come from a
 // preset for the kind of person, then from whatever the person changed with "Edit layout" (saved on this device).
 const PRESETS: BentoPreset[] = [
-  { id: 'owner', label: { en: 'Owner', ms: 'Pemilik', zh: '老板', ta: 'உரிமையாளர்' }, tiles: ['needsyou', 'orbit', 'needs', 'quotes', 'margin', 'work', 'suppliers', 'insight', 'speed', 'latest', 'replies', 'audit'] },
+  { id: 'owner', label: { en: 'Owner', ms: 'Pemilik', zh: '老板', ta: 'உரிமையாளர்' }, tiles: ['needsyou', 'needs', 'quotes', 'margin', 'work', 'suppliers', 'insight', 'speed', 'latest', 'replies', 'audit'] },
   { id: 'operator', label: { en: 'Operator', ms: 'Operator', zh: '操作员', ta: 'இயக்குநர்' }, tiles: ['needsyou', 'needs', 'due', 'work', 'jobs', 'track', 'suppliers', 'contacts', 'latest'] },
-  { id: 'accountant', label: { en: 'Accountant', ms: 'Akauntan', zh: '会计', ta: 'கணக்காளர்' }, tiles: ['needsyou', 'orbit', 'needs', 'margin', 'insight', 'replies', 'latest', 'track'] },
-  { id: 'everything', label: { en: 'Everything', ms: 'Semua', zh: '全部', ta: 'அனைத்தும்' }, tiles: ['needsyou', 'orbit', 'needs', 'quotes', 'margin', 'due', 'speed', 'work', 'suppliers', 'insight', 'replies', 'latest', 'jobs', 'track', 'contacts', 'audit'] },
+  { id: 'accountant', label: { en: 'Accountant', ms: 'Akauntan', zh: '会计', ta: 'கணக்காளர்' }, tiles: ['needsyou', 'needs', 'margin', 'insight', 'replies', 'latest', 'track'] },
+  { id: 'everything', label: { en: 'Everything', ms: 'Semua', zh: '全部', ta: 'அனைத்தும்' }, tiles: ['needsyou', 'needs', 'quotes', 'margin', 'due', 'speed', 'work', 'suppliers', 'insight', 'replies', 'latest', 'jobs', 'track', 'contacts', 'audit'] },
 ]
 
 function HomeTiles({ d, owner, userId }: { d: Dash; owner: boolean; userId: string }) {
   useLang()
-  const tiles = [...strip(d, owner), ...areaTiles(d, owner), ...homeTiles(d, owner)]
+  const tiles = [...strip(d), ...areaTiles(d, owner), ...homeTiles(d, owner)]
   return <BentoGrid tiles={tiles} storageKey={`laris.bento.home.${userId}`} presets={PRESETS} defaultPreset={owner ? 'owner' : 'operator'} />
 }
 
-// The two blocks from the UX slice. The Orbit shows what customers owe (receivables), so it needs record_payments (the route checks it) and view_costs (it shows what you owe suppliers).
-function strip(d: Dash, owner: boolean): BentoTile[] {
+// The top block: what needs the person today.
+function strip(d: Dash): BentoTile[] {
   return [
     { id: 'needsyou', size: 'M', title: t(N.head), node: <NeedsYou d={d} /> },
-    ...(owner || (can('record_payments') && can('view_costs')) ? [{ id: 'orbit', size: 'XL' as const, title: t(N.orbit), node: <section className="glass-lite p-3" aria-label={t(N.orbit)}><LiveOrbit /></section> }] : []),
   ]
 }
 

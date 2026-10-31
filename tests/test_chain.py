@@ -1,5 +1,5 @@
-"""Step 220: quote-to-cash chain (PO, sales order, proforma, delivery order, invoice, receipt, supplier PO): totals, state machines, numbering,
-partial deliveries, payments, owner-only approvals, tenant isolation."""
+"""Step 220, folded: customer PO, sales order and supplier PO: totals, state machines, numbering, the link to the order (jobs row), owner-only
+approvals, tenant isolation. Proforma, delivery, invoice and payments are tested in test_chain_api / test_chain_delivery."""
 from decimal import Decimal as D
 
 from uuid import uuid4
@@ -34,24 +34,22 @@ def test_lines_are_validated():
 
 
 def test_state_machines_refuse_illegal_moves_and_gate_owner_moves():
-    chain.check_move("inv", "draft", "pending_approval", owner=False)
+    chain.check_move("spo", "draft", "pending_approval", owner=False)
     with pytest.raises(ApiError) as e:
-        chain.check_move("inv", "draft", "issued", owner=True)
+        chain.check_move("spo", "draft", "sent", owner=True)
     assert e.value.status == 409
     with pytest.raises(ApiError) as e:
-        chain.check_move("inv", "pending_approval", "issued", owner=False)
+        chain.check_move("spo", "pending_approval", "sent", owner=False)
     assert e.value.status == 403
-    chain.check_move("inv", "pending_approval", "issued", owner=True)
-    for kind, flow in chain.FLOW.items():  # every kind starts somewhere that has a way out, and terminal states have none
+    chain.check_move("spo", "pending_approval", "sent", owner=True)
+    for kind, flow in chain.FLOW.items():  # every kind starts somewhere that has a way out
         assert chain.START[kind] in flow
-    assert "paid" not in chain.FLOW["inv"] and "void" not in chain.FLOW["rcp"]
+    # proforma, delivery order, invoice and receipt are deal_docs (api/chain.py), not chain_docs kinds
+    assert set(chain.KINDS) == set(chain.FLOW) == set(chain.START) == {"cpo", "so", "spo"}
+    assert not {"pf", "do", "inv", "rcp"} & set(chain.CONVERT["so"]) and chain.CONVERT["cpo"] == {"so"}
 
 
-def test_overdue_and_ageing_buckets():
-    from datetime import date
-    today = date(2026, 3, 11)
-    assert chain.effective_status("inv", "issued", date(2026, 3, 10), today) == "overdue"
-    assert chain.effective_status("inv", "paid", date(2026, 3, 10), today) == "paid"
+def test_ageing_buckets():
     assert [chain.ageing_bucket(n) for n in (-3, 0, 1, 30, 31, 60, 61)] == ["current", "current", "1-30", "1-30", "31-60", "31-60", "60+"]
 
 
@@ -77,57 +75,47 @@ def conv(e, doc, to, who=None, **kw):
     return e.c.post(f"/api/chain/{doc}/convert", json={"to": to, **kw}, headers=who or e.O)
 
 
-def test_full_chain_with_partial_deliveries_deposit_and_payments(env):
+def job_of(e, doc):
+    return e.sql("select job_id from chain_docs where id=%s", (doc,))[0]["job_id"]
+
+
+def test_a_sales_order_is_an_order_and_the_old_money_paths_are_gone(env):
     e = env
     so = mk(e).json()
     assert so["doc_no"].startswith("SO-") and so["doc_no"].endswith("-0001") and so["total"] == "137.00" and so["status"] == "confirmed"
-    assert mk(e).json()["doc_no"].endswith("-0002")  # gap-free numbering per kind
-    # proforma asks for a 30% deposit; paying it issues a receipt and moves the proforma
-    pf = conv(e, so["id"], "pf", deposit_pct=30).json()
-    assert pf["status"] == "draft" and pf["deposit_pct"] == "30.00"
-    assert go(e, pf["id"], "sent").status_code == 200
-    assert e.c.post(f"/api/chain/{pf['id']}/payment", json={"amount": "50"}, headers=e.O).status_code == 409  # more than the 41.10 deposit
-    p = e.c.post(f"/api/chain/{pf['id']}/payment", json={"amount": "41.10"}, headers=e.O)
-    assert p.status_code == 201 and p.json()["document"]["status"] == "deposit_received" and p.json()["receipt"]["doc_no"].startswith("RCP-")
-    # two partial deliveries; a third cannot exceed the order
-    d1 = conv(e, so["id"], "do", qty={"1": 6}).json()
-    assert [x["qty"] for x in d1["lines"]] == ["6"] and conv(e, so["id"], "do", qty={"1": 5}).status_code == 409
-    assert go(e, d1["id"], "dispatched").status_code == 200 and go(e, d1["id"], "delivered").status_code == 200
-    assert e.c.get(f"/api/chain/{so['id']}", headers=e.O).json()["status"] == "in_fulfilment"
-    d2 = conv(e, so["id"], "do").json()  # everything still open: 4 nasi lemak and 4 teh tarik
-    assert [x["qty"] for x in d2["lines"]] == ["4", "4"]
-    go(e, d2["id"], "dispatched"), go(e, d2["id"], "delivered")
-    assert e.c.get(f"/api/chain/{so['id']}", headers=e.O).json()["status"] == "fulfilled"
-    # invoice only what was delivered; staff cannot issue it; two payments pay it
-    inv = conv(e, d1["id"], "inv").json()
-    assert inv["total"] == "75.00" and inv["due_on"] and conv(e, d1["id"], "inv").status_code == 409
-    assert go(e, inv["id"], "pending_approval", who=e.S).status_code == 200
-    assert go(e, inv["id"], "issued", who=e.S).status_code == 403
-    assert go(e, inv["id"], "issued").status_code == 200
-    r1 = e.c.post(f"/api/chain/{inv['id']}/payment", json={"amount": "25"}, headers=e.O).json()
-    assert r1["document"]["status"] == "partially_paid" and r1["document"]["balance"] == "50.00"
-    r2 = e.c.post(f"/api/chain/{inv['id']}/payment", json={"amount": "50", "method": "cash"}, headers=e.O).json()
-    assert r2["document"]["status"] == "paid"
-    assert e.c.post(f"/api/chain/{inv['id']}/payment", json={"amount": "1"}, headers=e.O).status_code == 409
-    # voiding a receipt needs the owner and a reason, and puts the money back on the invoice
-    assert go(e, r2["receipt"]["id"], "void", who=e.S).status_code == 403
-    assert go(e, r2["receipt"]["id"], "void").status_code == 422
-    assert go(e, r2["receipt"]["id"], "void", reason="wrong amount").status_code == 200
-    assert e.c.get(f"/api/chain/{inv['id']}", headers=e.O).json()["status"] == "partially_paid"
-    # the trail shows every document of the deal, and the history shows who did what
-    t = e.c.get(f"/api/chain/{inv['id']}", headers=e.O).json()
-    assert {x["kind"] for x in t["trail"]} == {"so", "pf", "do", "inv", "rcp"} and len(t["history"]) >= 3
+    assert mk(e).json()["doc_no"].endswith("-0002")  # gap-free numbering per kind (cpo / so / spo only)
+    job = so["job_id"]
+    assert job and e.sql("select amount from jobs where id=%s", (job,))[0]["amount"] == D("137.00")
+    # the money for it lives on the job, through the order chain
+    assert e.c.post(f"/api/jobs/{job}/proforma", json={"deposit_pct": 30}, headers=e.O).status_code == 201
+    assert e.c.get(f"/api/jobs/{job}/chain", headers=e.O).json()["total"] == "137.00"
+    # their pf / do / inv / rcp paths are gone
+    assert e.c.post(f"/api/chain/{so['id']}/payment", json={"amount": "1"}, headers=e.O).status_code in (404, 405)
+    for to in ("pf", "do", "inv"):
+        assert conv(e, so["id"], to).status_code == 422
+    assert mk(e, "pf").status_code == 422
+    assert e.c.get("/api/chain?kind=inv", headers=e.O).status_code == 422
+    assert e.sql("select count(*) n from chain_docs where kind not in ('cpo','so','spo')")[0]["n"] == 0
+    # cancelling the order is refused once money is recorded on it
+    assert e.c.post(f"/api/jobs/{job}/payments", headers=e.O, json={"amount": "10.00", "method": "cash", "paid_on": "2026-01-02", "purpose": "deposit", "idempotency_key": "k" * 12}).status_code == 201
+    r = go(e, so["id"], "cancelled", reason="changed mind")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "has_payments"
+    # staff may not see an order's chain without record_payments, whatever route they come by
+    assert e.c.get("/api/chain/receivables", headers=e.S).status_code == 403
 
 
-def test_invoice_straight_from_a_service_order_and_not_after_deliveries(env):
+def test_receivables_come_from_the_order_chain_invoices_and_payments(env):
     e = env
     so = mk(e).json()
-    assert conv(e, so["id"], "inv").status_code == 201
-    so2 = mk(e).json()
-    conv(e, so2["id"], "do")
-    assert conv(e, so2["id"], "inv").status_code == 409
-    assert conv(e, so["id"], "so").status_code == 409  # illegal conversion
-    assert conv(e, so["id"], "pf").status_code == 422  # a proforma needs its deposit
+    job = so["job_id"]
+    assert e.c.post(f"/api/jobs/{job}/invoice", json={"override_reason": "service, no delivery"}, headers=e.O).status_code == 201
+    a = e.c.get("/api/chain/receivables", headers=e.O).json()
+    assert a["total"] == "137.00" and a["buckets"]["current"]["count"] == 1  # the default invoice has no due date: current
+    pay = e.c.post(f"/api/jobs/{job}/payments", headers=e.O, json={"amount": "37.00", "method": "cash", "paid_on": "2026-01-02", "purpose": "balance", "idempotency_key": "r" * 12})
+    assert pay.status_code == 201
+    assert e.c.get("/api/chain/receivables", headers=e.O).json()["total"] == "100.00"
+    e.c.post(f"/api/jobs/{job}/payments", headers=e.O, json={"amount": "100.00", "method": "cash", "paid_on": "2026-01-02", "purpose": "balance", "idempotency_key": "s" * 12})
+    assert e.c.get("/api/chain/receivables", headers=e.O).json()["total"] == "0"
 
 
 def test_customer_po_is_checked_for_duplicates_and_becomes_an_order(env):
@@ -155,28 +143,38 @@ def test_supplier_po_needs_a_supplier_and_owner_approval(env):
     assert go(e, spo["id"], "draft").status_code == 409
 
 
-def test_from_quote_needs_an_accepted_quote_and_only_once(env):
+def test_from_quote_joins_the_job_that_accept_made(env):
     e = env
     q = seed_quote(e)
     r = e.c.post(f"/api/chain/from-quote/{q}", json={}, headers=e.O)
     assert r.status_code == 409 and r.json()["error"]["code"] == "quote_not_accepted"
     assert tr(e, q, "accepted").status_code == 200
+    job = e.sql("select id from jobs where quote_id=%s", (q,))[0]["id"]
     ok = e.c.post(f"/api/chain/from-quote/{q}", json={"to": "cpo", "ref": "PO-1"}, headers=e.O)
-    assert ok.status_code == 201 and ok.json()["quote_id"] == str(q) and ok.json()["total"] != "0.00"
+    assert ok.status_code == 201 and ok.json()["quote_id"] == str(q) and ok.json()["total"] != "0.00" and ok.json()["job_id"] == str(job)
     assert e.c.post(f"/api/chain/from-quote/{q}", json={"to": "cpo"}, headers=e.O).status_code == 409
+    so = conv(e, ok.json()["id"], "so").json()  # PO -> SO keeps the same order
+    assert so["job_id"] == str(job) and so["deal_id"] == ok.json()["deal_id"]
+    assert e.sql("select count(*) n from jobs where quote_id=%s", (q,))[0]["n"] == 1
+    assert e.sql("select count(*) n from jobs")[0]["n"] == 1  # no second order was made
 
 
-def test_receivables_ageing_and_overdue(env):
+def test_a_quote_without_an_order_row_cannot_start_a_chain(env):
+    e = env
+    q = seed_quote(e)
+    assert tr(e, q, "accepted").status_code == 200
+    e.sql("delete from jobs where quote_id=%s", (q,))
+    assert e.c.post(f"/api/chain/from-quote/{q}", json={}, headers=e.O).json()["error"]["code"] == "no_order"
+
+
+def test_a_supplier_po_that_serves_an_order_shares_its_job(env):
     e = env
     so = mk(e).json()
-    inv = conv(e, so["id"], "inv", due_in_days=0).json()
-    go(e, inv["id"], "pending_approval"), go(e, inv["id"], "issued")
-    e.sql("update chain_docs set due_on = current_date - 45 where id=%s", (inv["id"],))
-    a = e.c.get("/api/chain/receivables", headers=e.O).json()
-    assert a["buckets"]["31-60"] == {"count": 1, "outstanding": "137.00"} and a["total"] == "137.00"
-    row = [x for x in e.c.get("/api/chain?kind=inv", headers=e.O).json() if x["id"] == inv["id"]][0]
-    assert row["status_effective"] == "overdue" and row["days_overdue"] >= 44 and row["ageing"] == "31-60"
-    assert len(e.c.get("/api/chain?status=overdue", headers=e.O).json()) == 1
+    sup = e.c.post("/api/contacts", json={"role": "supplier", "name": "Pasar " + uuid4().hex[:5]}, headers=e.O).json()["id"]
+    spo = mk(e, "spo", sup, serves=so["id"]).json()
+    assert spo["job_id"] == so["job_id"] and spo["deal_id"] == so["deal_id"]
+    assert mk(e, "spo", sup).json()["job_id"] is None  # a stand-alone supplier PO has no order and makes none
+    assert e.sql("select count(*) n from jobs")[0]["n"] == 1
 
 
 def test_another_business_cannot_see_or_move_a_document(env):

@@ -385,3 +385,34 @@
 }
 
 @media (max-width: 639px) { .orb-text { font-size: 21px; } .orb-sub { font-size: 17px; } .orb-parcel text { font-size: 14px; } }
+
+/* ---- Ask Laris robot. Outer box travels (transform), inner box bobs, hop box jumps: three separate transforms so they never fight. ---- */
+@layer components {
+  .bot { position: fixed; right: 16px; bottom: 16px; z-index: 47; width: 80px; height: 100px; transform: translate(var(--bx, 0px), var(--by, 0px)) rotate(var(--br, 0deg)); transition: transform 900ms cubic-bezier(.34,1.35,.5,1); transform-origin: 50% 80%; }
+  .bot[data-spot] { z-index: 90; }
+  .bot-btn { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 40%; }
+  .bot-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .bot-btn img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 6px 8px rgb(0 40 29 / 0.35)); -webkit-user-drag: none; user-select: none; }
+  .bot-hop, .bot-inner { display: block; width: 100%; height: 100%; transform-origin: 50% 90%; }
+  .bot-inner { animation: bot-bob 3.4s ease-in-out infinite; }
+  .bot-hop { animation: bot-hop 700ms cubic-bezier(.22,1,.36,1) 1; }
+  .bot:hover .bot-inner { animation: bot-wave 900ms ease-in-out 1; }
+  .bot[data-s="think"] .bot-inner { animation: bot-think 1.1s ease-in-out infinite; }
+  .bot[data-s="talk"] .bot-inner { animation: bot-talk 460ms ease-in-out infinite; }
+  .bot-shadow { position: absolute; left: 18%; right: 18%; bottom: -6px; height: 10px; border-radius: 50%; background: radial-gradient(closest-side, rgb(0 40 29 / 0.35), transparent); animation: bot-shadow 3.4s ease-in-out infinite; pointer-events: none; }
+  .bot-bubble { position: absolute; width: max-content; max-width: min(16rem, calc(100vw - 32px)); padding: 10px 12px; border-radius: 14px; font-size: 0.875rem; line-height: 1.35; color: var(--ink); border: 1px solid var(--hairline); box-shadow: var(--elev-2);
+    background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); animation: bot-pop 260ms cubic-bezier(.34,1.4,.5,1) both; }
+  .bot-bubble[data-v="t"] { bottom: calc(100% + 6px); } .bot-bubble[data-v="b"] { top: calc(100% + 6px); }
+  .bot-bubble[data-h="r"] { right: 0; } .bot-bubble[data-h="l"] { left: 0; }
+  @keyframes bot-bob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-7px) rotate(1.5deg); } }
+  @keyframes bot-shadow { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(0.82); opacity: 0.6; } }
+  @keyframes bot-hop { 0% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-22px) scale(0.94, 1.08); } 60% { transform: translateY(0) scale(1.08, 0.92); } 100% { transform: translateY(0) scale(1, 1); } }
+  @keyframes bot-wave { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-9deg); } 60% { transform: rotate(8deg); } }
+  @keyframes bot-think { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(6deg) translateY(-4px); } }
+  @keyframes bot-talk { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.04, 0.95); } }
+  @keyframes bot-pop { 0% { opacity: 0; transform: scale(0.8) translateY(6px); } 100% { opacity: 1; transform: none; } }
+  .ask-typed { white-space: pre-wrap; }
+  .ask-avatar { width: 28px; height: 35px; flex: none; object-fit: contain; }
+}
+@media (max-width: 639px) { .bot { width: 64px; height: 80px; } }
+@media (prefers-reduced-motion: reduce) { .bot, .bot-inner, .bot-hop, .bot-bubble, .bot-shadow { transition: none !important; animation: none !important; } }

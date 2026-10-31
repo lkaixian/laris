@@ -368,7 +368,7 @@ BEGIN FOR t IN SELECT id FROM tenants LOOP
   ) AS v(name,st,cats,certs,pay,stand,ot,stab,resp,km) JOIN parties p ON p.tenant_id=t AND p.role='supplier' AND p.name=v.name
   ON CONFLICT (supplier_id) DO NOTHING;
  INSERT INTO supplier_offers(tenant_id,supplier_id,product_id,pack_label,pack_size,tiers,moq,lead_days,delivery_fee,free_delivery_over,sst_rate,valid_until,stock,payment_days)
-  SELECT t,sp.id,pr.id,v.pl,v.psz,v.tiers::jsonb,v.moq,v.lead,v.fee,v.fo,v.sst,current_date+v.valid,v.stock,v.pay FROM (VALUES
+  SELECT t,sp.id,pr.id,v.pl,v.psz,v.tiers::jsonb,v.moq,v.lead,v.fee,v.fo,v.sst,(now() at time zone 'Asia/Kuala_Lumpur')::date+v.valid,v.stock,v.pay FROM (VALUES
   ('SAMPLE Penang Maker Parts Sdn Bhd (synthetic)','hotend_assembly_complete','pc',1,'[{"min_packs": "1", "price": "48.96"}]',NULL,3,12,250,0.08,15,133,30),
   ('SAMPLE Johor 3D Components (synthetic)','hotend_assembly_complete','pc',1,'[{"min_packs": "1", "price": "46.06"}]',NULL,4,20,300,0.08,5,NULL,30),
   ('SAMPLE Penang Maker Parts Sdn Bhd (synthetic)','heater_cartridge_24v_40w','pc',1,'[{"min_packs": "1", "price": "8.88"}]',NULL,2,12,250,0.08,9,NULL,30),

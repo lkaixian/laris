@@ -2,6 +2,10 @@
 from datetime import date, timedelta
 from decimal import Decimal as D
 
+import psycopg
+import pytest
+
+from src.pipeline import today_my  # the app's own "today" (Malaysia): date.today() is the test machine's, a day behind in UTC for part of every day
 from support.fixtures import env, pg_url  # noqa: F401
 
 
@@ -44,7 +48,7 @@ def test_oil_comparison_guardrails_and_winner_changes_with_quantity(env):
     e = env
     pid, _ = setup(e)
     oil = pid("Cooking oil 17kg")
-    r = e.c.get(f"/api/products/{oil}/compare?qty=85&needed_by={date.today() + timedelta(days=3)}", headers=e.O).json()
+    r = e.c.get(f"/api/products/{oil}/compare?qty=85&needed_by={today_my() + timedelta(days=3)}", headers=e.O).json()
     why = {x["supplier_name"][7:18]: x["why_not"] for x in r["disqualified"]}
     assert why["Johor Edibl"] == ["below_moq"] and why["Penang Trad"] == ["too_slow"] and why["KL Foodstuf"] == ["expired"] and why["Kedah Cheap"] == ["blocked"]
     assert r["recommended"]["supplier_name"].startswith("SAMPLE Perak")  # 5 x 67
@@ -103,7 +107,7 @@ def test_contract_flow_staff_drafts_manager_approves_and_product_flips(env):
     mgr = role(e, "Manager", ["manage_contracts", "approve_contracts"])
     chk = pid("Chicken breast, fresh")
     assert e.c.get(f"/api/contracts/coverage?product_id={chk}", headers=e.O).json()["status"] == "not_in_contract"  # expired contract only
-    t = date.today()
+    t = today_my()
     body = {"supplier_id": sid("Sabah"), "name": "Chicken 2026-27", "items": [{"product_id": chk, "pack_size": "1", "price_per_pack": "10.4"}],
             "start_on": str(t), "end_on": str(t + timedelta(days=365)), "notice_days": 30, "value": "3000", "min_qty": "500", "max_qty": "1500"}
     cid = e.c.post("/api/contracts", json=body, headers=buyer).json()["id"]
@@ -126,7 +130,7 @@ def test_manager_limit_sends_big_contracts_to_the_owner(env):
     pid, sid = setup(e)
     mgr = role(e, "Manager", ["manage_contracts", "approve_contracts"])
     drafter = role(e, "Drafter", ["manage_contracts"])
-    t = date.today()
+    t = today_my()
     body = {"supplier_id": sid("Sabah"), "name": "Big", "items": [{"product_id": pid("Flour 25kg"), "pack_size": "25", "price_per_pack": "50"}],
             "start_on": str(t), "end_on": str(t + timedelta(days=100)), "value": "50000"}
     cid = e.c.post("/api/contracts", json=body, headers=drafter).json()["id"]
@@ -138,7 +142,7 @@ def test_manager_limit_sends_big_contracts_to_the_owner(env):
 def test_contract_validation(env):
     e = env
     pid, sid = setup(e)
-    t = date.today()
+    t = today_my()
     ok = {"supplier_id": sid("Sabah"), "name": "x", "items": [{"product_id": pid("Flour 25kg"), "price_per_pack": "50"}], "start_on": str(t), "end_on": str(t + timedelta(days=10))}
     assert e.c.post("/api/contracts", json={**ok, "end_on": str(t)}, headers=e.O).json()["error"]["code"] == "bad_dates"
     assert e.c.post("/api/contracts", json={**ok, "min_qty": "10", "max_qty": "5"}, headers=e.O).json()["error"]["code"] == "bad_volume"
@@ -152,7 +156,7 @@ def test_timeline_has_durations_gaps_and_reminders(env):
     tl = e.c.get("/api/contracts/timeline", headers=e.O).json()
     flat = [c for lane in tl["lanes"] for c in lane["contracts"]]
     exp = next(c for c in flat if c["name"] == "Cooking oil supply 2026")
-    assert exp["days_left"] == 20 and exp["state"] == "expiring" and exp["notice_deadline"] == str(date.today() - timedelta(days=10))
+    assert exp["days_left"] == 20 and exp["state"] == "expiring" and exp["notice_deadline"] == str(today_my() - timedelta(days=10))
     assert [m["kind"] for m in exp["milestones"]][-1] == "end"
     assert any(c["name"] == "Flour 12-month supply" and c["state"] == "active" and c["start"] > tl["today"] for c in flat)
     assert any(c["state"] == "expired" for c in flat)
@@ -258,3 +262,17 @@ def test_savings_this_month_counts_only_real_cheaper_orders(env):
     buy(today, 50, "pending")                # not approved: counts for nothing
     buy(today, 120)                          # dearer than last paid: never a negative saving
     assert D(e.c.get("/api/suppliers/summary", headers=e.O).json()["savings_this_month"]) - before == D("20")
+
+
+@pytest.mark.parametrize("zone", ["Pacific/Kiritimati", "Pacific/Pago_Pago"])  # UTC+14 and UTC-11: at any hour of the day at least one has a different date from Malaysia
+def test_demo_seed_counts_days_in_malaysia_whatever_the_server_zone(env, pg_url, zone):
+    e = env
+    tid = e.sql("select id from tenants limit 1")[0]["id"]
+    with psycopg.connect(pg_url, autocommit=True) as c:
+        c.execute(f"set time zone '{zone}'")
+        c.execute("select set_config('laris.tenant', '*', false)")
+        c.execute("select seed_supplier_demo(%s)", (tid,))
+        c.execute("reset time zone")
+    tl = e.c.get("/api/contracts/timeline", headers=e.O).json()
+    exp = next(c for lane in tl["lanes"] for c in lane["contracts"] if c["name"] == "Cooking oil supply 2026")
+    assert exp["days_left"] == 20 and exp["notice_deadline"] == str(today_my() - timedelta(days=10))

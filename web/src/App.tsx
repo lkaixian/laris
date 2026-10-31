@@ -25,6 +25,7 @@ import { SearchView } from './Search'
 import { AssistantView, AssistantWidget } from './Assistant'
 import { GuidePanel } from './Guide'
 import { HomeView } from './Home'
+import { RevenueView } from './Revenue'
 import { TrackView } from './Track'
 import { JobsView } from './JobsBoard'
 import { AskView } from './Ask'
@@ -184,7 +185,7 @@ function GeneralTab({ setDark }: { setDark: (d: boolean) => void }) {
       </fieldset>
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
         <legend className="px-1 text-sm font-semibold">{t(S.appearance)}</legend>
-        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-3 gap-2 sm:max-w-md">
+        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-3 gap-2 sm:max-w-sm">
           {([[S.light, 'light'], [S.dark, 'dark'], [S.system, 'system']] as const).map(([n, p]) => <button key={p} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={pref === p}
             onClick={() => { setPref(p); setDark(setThemePref(p)) }}>{t(n)}</button>)}
         </div>
@@ -439,6 +440,7 @@ function MockCrash(): never { throw new Error('Mock crash (?crash=1)') }
 const NotFound = () => { useLang(); return <><PageHeader title={t(S.notFound)} /><EmptyState title={t(S.notExist)} action={{ label: t(S.openTracker), href: '#/tracker' }} /></> }
 const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   home: { render: c => <HomeView me={c.me} owner={can('view_costs')} /> },
+  revenue: { render: () => <RevenueView /> },
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
   tracker: { render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },
@@ -622,7 +624,7 @@ function AppShell() {
             )}
           </div>
         )}
-        {me && lic && <AssistantWidget hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
+        {me && lic && <AssistantWidget name={me.name} uid={me.id} hidden={route === 'assistant' || !canOpen('assistant', owner)} />}
         {me && lic && <GuidePanel />}
       </Shell>
       {me && <TourHost me={me} owner={owner} />}

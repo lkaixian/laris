@@ -8,6 +8,7 @@ import { hasGuide, openGuide } from './Guide'
 import { useShowTutorialButton } from './helpPrefs'
 import type { Me } from './api'
 import { Icon } from './icons'
+import { setThemePref } from './skin'
 import type { IconName } from './icons'
 
 const S = {
@@ -151,7 +152,7 @@ function GuideButton() {
   return <button type="button" className="btn min-h-8 gap-1 rounded-full px-3 text-sm" data-guide="how-to" onClick={() => openGuide(key)}><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-accent text-xs font-bold text-on-accent">?</span>{tx('guide.button')}</button>
 }
 
-const ROUTE_ICON: Record<string, IconName> = { home: 'home', tracker: 'tracker', track: 'pipeline', jobs: 'jobs', deals: 'tracker', followups: 'clock', contacts: 'contacts', contact: 'contacts',
+const ROUTE_ICON: Record<string, IconName> = { home: 'home', revenue: 'revenue', tracker: 'tracker', track: 'pipeline', jobs: 'jobs', deals: 'tracker', followups: 'clock', contacts: 'contacts', contact: 'contacts',
   ask: 'ask', catalog: 'camera', alerts: 'alerts', activity: 'activity', team: 'team', roles: 'roles', settings: 'settings', privacy: 'roles', 'api-access': 'key', 'ai-settings': 'ask',
   status: 'warn', licence: 'key', issuer: 'key', purchase: 'key', doc: 'tracker', assistant: 'ask', account: 'team', help: 'ask', search: 'ask' }
 const routeNow = () => (location.hash.split('/')[1] || 'home').split('?')[0]
@@ -233,10 +234,7 @@ export function Hint({ id, children }: { id: string; children: ReactNode }) {
 export function ThemeToggle({ dark, setDark, compact }: { dark: boolean; setDark: (d: boolean) => void; compact?: boolean }) {
   useLang()
   const flip = () => {
-    const t = dark ? 'light' : 'dark'
-    document.documentElement.dataset.theme = t
-    try { localStorage.setItem('theme', t) } catch { /* storage blocked: choice lasts for this visit only */ }
-    setDark(!dark)
+    setDark(setThemePref(dark ? 'light' : 'dark'))
   }
   return compact
     ? <button type="button" className="btn size-(--control-h) px-0 aria-pressed:bg-tint" aria-pressed={dark} aria-label={t(S.dark)} title={t(S.dark)} onClick={flip}><Icon name="moon" /></button>

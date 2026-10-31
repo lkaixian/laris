@@ -477,6 +477,8 @@ function Gallery({ rows, current, onView }: { rows: ListingRow[]; current?: stri
 function PhotoDialog({ id, showPrice, onClose }: { id?: string; showPrice: boolean; onClose: () => void }) {
   useLang()
   const ref = useRef<HTMLDialogElement>(null)
+  const last = useRef(id)
+  if (id) last.current = id  // onClose clears id and re-renders before the browser follows the link: the href must keep the opened photo
   const s = useFetch<Detail>(id ? `/listings/${id}` : null)
   useEffect(() => {
     const d = ref.current
@@ -522,7 +524,7 @@ function PhotoDialog({ id, showPrice, onClose }: { id?: string; showPrice: boole
         </Async>
       </div>
       <div className="flex shrink-0 justify-end border-t border-hairline p-4">
-        <a className="btn btn-primary" href={`#/catalog/${id}`} onClick={onClose}>{t({ en: 'Open to review and edit', ms: 'Buka untuk semak dan sunting', zh: '打开以审核和编辑', ta: 'மதிப்பாய்வு செய்து திருத்த திற' })}</a>
+        <a className="btn btn-primary" href={`#/catalog/${last.current}`} onClick={onClose}>{t({ en: 'Open to review and edit', ms: 'Buka untuk semak dan sunting', zh: '打开以审核和编辑', ta: 'மதிப்பாய்வு செய்து திருத்த திற' })}</a>
       </div>
     </dialog>
   )

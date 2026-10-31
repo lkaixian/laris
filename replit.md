@@ -45,6 +45,14 @@ Do not set `SEED=1` permanently. The demo data was loaded once; normal restarts
 preserve data. The API's existing startup routine applies the remaining schema
 files and initializes trade-template fields.
 
+## Pulling and publishing
+
+1. `git status --short --branch`; commit or stash first. Never `reset --hard` to clear changes.
+2. `git pull --ff-only origin master`. If it reports diverged (Replit's empty "Published your App" commit causes this), `git fetch origin && git merge origin/master`. No rebase, no force push.
+3. `bash scripts/post-merge.sh` (installs packages, builds the frontend; it does not touch the database), then restart **Start application** from the Run controls.
+4. If the pull changed anything under `db/`, press Run before publishing so `src/db.py apply_schema` brings the development database up to date. Publish compares development with production and makes production match.
+5. Never approve a publish plan with an unexpected `DROP TABLE`, `DROP COLUMN` or data-overwrite warning. That means development is behind production: cancel, back up production, run the app, publish again.
+
 ## Optional services
 
 The tracker and rules-based pricing work without external service credentials.

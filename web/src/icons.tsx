@@ -32,6 +32,7 @@ const P = {
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
   pipeline: 'M4 5h4v14H4z M10 5h4v9h-4z M16 5h4v6h-4z',
   inbox: 'M3 13l3-8h12l3 8v6H3z M3 13h5l1 3h6l1-3h5',
+  revenue: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M14.6 9.3c-.5-.8-1.4-1.3-2.6-1.3-1.5 0-2.6.8-2.6 1.9 0 2.7 5.2 1.3 5.2 4 0 1.2-1.2 2-2.7 2-1.2 0-2.2-.5-2.8-1.4 M12 6.4V8 M12 16v1.6',
 } as const
 
 export type IconName = keyof typeof P

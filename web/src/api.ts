@@ -102,12 +102,15 @@ export const PERM_LABEL: Record<string, string> = {
   view_costs: 'See costs and prices', view_reports: 'See the margin report', edit_supplier_contacts: 'Edit supplier contacts', manage_contacts: 'Manage contacts',
   upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
   export_data: 'Export data', view_audit: 'See the activity log', decide_quotes: 'Approve, accept, reject or send quotes',
+  view_revenue: 'See revenue and profit', record_expenses: 'Record running costs',
 }
 // Permission label (and description) by key in the current language; English and unknown keys show the server's own text. Used by the Roles page and why().
 type L = Omit<Text, 'en'>
 export const PERMS: Record<string, { label: L; description?: L }> = {
   view_costs: { label: { ms: 'Lihat kos dan margin', zh: '查看成本和利润', ta: 'செலவுகளையும் லாபத்தையும் காண்' }, description: { ms: 'Harga pembekal, item kos, margin, amaran kos lapuk dan teks sembang pembekal. Tanpanya setiap respons dibersihkan daripada semua ini.', zh: '供应商价格、成本项目、利润、过时成本提醒和供应商聊天内容。没有此权限，所有响应都会隐去这些内容。', ta: 'சப்ளையர் விலைகள், செலவு உருப்படிகள், லாபம், பழைய செலவு எச்சரிக்கைகள், சப்ளையர் அரட்டை உரை. இல்லையெனில் ஒவ்வொரு பதிலிலிருந்தும் இவை நீக்கப்படும்.' } },
   view_reports: { label: { ms: 'Lihat laporan margin', zh: '查看利润报表', ta: 'லாப அறிக்கையைக் காண்' }, description: { ms: 'Laporan margin (angka kos dan margin di dalamnya juga memerlukan Lihat kos dan margin).', zh: '利润报表（其中的成本和利润数字还需要“查看成本和利润”权限）。', ta: 'லாப அறிக்கை (அதிலுள்ள செலவு, லாப எண்களுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை).' } },
+  view_revenue: { label: { ms: 'Lihat hasil dan untung', zh: '查看收入和利润', ta: 'வருவாயையும் லாபத்தையும் காண்' }, description: { ms: 'Halaman Hasil: wang masuk dan keluar, untung kasar dan untung bersih. Ia menunjukkan kos, jadi ia juga memerlukan Lihat kos dan margin.', zh: '“收入”页面：收入与支出、毛利和净利润。它会显示成本，因此还需要“查看成本和利润”。', ta: 'வருவாய்ப் பக்கம்: வரும் மற்றும் போகும் பணம், மொத்த லாபம், நிகர லாபம். இது செலவுகளைக் காட்டுவதால் செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை.' } },
+  record_expenses: { label: { ms: 'Rekod kos operasi', zh: '记录经营开支', ta: 'இயக்கச் செலவுகளைப் பதிவு செய்' }, description: { ms: 'Tambah sewa, gaji dan bil ke halaman Hasil supaya untung bersih betul. Membatalkan satu entri ialah hak pemilik.', zh: '把租金、工资和账单添加到“收入”页面，使净利润准确。作废一笔记录由老板操作。', ta: 'நிகர லாபம் சரியாக இருக்க வாடகை, சம்பளம், கட்டணங்களை வருவாய்ப் பக்கத்தில் சேர்க்கவும். ஒரு பதிவைச் செல்லாததாக்குவது உரிமையாளருக்கு.' } },
   edit_supplier_contacts: { label: { ms: 'Tukar nama atau nombor pembekal', zh: '更改供应商的名称或号码', ta: 'சப்ளையரின் பெயர் அல்லது எண்ணை மாற்று' }, description: { ms: 'Tempat sembang pembekal dihalakan. Medan kenalan lain hanya memerlukan Urus kenalan.', zh: '供应商聊天的转接位置。其他联系人字段只需要“添加和编辑联系人”。', ta: 'சப்ளையர் அரட்டை எங்கே செல்கிறது என்பது. மற்ற தொடர்புப் புலங்களுக்கு தொடர்புகளைச் சேர் மற்றும் திருத்து மட்டும் போதும்.' } },
   manage_contacts: { label: { ms: 'Tambah dan edit kenalan', zh: '添加和编辑联系人', ta: 'தொடர்புகளைச் சேர் மற்றும் திருத்து' }, description: { ms: 'Cipta dan edit pelanggan, pembekal dan kontraktor.', zh: '创建和编辑客户、供应商和承包商。', ta: 'வாடிக்கையாளர்கள், சப்ளையர்கள், ஒப்பந்ததாரர்களை உருவாக்கித் திருத்து.' } },
   upload_documents: { label: { ms: 'Muat naik dokumen pembekal', zh: '上传供应商文档', ta: 'சப்ளையர் ஆவணங்களைப் பதிவேற்று' }, description: { ms: 'Masukkan fail pembekal atau teks yang ditampal, dan taip dokumen secara manual.', zh: '导入供应商文件或粘贴的文本，并手动录入文档。', ta: 'சப்ளையர் கோப்பு அல்லது ஒட்டிய உரையை உள்ளிடு, ஆவணத்தை கைமுறையாகப் பதிவு செய்.' } },
@@ -152,7 +155,8 @@ let lastPerms = 0
 const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
 // Pages that need a permission. Team, Roles, Settings, Privacy and API access are owner-class only (docs/roles.md, "Owner only, not assignable").
 const NEED: Record<string, string> = { alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : !NEED[route] || can(NEED[route])
+// Revenue shows costs, so it needs both permissions (the server asks for both too).
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : route === 'revenue' ? can('view_revenue') && can('view_costs') : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
@@ -195,6 +199,7 @@ export const setAccessToken = (t: string) => setToken(t.trim())
 
 export async function logout(): Promise<void> {
   if (!MOCK && getToken()) await fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + getToken() } }).catch(() => undefined)
+  try { sessionStorage.removeItem('laris.bot.intro') } catch { /* private window */ }  // the robot introduces itself again at the next sign-in
   signedOut()
 }
 

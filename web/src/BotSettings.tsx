@@ -49,7 +49,7 @@ export function BotSettings() {
   const text = (k: 'welcome' | 'help', title: string, def: string) => f && (
     <div className="grid gap-1">
       <label htmlFor={`bs-${k}`} className="text-sm font-semibold">{title}</label>
-      <textarea id={`bs-${k}`} className="input py-2 font-normal" rows={3} maxLength={MAX[k]} value={f[k]} {...inv(k)} onChange={e => set({ [k]: e.target.value })} />
+      <textarea id={`bs-${k}`} className="input w-full py-2 font-normal" rows={3} maxLength={MAX[k]} value={f[k]} {...inv(k)} onChange={e => set({ [k]: e.target.value })} />
       <p className="flex flex-wrap justify-between gap-2 text-sm text-muted"><span>{f[k].length} / {MAX[k]}</span>
         <button type="button" className="link" onClick={() => set({ [k]: def })}>{t(DEF)}<span className="sr-only"> {title.toLowerCase()}</span></button></p>
       <FieldErr k={k} />
@@ -61,8 +61,8 @@ export function BotSettings() {
       <p className="mb-3 text-sm text-muted">{t({ en: 'Change what customers see when they message your bot on Telegram.', ms: 'Ubah apa yang pelanggan lihat apabila mereka menghantar mesej kepada bot anda di Telegram.', zh: '更改客户在 Telegram 上给你的机器人发消息时看到的内容。', ta: 'வாடிக்கையாளர்கள் Telegram இல் உங்கள் bot க்கு செய்தி அனுப்பும்போது அவர்கள் காண்பதை மாற்றவும்.' })}</p>
       {s.error ? <div role="alert" className="text-sm text-warn"><p>{s.error}</p><button type="button" className="btn mt-2" onClick={s.reload}>{t({ en: 'Retry loading', ms: 'Cuba muat semula', zh: '重新加载', ta: 'மீண்டும் ஏற்று' })}</button></div>
         : !f || !d || !ah ? <div role="status" aria-busy="true" className="skeleton h-32"><span className="sr-only">{t({ en: 'Loading...', ms: 'Memuatkan...', zh: '加载中...', ta: 'ஏற்றுகிறது...' })}</span></div> : (
-        <div className="grid gap-6 md:grid-cols-2">
-          <form className="grid min-w-0 gap-4" onSubmit={e => { e.preventDefault(); send(f, t({ en: 'Bot messages saved.', ms: 'Mesej bot disimpan.', zh: '机器人消息已保存。', ta: 'Bot செய்திகள் சேமிக்கப்பட்டன.' })) }}>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-2">
+          <form className="grid grid-cols-[minmax(0,1fr)] gap-4" onSubmit={e => { e.preventDefault(); send(f, t({ en: 'Bot messages saved.', ms: 'Mesej bot disimpan.', zh: '机器人消息已保存。', ta: 'Bot செய்திகள் சேமிக்கப்பட்டன.' })) }}>
             {text('welcome', t({ en: 'Welcome message', ms: 'Mesej alu-aluan', zh: '欢迎消息', ta: 'வரவேற்பு செய்தி' }), d.welcome)}
             {text('help', t({ en: 'Help message', ms: 'Mesej bantuan', zh: '帮助消息', ta: 'உதவிச் செய்தி' }), d.help)}
 
@@ -97,7 +97,7 @@ export function BotSettings() {
                 </fieldset>
                 <div className="grid gap-1">
                   <label htmlFor="bs-ahm" className="text-sm font-semibold">{t({ en: 'Message when closed', ms: 'Mesej apabila tutup', zh: '休息时的消息', ta: 'மூடியிருக்கும்போது செய்தி' })}</label>
-                  <textarea id="bs-ahm" className="input py-2 font-normal" rows={2} maxLength={MAX.after_hours} value={ah.message} {...inv('after_hours')} onChange={e => setAh({ message: e.target.value })} />
+                  <textarea id="bs-ahm" className="input w-full py-2 font-normal" rows={2} maxLength={MAX.after_hours} value={ah.message} {...inv('after_hours')} onChange={e => setAh({ message: e.target.value })} />
                   <p className="flex flex-wrap justify-between gap-2 text-sm text-muted"><span>{ah.message.length} / {MAX.after_hours}</span>
                     <button type="button" className="link" onClick={() => setAh({ message: d.after_hours_message })}>{t(DEF)}<span className="sr-only"> {t({ en: 'closed message', ms: 'mesej tutup', zh: '休息消息', ta: 'மூடியிருக்கும் செய்தி' })}</span></button></p>
                 </div></>}

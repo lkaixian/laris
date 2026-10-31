@@ -36,6 +36,7 @@ Regenerate with `python scripts/features_map.py` (statuses are kept by hand in t
 | RunPod Endpoint | vLLM GPU pod serving Qwen2.5-VL-7B (private, key required). See the RunPod proof of use |
 | Slide Deck | [PDF](submission/SDC2026_SparkSurge_SlideDeck.pdf) · [PPTX](submission/SDC2026_SparkSurge_SlideDeck.pptx) |
 | Demo Video | https://youtu.be/JVA05hTM_HU |
+| Demo Video (backup) | https://youtu.be/gE6c4qGsy24 |
 | Final Phase (Report) | [PDF](submission/SDC2026_SparkSurge_Final.pdf) |
 | Final Phase (Tech Declaration) | [PDF](submission/SDC2026_SparkSurge_Final_TechDeclaration.pdf) |
 

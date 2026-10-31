@@ -42,7 +42,7 @@ const S = {
 }
 
 // Monthly AI allowance per plan. Keep in step with PLANS in src/license.py (ai_month, photos_month).
-const AI_MONTH = { starter: [800, 30], standard: [4000, 150], pro: [16000, 500] } as const
+const AI_MONTH = { starter: [800, 30], standard: [3000, 150], pro: [10000, 500] } as const
 const aiLine = (k: Key): Text => { const [m, p] = AI_MONTH[k]; return { en: `${m.toLocaleString()} AI messages and ${p} photo reads a month`, ms: `${m.toLocaleString()} mesej AI dan ${p} bacaan foto sebulan`, zh: `每月 ${m.toLocaleString()} 次 AI 消息和 ${p} 次照片识别` } }
 
 const PLANS: { key: Key; name: string; seats: number; pop?: boolean; pts: Text[] }[] = [

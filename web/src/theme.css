@@ -24,18 +24,19 @@
   --pipe-1: #a8d5c2; --pipe-2: #3f8f72; --pipe-3: #0f5c47; --hero-wash: rgb(255 255 255 / 0.12);
 }
 :root[data-theme="dark"] {
-  /* Brand-green dark (#00563f page), layered up: sunken < bg < surface < surface-2 < surface-3. Pairs are checked by tests/test_contrast.py. */
+  /* Black dark theme, layered up: sunken < bg < surface < surface-2 < surface-3. The green is only the accent. Pairs are checked by tests/test_contrast.py. */
   color-scheme: dark;
-  --sunken: #003d2d; --bg: #00563f; --surface: #0f604a; --surface-3: #2e7462; --ink: #f2fbf7; --muted: #d3eadf; --amber: #ffc857;
-  --line: #9fc9b8; --soft: #1f6a56; --tint: #1f6a56;
-  --accent: #5cf2b0; --accent-hover: #86f7c6; --on-accent: #00281d;
-  --warn: #ffc2bb; --warn-bg: #5a2420; --info: #7fd0ff;
-  --hairline: #3c8570; --surface-2: #1f6a56; --ink-2: #d9efe5; --skeleton: #1f6a56;
-  --glow: 0 0 24px rgb(92 242 176 / 0.35);
-  --elev-2: 0 4px 12px rgb(0 40 29 / 0.35); --elev-3: 0 12px 32px rgb(0 40 29 / 0.5);
-  --elev-1: 0 1px 2px rgb(0 40 29 / 0.3), 0 6px 18px rgb(0 40 29 / 0.22);
-  --pipe-1: #2e7462; --pipe-2: #4fc79b; --pipe-3: #5cf2b0; --hero-wash: rgb(0 40 29 / 0.16);
+  --sunken: #050505; --bg: #000000; --surface: #0b0b0b; --surface-3: #1a1a1a; --ink: #edf3f0; --muted: #a3b0aa; --amber: #ffc857;
+  --line: #6f7c76; --soft: #111111; --tint: #10201a;
+  --accent: #4fd6a3; --accent-hover: #6fe3b8; --on-accent: #04130d;
+  --warn: #ffc2bb; --warn-bg: #3a1815; --info: #7fd0ff;
+  --hairline: #1f1f1f; --surface-2: #111111; --ink-2: #d2dbd7; --skeleton: #161616;
+  --glow: 0 0 24px rgb(79 214 163 / 0.28);
+  --elev-2: 0 4px 12px rgb(0 0 0 / 0.5); --elev-3: 0 12px 32px rgb(0 0 0 / 0.65);
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 6px 18px rgb(0 0 0 / 0.4);
+  --pipe-1: #1d4a39; --pipe-2: #2f8a69; --pipe-3: #4fd6a3; --hero-wash: rgb(255 255 255 / 0.04);
 }
+
 :root { --ease-tile: cubic-bezier(0.2, 0.8, 0.2, 1); --dur-fast: 120ms; --dur-base: 220ms; --dur-slow: 420ms; --ease-out: cubic-bezier(.22,1,.36,1); --ease-in-out: cubic-bezier(.65,0,.35,1); --sunken: #e8f1ec; }
 @media (pointer: coarse), (max-width: 767px) { :root { --control-h: 44px; --control-h-sm: 44px; } }
 
@@ -143,14 +144,14 @@
   .chip-job_created { --chip-fg: #ffffff; --chip-bg: #0a3d2f; }
   .chip-rejected { --chip-fg: #8f2a1a; --chip-bg: #fbeeea; }
   .chip-expired { --chip-fg: #475a50; --chip-bg: #ffffff; }
-  :root[data-theme="dark"] .chip-draft { --chip-fg: #e3f3ec; --chip-bg: #0b4a38; }
-  :root[data-theme="dark"] .chip-approved { --chip-fg: #d4f5e6; --chip-bg: #1f6a56; }
+  :root[data-theme="dark"] .chip-draft { --chip-fg: #e3f3ec; --chip-bg: #1a2b24; }
+  :root[data-theme="dark"] .chip-approved { --chip-fg: #d4f5e6; --chip-bg: #1f4a3b; }
   :root[data-theme="dark"] .chip-sent { --chip-fg: #00281d; --chip-bg: #9fe3c6; }
   :root[data-theme="dark"] .chip-read { --chip-fg: #00281d; --chip-bg: #5cf2b0; }
   :root[data-theme="dark"] .chip-accepted { --chip-fg: #00281d; --chip-bg: #3fd99a; }
   :root[data-theme="dark"] .chip-job_created { --chip-fg: #00281d; --chip-bg: #b8efd9; }
   :root[data-theme="dark"] .chip-rejected { --chip-fg: #ffd6d1; --chip-bg: #5a2420; }
-  :root[data-theme="dark"] .chip-expired { --chip-fg: #d3eadf; --chip-bg: #0b4a38; }
+  :root[data-theme="dark"] .chip-expired { --chip-fg: #d3eadf; --chip-bg: #1f2a26; }
   .chip-warn { --chip-fg: var(--warn); --chip-bg: var(--warn-bg); }
   /* Age "heat" bands (tracker, follow-ups): four flat steps, never a gradient. The chip always names the band and the days,
      and the dot gets fuller as the band gets older, so colour is never the only signal. All pairs >= 6.5:1 in both themes. */
@@ -158,7 +159,7 @@
   .heat-waiting { --heat-fg: #5c4300; --heat-bg: #fbefc4; }
   .heat-late { --heat-fg: #7a3300; --heat-bg: #fbdcc3; }
   .heat-stale { --heat-fg: #8f1d12; --heat-bg: #f8d4cf; }
-  :root[data-theme="dark"] .heat-fresh { --heat-fg: #bff5dc; --heat-bg: #0b4a38; }
+  :root[data-theme="dark"] .heat-fresh { --heat-fg: #bff5dc; --heat-bg: #14392d; }
   :root[data-theme="dark"] .heat-waiting { --heat-fg: #ffe08a; --heat-bg: #4a3d0c; }
   :root[data-theme="dark"] .heat-late { --heat-fg: #ffc79a; --heat-bg: #5a3010; }
   :root[data-theme="dark"] .heat-stale { --heat-fg: #ffd0c9; --heat-bg: #5a2420; }
@@ -353,7 +354,7 @@
   .glass-stage fieldset > legend { float: left; width: 100%; padding: 0; margin: 0 0 .5rem; font-weight: 600; }
   .glass-stage fieldset > legend + * { clear: both; }
   /* A table in a fixed-height window: it scrolls inside, the column heads stay put, and the page does not grow with the rows. */
-  .scroll-table { max-height: 20rem; overflow: auto; border-radius: .6rem; border: 1px solid var(--hairline); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+  .scroll-table { max-height: 20rem; overflow: auto; border-radius: .6rem; border: 1px solid var(--hairline); background: var(--surface); }
   .scroll-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-solid, var(--surface)); box-shadow: inset 0 -1px 0 var(--hairline); }
   .scroll-table th, .scroll-table td { padding-left: .75rem; }
   :root[data-theme="dark"] .glass-stage fieldset { border-color: color-mix(in srgb, white 12%, transparent); background: color-mix(in srgb, var(--surface) 84%, transparent); }

@@ -29,10 +29,10 @@ MAX_TOKEN, MAX_TS, MAX_SEATS, EXPIRING_DAYS, CACHE_SECONDS = 4096, 4102444800, 1
 B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 # ponytail: static catalog in code. REAL DATA needed: prices (shown as "contact us" until the owner of the product sets them).
 # ai_month: model calls (customer chat, assistant, document reading) per calendar month; photos_month: catalog photos read by the vision model per month.
-# photos_month is the owner's (30 / 150 / 500). REAL DATA needed: ai_month is a placeholder (four times the old weekly number); the Pricing page (web/src/Pricing.tsx) repeats both.
+# Both are the owner's: ai_month 800 / 3,000 / 10,000 and photos_month 30 / 150 / 500. The Pricing page (web/src/Pricing.tsx) repeats them.
 PLANS = {"starter": {"name": "Starter", "seats": 3, "ai_month": 800, "photos_month": 30},
-         "standard": {"name": "Standard", "seats": 10, "ai_month": 4000, "photos_month": 150},
-         "pro": {"name": "Pro", "seats": 25, "ai_month": 16000, "photos_month": 500}}
+         "standard": {"name": "Standard", "seats": 10, "ai_month": 3000, "photos_month": 150},
+         "pro": {"name": "Pro", "seats": 25, "ai_month": 10000, "photos_month": 500}}
 BLOCKING = ("missing", "expired", "invalid", "clock_unverified")  # statuses that put an enforced installation into read-only mode
 ALLOWED = ("/api/license", "/api/me/sessions", "/api/me/password")  # writes that stay open: licensing itself, own sessions, own password
 _CACHE: dict = {}

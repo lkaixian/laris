@@ -1,6 +1,6 @@
 /*
   Glass skin (DECISIONS.md D-01). Loaded after theme.css, so it re-points the same colour tokens at frosted values and the whole app
-  turns to glass without touching a component. Dark glass on brand green #00563f is the hero theme; light glass uses the same hue.
+  turns to glass without touching a component. Dark glass is black (the green is only the accent); light glass uses the brand green hue.
 
   READABILITY RULES (checked by tests/test_glass_contrast.py, which reads the token blocks below):
    - Text never sits on a bare translucent fill. --surface is dense enough that every text token passes WCAG AA over the worst
@@ -31,25 +31,26 @@
   --glass-blur: 22px;
 }
 :root[data-theme="dark"] {
-  --glass-bg-deep: #00281d; --glass-bg-brand: #00563f;
-  --orb-1: 11 143 106; --orb-1-peak: 0.55;
-  --orb-2: 31 209 161; --orb-2-peak: 0.30;
-  --orb-3: 245 185 66; --orb-3-peak: 0.12;
-  --surface-glass: rgba(0, 40, 29, 0.70); --surface-solid: #05342a;
-  --glass-fill: rgba(255, 255, 255, 0.08); --glass-fill-strong: rgba(0, 40, 29, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.18); --glass-rim: rgba(255, 255, 255, 0.22);
-  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%);
-  --shadow-glow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 0 24px rgba(92, 242, 176, 0.18);
-  --ink: #f2fbf7; --ink-2: #dcefe6; --muted: #bfdcd0;
-  --accent: #5cf2b0; --accent-hover: #8af7c8; --on-accent: #00281d;
+  --glass-bg-deep: #000000; --glass-bg-brand: #050505;
+  --orb-1: 31 158 116; --orb-1-peak: 0.10;
+  --orb-2: 47 191 140; --orb-2-peak: 0.06;
+  --orb-3: 245 185 66; --orb-3-peak: 0;
+  --surface-glass: rgba(11, 11, 11, 0.78); --surface-solid: #0b0b0b;
+  --glass-fill: rgba(255, 255, 255, 0.05); --glass-fill-strong: rgba(11, 11, 11, 0.70);
+  --glass-border: rgba(255, 255, 255, 0.10); --glass-rim: rgba(255, 255, 255, 0.14);
+  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 45%);
+  --shadow-glow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(79, 214, 163, 0.12);
+  --ink: #edf3f0; --ink-2: #d2dbd7; --muted: #a3b0aa;
+  --accent: #4fd6a3; --accent-hover: #6fe3b8; --on-accent: #04130d;
   --warn: #ffaba2; --warn-bg: rgba(255, 138, 128, 0.12); --amber: #ffc857; --info: #7fd0ff;
-  --line: #9abbad; --hairline: rgba(255, 255, 255, 0.14); --soft: rgba(255, 255, 255, 0.12); --tint: rgba(92, 242, 176, 0.14);
-  --surface-2: rgba(255, 255, 255, 0.07); --skeleton: rgba(255, 255, 255, 0.10);
-  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.30), 0 8px 24px rgba(0, 0, 0, 0.30);
-  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.38);
-  --elev-3: 0 4px 8px rgba(0, 0, 0, 0.35), 0 20px 48px rgba(0, 0, 0, 0.50);
+  --line: #6f7c76; --hairline: rgba(255, 255, 255, 0.10); --soft: rgba(255, 255, 255, 0.08); --tint: rgba(79, 214, 163, 0.12);
+  --surface-2: rgba(255, 255, 255, 0.05); --skeleton: rgba(255, 255, 255, 0.08);
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.50), 0 8px 24px rgba(0, 0, 0, 0.40);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.50), 0 12px 32px rgba(0, 0, 0, 0.55);
+  --elev-3: 0 4px 8px rgba(0, 0, 0, 0.55), 0 20px 48px rgba(0, 0, 0, 0.70);
   --glass-blur: 22px;
 }
+
 /* The tokens the rest of the app already reads. Both themes: surface is the glass fill, the page colour is the deep brand tone. */
 :root[data-theme] { --surface: var(--surface-glass); --bg: var(--glass-bg-deep); --glass-filter: blur(var(--glass-blur)) saturate(140%); }
 

@@ -117,10 +117,10 @@ def test_buttons_and_form_borders_pass(theme):
     assert not fails, f"{theme}: " + "; ".join(fails)
 
 
-def test_dark_theme_is_built_on_the_brand_green():
+def test_dark_theme_is_black_with_a_green_accent():
     d = THEMES["dark"]
-    assert d["--glass-bg-brand"].lower() == "#00563f" and d["--glass-bg-deep"].lower() == "#00281d"
-    assert d["--accent"].lower() == "#5cf2b0" and d["--ink"].lower() == "#f2fbf7"
+    assert d["--glass-bg-deep"].lower() == "#000000" and d["--glass-bg-brand"].lower() == "#050505"  # black, not the old brand green
+    assert d["--accent"].lower() == "#4fd6a3" and d["--ink"].lower() == "#edf3f0"
 
 
 def test_every_fallback_trigger_drops_the_blur():

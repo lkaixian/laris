@@ -122,7 +122,7 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
                   </span>
                 </button>
               )}
-            <div id={`${idp}-${g.label}-items`} className={`grid transition-[grid-template-rows] duration-150 motion-reduce:transition-none ${collapsed || isOpen(folds, g.label) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`} inert={!collapsed && !isOpen(folds, g.label) ? true : undefined}>
+            <div id={`${idp}-${g.label}-items`} className={`grid transition-[grid-template-rows] duration-150 motion-reduce:transition-none ${collapsed || isOpen(folds, g.label) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] overflow-hidden'}`} inert={!collapsed && !isOpen(folds, g.label) ? true : undefined}>
             <ul aria-labelledby={`${idp}-${g.label}`} className="-m-1 grid min-h-0 gap-0.5 overflow-hidden p-1">
               {g.items.map(i => (
                 <li key={i.key} className="group relative" onMouseEnter={e => show(i.key, e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={e => show(i.key, e.currentTarget)} onBlur={() => setTip(null)}>

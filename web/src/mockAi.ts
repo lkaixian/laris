@@ -22,7 +22,7 @@ export function mockAi(method: string, p: string, owner: boolean, body: any): un
     const c: { label: string; href: string }[] = (body.candidates ?? []).slice(0, 2)
     return { answer: `This is a SAMPLE answer to "${String(body.question).slice(0, 60)}". Try ${c.length > 1 ? 'these screens' : 'this screen'}.`, links: c.map(x => ({ label: x.label, href: x.href })) }
   }
-  if (p === '/ai/usage' && method === 'GET') return { plan: 'standard', limited: true, resets_at: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(), ai: { used: 312, limit: 4000 }, photos: { used: 96, limit: 150 } }
+  if (p === '/ai/usage' && method === 'GET') return { plan: 'standard', limited: true, resets_at: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(), ai: { used: 312, limit: 3000 }, photos: { used: 96, limit: 150 } }
   if (p === '/ai/activity' && method === 'GET') {
     const at = (m: number) => new Date(Date.now() - m * 6e4).toISOString()
     const all = [

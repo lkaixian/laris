@@ -101,6 +101,7 @@ export const can = (k: string) => perms.includes(k)
 export const PERM_LABEL: Record<string, string> = {
   view_costs: 'See costs and prices', view_reports: 'See the margin report', edit_supplier_contacts: 'Edit supplier contacts', manage_contacts: 'Manage contacts',
   upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
+  manage_contracts: 'Draft supplier contracts', approve_contracts: 'Approve contracts up to a limit',
   export_data: 'Export data', view_audit: 'See the activity log', decide_quotes: 'Approve, accept, reject or send quotes',
   view_revenue: 'See revenue and profit', record_expenses: 'Record running costs',
 }
@@ -119,6 +120,8 @@ export const PERMS: Record<string, { label: L; description?: L }> = {
   manage_followups: { label: { ms: 'Hantar atau langkau susulan', zh: '发送或跳过跟进', ta: 'பின்தொடர்வுகளை அனுப்பு அல்லது தவிர்' }, description: { ms: 'Hantar mesej susulan yang dicadangkan kepada pelanggan, atau langkaunya.', zh: '向客户发送建议的催促消息，或跳过。', ta: 'பரிந்துரைக்கப்பட்ட நினைவூட்டல் செய்தியை வாடிக்கையாளருக்கு அனுப்பு, அல்லது தவிர்.' } },
   export_data: { label: { ms: 'Eksport data', zh: '导出数据', ta: 'தரவை ஏற்றுமதி செய்' }, description: { ms: 'CSV buku kenalan; eksport BOM dan PO juga memerlukan Lihat kos dan margin.', zh: '通讯录 CSV；BOM 和 PO 导出还需要“查看成本和利润”。', ta: 'தொடர்புப் புத்தக CSV; BOM, PO ஏற்றுமதிகளுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை.' } },
   view_audit: { label: { ms: 'Lihat suapan aktiviti', zh: '查看活动动态', ta: 'செயல்பாட்டு ஊட்டத்தைக் காண்' }, description: { ms: 'Suapan audit (entri kos di dalamnya juga memerlukan Lihat kos dan margin).', zh: '审计动态（其中的成本条目还需要“查看成本和利润”）。', ta: 'தணிக்கை ஊட்டம் (அதிலுள்ள செலவு உள்ளீடுகளுக்கு செலவுகளையும் லாபத்தையும் காண் அனுமதியும் தேவை).' } },
+  manage_contracts: { label: { ms: 'Draf kontrak pembekal', zh: '起草供应商合同', ta: 'சப்ளையர் ஒப்பந்தங்களை வரை' }, description: { ms: 'Mulakan kontrak daripada sebut harga dan hantar untuk kelulusan. Juga melihat harga dan kontrak pembekal.', zh: '根据报价起草合同并提交审批。也可查看供应商价格和合同。', ta: 'விலைப்புள்ளியிலிருந்து ஒப்பந்தம் தொடங்கி ஒப்புதலுக்கு அனுப்பு. சப்ளையர் விலைகளையும் ஒப்பந்தங்களையும் காணலாம்.' } },
+  approve_contracts: { label: { ms: 'Lulus kontrak sehingga had', zh: '在限额内批准合同', ta: 'வரம்பு வரை ஒப்பந்தங்களை அங்கீகரி' }, description: { ms: 'Lulus kontrak yang nilainya tidak melebihi had dalam Tetapan pembekal. Yang lebih besar perlu pemilik.', zh: '批准价值不超过供应商设置中限额的合同。更大的合同需要店主批准。', ta: 'சப்ளையர் அமைப்பில் உள்ள வரம்புக்குள் மதிப்புள்ள ஒப்பந்தங்களை அங்கீகரி. பெரியவற்றுக்கு உரிமையாளர் தேவை.' } },
   manage_team: { label: { ms: 'Tambah, edit dan nyahaktifkan orang', zh: '添加、编辑和停用成员', ta: 'நபர்களைச் சேர், திருத்து, செயலிழக்கச் செய்' } },
   manage_roles: { label: { ms: 'Cipta dan edit peranan', zh: '创建和编辑角色', ta: 'பங்குகளை உருவாக்கு, திருத்து' } },
   manage_settings: { label: { ms: 'Tetapan organisasi dan penjenamaan', zh: '组织设置和品牌', ta: 'நிறுவன அமைப்புகளும் பிராண்டிங்கும்' } },
@@ -155,8 +158,9 @@ let lastPerms = 0
 const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 10_000) { lastPerms = Date.now(); window.dispatchEvent(new Event('laris:perms')) } }
 // Pages that need a permission. Team, Roles, Settings, Privacy and API access are owner-class only (docs/roles.md, "Owner only, not assignable").
 const NEED: Record<string, string> = { reports: 'view_costs', alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
+const SUPPLIER_PAGES = ['suppliers', 'supplier', 'products', 'product', 'contracts', 'contract']  // supplier prices: See costs, or a buyer role with Draft contracts
 // Revenue shows costs, so it needs both permissions (the server asks for both too).
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : route === 'revenue' ? can('view_revenue') && can('view_costs') : !NEED[route] || can(NEED[route])
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : SUPPLIER_PAGES.includes(route) ? can('view_costs') || can('manage_contracts') : route === 'revenue' ? can('view_revenue') && can('view_costs') : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }

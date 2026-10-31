@@ -14,3 +14,4 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON doc_transitions FROM laris_app;  -- s
 REVOKE TRUNCATE, TRIGGER, REFERENCES ON ALL TABLES IN SCHEMA public FROM laris_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO laris_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO laris_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON contract_events FROM laris_app;  -- the contract history is append-only

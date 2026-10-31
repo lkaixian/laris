@@ -23,6 +23,7 @@ import { IssuerView } from './Issuer'
 import { ChannelsCard } from './Channels'
 import { QuoteSettingsCard } from './QuoteSettings'
 import { ContactDetail, ContactsView } from './Contacts'
+import { ContractDetail, ContractsView, ProductView, ProductsView, SupplierDetail, SuppliersView } from './Suppliers'
 import { SearchView } from './Search'
 import { AssistantView, AssistantWidget } from './Assistant'
 import { GuidePanel } from './Guide'
@@ -447,6 +448,12 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   alerts: { render: () => <AlertsView /> },
   followups: { render: () => <Followups /> },
   tracker: { render: c => <TrackerView owner={can('view_costs')} arg={c.arg} /> },
+  suppliers: { render: c => <SuppliersView owner={c.owner} /> },
+  supplier: { render: c => c.arg ? <SupplierDetail id={c.arg} /> : <NotFound /> },
+  products: { render: c => <ProductsView owner={c.owner} /> },
+  product: { render: c => c.arg ? <ProductView id={c.arg} owner={c.owner} /> : <NotFound /> },
+  contracts: { render: c => <ContractsView owner={c.owner} /> },
+  contract: { render: c => c.arg ? <ContractDetail id={c.arg} owner={c.owner} /> : <NotFound /> },
   contacts: { render: c => <ContactsView owner={can('view_costs')} arg={c.arg} /> },
   contact: { render: c => c.arg ? <ContactDetail id={c.arg} owner={can('view_costs')} /> : <NotFound /> },
   ask: { render: () => <AskView owner={can('view_replies_prices')} /> },

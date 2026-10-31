@@ -25,7 +25,7 @@ Regenerate with `python scripts/features_map.py` (statuses are kept by hand in t
 | SDG Track (1–17) | SDG 8: Decent Work and Economic Growth (Target 8.3) |
 | Team Leader | Harrish Govind a/l Sethulingam |
 | University | Universiti Tun Hussein Onn Malaysia (UTHM) |
-| Number of Members | 4 |
+| Number of Members | 5 |
 
 ## Links
 
@@ -36,6 +36,8 @@ Regenerate with `python scripts/features_map.py` (statuses are kept by hand in t
 | RunPod Endpoint | vLLM GPU pod serving Qwen2.5-VL-7B (private, key required). See the RunPod proof of use |
 | Slide Deck | [PDF](submission/SDC2026_SparkSurge_SlideDeck.pdf) · [PPTX](submission/SDC2026_SparkSurge_SlideDeck.pptx) |
 | Demo Video | https://youtu.be/JVA05hTM_HU |
+| Final Phase (Report) | [PDF](submission/SDC2026_SparkSurge_Final.pdf) |
+| Final Phase (Tech Declaration) | [PDF](submission/SDC2026_SparkSurge_Final_TechDeclaration.pdf) |
 
 ## Demo
 
@@ -101,7 +103,7 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 | Email | Mailtrap API (verification, reset, invites, quotes, licences; sandbox inbox while testing) |
 | Documents | reportlab + uharfbuzz (quote and report PDFs, Tamil shaping), openpyxl (XLSX), pypdf, Pillow |
 | Licence | Ed25519-signed keys (`cryptography`), verified in the app; signing in the browser (WebCrypto) |
-| Payments | Stripe Checkout (one-time licence purchase); a signed webhook issues and emails the key |
+| Payments | Stripe Checkout: one-time licence purchase (a signed webhook issues and emails the key) and customer deposits through each business's own Stripe account |
 | Hosting / Dev | Replit |
 
 The full model and library list with licences is in `submission/SDC2026_SparkSurge_TechDeclaration.pdf` and `docs/tech-and-tools-declaration.md`.
@@ -118,7 +120,7 @@ The full model and library list with licences is in `submission/SDC2026_SparkSur
 ├── tests/                # pytest suite and PGlite schema/role checks
 ├── docs/                 # PRD, user manual, deployment, API contract, roles, licensing, privacy runbook, build log
 ├── knowledge/            # Research notes, sources, decisions
-├── submission/           # Final submission PDFs (Preliminary, TechDeclaration, Replit and RunPod proof of use)
+├── submission/           # Submission PDFs (Preliminary, Final report, Final tech declaration, Replit and RunPod proof of use)
 ├── .replit, replit.nix, run.sh   # Replit run and deploy configuration
 ├── .env.example          # Environment variable names (no values)
 ├── requirements.txt

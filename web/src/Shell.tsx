@@ -174,6 +174,8 @@ function UserMenu({ me, signedIn, loc }: { me?: Me; signedIn: boolean; loc: stri
         <div id="user-panel" className="card absolute right-0 top-full z-50 mt-1 w-64 p-2 shadow-2">
           <p className="px-2 py-1"><span className="block truncate font-semibold">{me.name}</span><span className="block text-sm text-muted">{me.role_name ?? me.role}</span></p>
           <a className="sidelink" href="#/account"><Icon name="user" />{tx('user.account')}</a>
+          <a className="sidelink" href="#/pricing"><Icon name="revenue" />{t({ en: 'Plans and pricing', ms: 'Pelan dan harga', zh: '套餐与价格' })}</a>
+          <a className="sidelink" href="#/welcome"><Icon name="home" />{t({ en: 'Website', ms: 'Laman web', zh: '官网' })}</a>
           <a className="sidelink" href="#/help"><Icon name="ask" />{tx('user.help')}</a>
           <button type="button" className="sidelink w-full text-left" onClick={() => { setOpen(false); startTour() }}><Icon name="check" />{tx('user.tour')}</button>
           <LangSwitch />

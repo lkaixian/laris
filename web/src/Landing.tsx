@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { getToken } from './api'
-import { Brand, ThemeToggle } from './ui'
 import { Icon } from './icons'
 import type { IconName } from './icons'
-import { LANGS, setLang, t, useLang } from './i18n'
+import { t, useLang } from './i18n'
+import { SiteFooter, SiteHeader } from './SiteChrome'
+import type { NavItem } from './SiteChrome'
 import { TradeOrbit } from './TradeOrbit'
 import type { Text } from './i18n'
 
@@ -113,6 +114,65 @@ function useHealth() {
   return up
 }
 
+
+// Two looping examples: a typed message, and a voice note that is transcribed first. Steps advance on a timer; with reduced motion the finished state shows and the tabs switch it.
+const LAST = [3, 4]
+function Draft({ line, total, margin }: { line: Text; total: string; margin: Text }) {
+  return (
+    <div className="card shadow-2 page-in p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold">{t(S.exDraft)}</p>
+        <span className="rounded-ui bg-tint px-2 py-0.5 text-xs font-semibold">RM {total}</span>
+      </div>
+      <dl className="mt-3 grid grid-cols-[1fr_auto] gap-y-1 text-sm"><dt>{t(line)}</dt><dd className="text-right tabular-nums">RM {total}</dd></dl>
+      <p className="mt-3 flex items-center gap-2 text-sm text-muted"><Icon name="check" className="size-4 text-accent" />{t(margin)}</p>
+    </div>
+  )
+}
+
+function EnquiryDemo() {
+  const [sc, setSc] = useState(0)
+  const [step, setStep] = useState(0)
+  const still = useRef(reduced())
+  useEffect(() => {
+    if (still.current) { setStep(LAST[sc]); return }
+    setStep(0)
+    let n = 0
+    const id = setInterval(() => {
+      n++
+      if (n > LAST[sc] + 3) { setSc(x => 1 - x); return }  // hold the finished draft for three ticks, then the other example
+      setStep(Math.min(n, LAST[sc]))
+    }, 1300)
+    return () => clearInterval(id)
+  }, [sc])
+  const voice = sc === 1
+  const bubble = 'page-in rounded-card bg-tint p-3 text-sm'
+  return (
+    <figure className="m-0 grid gap-3" aria-label={t(S.exTag)}>
+      <div role="tablist" aria-label={t(S.exTag)} className="flex gap-2">
+        {S.exTab.map((x, n) => <button key={n} role="tab" type="button" aria-selected={sc === n} className="btn min-h-9 aria-selected:border-accent aria-selected:bg-tint" onClick={() => setSc(n)}>{t(x)}</button>)}
+      </div>
+      <div className="card shadow-2 min-h-40 p-4" aria-live="polite">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t(S.exTag)} · Telegram</p>
+        {step >= 1 && (voice
+          ? <div key="v" className={bubble + ' mt-2 flex items-center gap-3'}>
+              <Icon name="assistant" className="size-4 text-accent" />
+              <span aria-hidden className="flex h-6 items-center gap-0.5">{[40, 80, 55, 100, 65, 90, 45, 75, 50, 85, 60, 35].map((h, i) => <span key={i} className="w-1 rounded-full bg-accent" style={{ height: h + '%', animation: step < 3 && !still.current ? `pulse-soft 0.9s ease-in-out ${i * 70}ms infinite` : undefined }} />)}</span>
+              <span className="text-xs tabular-nums text-muted">0:09</span>
+            </div>
+          : <p key="m" className={bubble + ' mt-2'}>{t(S.exMsg)}</p>)}
+        {voice && step === 2 && <p key="tr" className="page-in mt-2 text-sm text-muted">{t(S.exTranscribing)}</p>}
+        {voice && step >= 3 && <p key="tx" className="page-in mt-2 text-sm"><span className="badge mr-2">{t(S.exAuto)}</span>{t(S.exVoice)}</p>}
+        {!voice && step === 2 && <p key="rd" className="page-in mt-2 text-sm text-muted">{t(S.exReading)}</p>}
+      </div>
+      {step >= LAST[sc] && (voice
+        ? <Draft key="d1" line={S.exLine2} total="216.00" margin={S.exMargin2} />
+        : <Draft key="d0" line={{ en: S.exLine.en + ' × 3', ms: S.exLine.ms + ' × 3', zh: S.exLine.zh + ' × 3' }} total="1,260.00" margin={S.exMargin} />)}
+      <figcaption className="text-xs text-muted">{t(S.exNote)}</figcaption>
+    </figure>
+  )
+}
+
 function Tour() {
   const [i, setI] = useState(0)
   const v = S.tour[i]
@@ -145,6 +205,38 @@ function Tour() {
   )
 }
 
+
+// Sample page per module: made-up rows in the style of the real screen. Plain strings are data (names, amounts); Text values are labels.
+type Cell = string | Text
+const W = { fresh: { en: 'Fresh', ms: 'Segar', zh: '新鲜' }, wait: { en: 'Waiting', ms: 'Menunggu', zh: '等待中' }, late: { en: 'Late', ms: 'Lewat', zh: '逾期' }, done: { en: 'Accepted', ms: 'Diterima', zh: '已接受' }, draft: { en: 'Draft', ms: 'Draf', zh: '草稿' }, stale: { en: 'Stale', ms: 'Lapuk', zh: '过期' } } satisfies Record<string, Text>
+const SAMPLE: Record<string, [Cell, Cell, Text?][]> = {
+  home: [[{ en: 'Speed to quote', ms: 'Kelajuan sebut harga', zh: '报价速度' }, '4 min'], [{ en: 'Quotes this week', ms: 'Sebut harga minggu ini', zh: '本周报价' }, '12'], [{ en: 'Average margin', ms: 'Margin purata', zh: '平均利润率' }, '36%'], [{ en: 'Needs you today', ms: 'Perlukan anda hari ini', zh: '今天需要您' }, '3', W.late]],
+  tracker: [['Ah Seng Hardware', 'RM 1,260.00', W.fresh], ['Kopitiam Mei Ling', 'RM 480.00', W.wait], ['Taman Desa Clinic', 'RM 2,150.00', W.late], ['Selva Trading', 'RM 790.00', W.done]],
+  jobs: [['Acrylic signboard × 3', 'Fri', W.draft], ['Vinyl banner × 2', 'Mon', W.wait], ['Shop-front sticker', 'Wed', W.done]],
+  contacts: [['Ah Seng Hardware', '5 quotes'], ['Kopitiam Mei Ling', '2 quotes'], ['Sunrise Acrylic Supply', '8 quotes']],
+  camera: [['Acrylic sheet 3 mm', 'RM 38.00'], ['LED strip, white, 5 m', 'RM 21.50'], ['Vinyl roll 1.2 m', 'RM 64.00']],
+  alerts: [['Taman Desa Clinic', '9 days', W.stale], ['Kopitiam Mei Ling', '4 days', W.late], ['Selva Trading', '2 days', W.wait]],
+  activity: [['Aisyah approved a quote', '10:42'], ['Wei Jie sent a quote', '10:15'], ['Owner changed margin floor', '09:03']],
+  team: [['Owner', { en: 'Everything', ms: 'Semua', zh: '全部' }], ['Aisyah', { en: 'Quotes, follow-ups', ms: 'Sebut harga, susulan', zh: '报价、跟进' }], ['Wei Jie', { en: 'Jobs board', ms: 'Papan kerja', zh: '工作看板' }]],
+  assistant: [[{ en: 'Which quotes are waiting longest?', ms: 'Sebut harga mana menunggu paling lama?', zh: '哪些报价等得最久？' }, ''], [{ en: 'Taman Desa Clinic, 9 days. Open it?', ms: 'Taman Desa Clinic, 9 hari. Buka?', zh: 'Taman Desa Clinic，9 天。要打开吗？' }, '']],
+  key: [['GET /recipes', { en: 'Read only', ms: 'Baca sahaja', zh: '只读' }], ['GET /price-check', { en: 'Read only', ms: 'Baca sahaja', zh: '只读' }], ['Costs and margins', { en: 'Never shared', ms: 'Tidak pernah dikongsi', zh: '从不公开' }]],
+}
+const cell = (c: Cell) => typeof c === 'string' ? c : t(c)
+
+function Sample({ id }: { id: string }) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-card border border-hairline" aria-hidden>
+      <div className="flex items-center gap-1.5 border-b border-hairline bg-surface-2 px-3 py-2"><span className="size-2 rounded-full bg-line" /><span className="size-2 rounded-full bg-line" /><span className="size-2 rounded-full bg-line" /></div>
+      <ul>{(SAMPLE[id] ?? []).map(([a, b, badge], i) => (
+        <li key={i} className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2 text-sm last:border-b-0">
+          <span className="truncate">{cell(a)}</span>
+          <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted">{cell(b)}{badge && <span className="badge">{t(badge)}</span>}</span>
+        </li>
+      ))}</ul>
+    </div>
+  )
+}
+
 function Modules() {
   const [sel, setSel] = useState<number>(0)
   const m = S.mods[sel]
@@ -159,6 +251,7 @@ function Modules() {
       <div className="card" aria-live="polite">
         <h3 className="flex items-center gap-2 text-md font-semibold"><Icon name={m.id} className="size-5 text-accent" />{t(m.n)}</h3>
         <p className="mt-2 text-muted">{t(m.d)}</p>
+        <Sample id={m.id} />
         <p className="mt-3 text-xs text-muted">{t(S.modsHint)}</p>
       </div>
     </div>
@@ -168,6 +261,7 @@ function Modules() {
 export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => void }) {
   const [lang] = useLang()
   const up = useHealth()
+  const spy = useSpy()
   const signedIn = !!getToken()
   useEffect(() => { document.title = 'LARIS · ' + t(S.kicker) }, [lang])
   const primary = signedIn
@@ -177,23 +271,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
   return (
     <div className="min-h-screen">
       <a href="#main" onClick={e => { e.preventDefault(); document.getElementById('main')?.focus() }} className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-ui focus:bg-surface focus:p-3">Skip to content</a>
-      <header className="sticky top-0 z-40 border-b border-hairline bg-bg">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2">
-          <a href="#/welcome" aria-label="LARIS" className="inline-flex min-h-11 items-center"><Brand dark={dark} /></a>
-          <nav aria-label={t(S.sections)} className="order-last flex w-full gap-1 overflow-x-auto md:order-none md:w-auto md:flex-1">
-            {NAV.map(([id, label]) => <a key={id} href={'#' + id} onClick={e => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }} className="btn btn-quiet min-h-11 shrink-0 whitespace-nowrap">{t(label)}</a>)}
-          </nav>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="flex items-center gap-1 text-sm"><span className="sr-only">{t(S.langL)}</span>
-              <select className="input w-auto" value={lang} onChange={e => setLang(e.target.value as typeof lang)}>
-                {LANGS.map(([l, n]) => <option key={l} value={l} lang={l}>{n}</option>)}
-              </select>
-            </label>
-            <ThemeToggle dark={dark} setDark={setDark} compact />
-            {!signedIn && <a className="btn btn-primary min-h-11" href="#/login">{t(S.signIn)}</a>}
-          </div>
-        </div>
-      </header>
+      <SiteHeader dark={dark} setDark={setDark} items={NAV} active={spy} onNav={id => document.getElementById(id)?.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth' })} />
 
       <main id="main" tabIndex={-1} className="outline-none">
         <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 md:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center" aria-labelledby="hero-h">
@@ -202,28 +280,12 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
             <h1 id="hero-h" className="mt-3 text-3xl font-bold leading-tight md:text-5xl md:leading-[1.1]">{t(S.h1)}</h1>
             <p className="mt-5 max-w-xl text-md text-muted">{t(S.lead)}</p>
             <div className="mt-7 flex flex-wrap gap-3">{primary}</div>
-            <p role="status" className="mt-6 inline-flex items-center gap-2 rounded-ui border border-hairline bg-surface px-3 py-2 text-sm">
+            <a href="#/service-status" title={t(S.statusPage)} role="status" className="mt-6 inline-flex items-center gap-2 rounded-ui border border-hairline bg-surface px-3 py-2 text-sm hover:bg-tint">
               <span aria-hidden className={`size-2.5 rounded-full ${up ? 'bg-accent' : up === false ? 'bg-warn' : 'bg-line'}`} />
               {up === undefined ? t(S.statusWait) : up ? t(S.statusUp) : t(S.statusDown)}
-            </p>
+            </a>
           </div>
-          <figure className="m-0 grid gap-3" aria-label={t(S.exTag)}>
-            <div className="card shadow-2 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t(S.exTag)} · Telegram</p>
-              <p className="mt-2 rounded-card bg-tint p-3 text-sm">{t(S.exMsg)}</p>
-            </div>
-            <div className="card shadow-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold">{t(S.exDraft)}</p>
-                <span className="rounded-ui bg-tint px-2 py-0.5 text-xs font-semibold">RM 1,260.00</span>
-              </div>
-              <dl className="mt-3 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-                <dt>{t(S.exLine)} × 3</dt><dd className="text-right tabular-nums">RM 1,260.00</dd>
-              </dl>
-              <p className="mt-3 flex items-center gap-2 text-sm text-muted"><Icon name="check" className="size-4 text-accent" />{t(S.exMargin)}</p>
-            </div>
-            <figcaption className="text-xs text-muted">{t(S.exNote)}</figcaption>
-          </figure>
+          <EnquiryDemo />
         </section>
 
         <section id="loop" className={sec} aria-labelledby="loop-h">
@@ -291,12 +353,7 @@ export default function Landing({ dark, setDark }: { dark: boolean; setDark: (d:
         </section>
       </main>
 
-      <footer className="border-t border-hairline">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-muted">
-          <p>{t(S.foot)}</p>
-          <p className="flex gap-4"><a className="link inline-flex min-h-11 items-center" href="#/login">{t(S.signIn)}</a></p>
-        </div>
-      </footer>
+      <SiteFooter dark={dark} />
     </div>
   )
 }

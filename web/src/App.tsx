@@ -6,6 +6,7 @@ import { api, resolveMe, getRole, setRole, MOCK, authConfig, getToken, getAccoun
 import type { License } from './api'
 import Login from './Login'
 import Landing from './Landing'
+import { Pricing, ServiceStatus } from './Pricing'
 import { Register, Forgot } from './Signup'
 import AcceptInvite from './Invite'
 import Accept from './Accept'
@@ -595,6 +596,8 @@ function AppShell() {
   if (gate === 'checking') return <div className="p-6"><Skeleton rows={3} /></div>
   // Signed-out screens (full width, no sidebar): sign in is the default, register and forgot are public routes.
   // Public homepage: #/welcome, and the bare address for a visitor who is not signed in.
+  if (route === 'pricing') return <Pricing dark={dark} setDark={setDark} />  // public, also for signed-in users (shows their current plan)
+  if (route === 'service-status') return <ServiceStatus dark={dark} setDark={setDark} />
   if (route === 'welcome' || (gate === 'login' && ['', '#', '#/'].includes(hash))) return <Landing dark={dark} setDark={setDark} />
   if (route === 'invite') return <AcceptInvite dark={dark} setDark={setDark} />
   if (gate === 'login' || (['login', 'register', 'forgot'].includes(route) && (MOCK || !getToken()))) {

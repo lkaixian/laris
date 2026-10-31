@@ -37,11 +37,11 @@ const MASK: Record<string, Text> = {
 
 interface Usage { plan: string | null; limited: boolean; resets_at: string; ai: { used: number; limit: number | null }; photos: { used: number; limit: number | null } }
 const U = {
-  h: { en: 'This week on your plan', ms: 'Minggu ini pada pelan anda', zh: '本周套餐用量', ta: 'இந்த வாரம் உங்கள் திட்டத்தில்' },
+  h: { en: 'This month on your plan', ms: 'Bulan ini pada pelan anda', zh: '本月套餐用量', ta: 'இந்த மாதம் உங்கள் திட்டத்தில்' },
   ai: { en: 'AI messages', ms: 'Mesej AI', zh: 'AI 消息', ta: 'AI செய்திகள்' },
   photos: { en: 'Photo reads', ms: 'Bacaan foto', zh: '照片识别', ta: 'படம் வாசிப்பு' },
   resets: { en: 'Resets on', ms: 'Ditetapkan semula pada', zh: '重置于', ta: 'மீட்டமைவு' },
-  full: { en: 'Used up for this week. A higher plan has a bigger allowance.', ms: 'Telah habis untuk minggu ini. Pelan yang lebih tinggi mempunyai had lebih besar.', zh: '本周额度已用完。更高的套餐额度更大。' },
+  full: { en: 'Used up for this month. A higher plan has a bigger allowance.', ms: 'Telah habis untuk bulan ini. Pelan yang lebih tinggi mempunyai had lebih besar.', zh: '本月额度已用完。更高的套餐额度更大。' },
   more: { en: 'See plans', ms: 'Lihat pelan', zh: '查看套餐' },
 } satisfies Record<string, Text>
 
@@ -61,7 +61,7 @@ function UsageBars() {
           <div className="flex justify-between text-sm"><span>{t(label, lang)}</span><span className="tabular-nums">{m.used.toLocaleString()} / {m.limit.toLocaleString()}</span></div>
           <progress className="mt-1 h-2 w-full accent-(--accent)" value={Math.min(m.used, m.limit)} max={m.limit} aria-label={t(label, lang)} />
         </div>))}
-      <p className="text-sm text-muted">{full ? <>{t(U.full, lang)} <a className="link" href="#/pricing">{t(U.more, lang)}</a>. </> : null}{t(U.resets, lang)} {new Date(d.resets_at).toLocaleDateString(locale(lang), { weekday: 'long', day: 'numeric', month: 'short' })}.</p>
+      <p className="text-sm text-muted">{full ? <>{t(U.full, lang)} <a className="link" href="#/pricing">{t(U.more, lang)}</a>. </> : null}{t(U.resets, lang)} {new Date(d.resets_at).toLocaleDateString(locale(lang), { day: 'numeric', month: 'long' })}.</p>
     </section>
   )
 }

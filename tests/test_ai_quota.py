@@ -1,4 +1,4 @@
-"""Weekly AI allowance per plan (src/ai_quota.py): counted from ai_calls and listings, enforced only on a licensed installation."""
+"""Monthly AI allowance per plan (src/ai_quota.py): counted from ai_calls and listings, enforced only on a licensed installation."""
 import pytest
 
 from src import ai_quota, db
@@ -17,14 +17,13 @@ def tid(e):
 
 
 def calls(e, n):
-    for _ in range(n):
-        e.sql("insert into ai_calls (tenant_id, kind, provider, ok, ms) values (%s, 'enquiry', 'ilmu', true, 10)", (tid(e),))
+    e.sql("insert into ai_calls (tenant_id, kind, provider, ok, ms) select %s, 'enquiry', 'ilmu', true, 10 from generate_series(1, %s)", (tid(e), n))
 
 
 def test_plans_rise_with_the_tier():
     p = lic.PLANS
-    assert p["starter"]["ai_week"] < p["standard"]["ai_week"] < p["pro"]["ai_week"]
-    assert p["starter"]["photos_week"] < p["standard"]["photos_week"] < p["pro"]["photos_week"]
+    assert p["starter"]["ai_month"] < p["standard"]["ai_month"] < p["pro"]["ai_month"]
+    assert (p["starter"]["photos_month"], p["standard"]["photos_month"], p["pro"]["photos_month"]) == (30, 150, 500)
 
 
 def test_unlicensed_installation_is_not_limited(env):
@@ -38,7 +37,7 @@ def test_unlicensed_installation_is_not_limited(env):
 
 def test_over_the_limit_blocks_and_a_higher_plan_does_not(env, monkeypatch):
     e = env
-    calls(e, lic.PLANS["starter"]["ai_week"])
+    calls(e, lic.PLANS["starter"]["ai_month"])
     t = tid(e)
     licensed(monkeypatch, "starter")
     with db.tx(tenant=db.ALL_TENANTS) as c, pytest.raises(ApiError) as x:
@@ -52,7 +51,7 @@ def test_over_the_limit_blocks_and_a_higher_plan_does_not(env, monkeypatch):
 def test_usage_route_and_old_calls_do_not_count(env, monkeypatch):
     e = env
     calls(e, 2)
-    e.sql("insert into ai_calls (tenant_id, kind, provider, ok, ms, at) values (%s, 'enquiry', 'ilmu', true, 10, now() - interval '15 days')", (tid(e),))
+    e.sql("insert into ai_calls (tenant_id, kind, provider, ok, ms, at) values (%s, 'enquiry', 'ilmu', true, 10, now() - interval '40 days')", (tid(e),))
     licensed(monkeypatch, "pro")
     r = e.c.get("/api/ai/usage", headers=e.O).json()
-    assert r["limited"] and r["ai"]["used"] == 2 and r["ai"]["limit"] == lic.PLANS["pro"]["ai_week"] and r["photos"]["limit"] == lic.PLANS["pro"]["photos_week"]
+    assert r["limited"] and r["ai"]["used"] == 2 and r["ai"]["limit"] == lic.PLANS["pro"]["ai_month"] and r["photos"]["limit"] == lic.PLANS["pro"]["photos_month"]

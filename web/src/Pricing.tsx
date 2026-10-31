@@ -41,9 +41,9 @@ const S = {
   statusNote: { en: 'This page asks the server whether it is running. It does not show details about any business.', ms: 'Halaman ini bertanya kepada pelayan sama ada ia berjalan. Ia tidak menunjukkan butiran mana-mana perniagaan.', zh: '本页只询问服务器是否在运行，不显示任何企业的信息。' },
 }
 
-// Weekly AI allowance per plan. Keep in step with PLANS in src/license.py (ai_week, photos_week).
-const AI_WEEK = { starter: [200, 20], standard: [1000, 100], pro: [4000, 400] } as const
-const aiLine = (k: Key): Text => { const [m, p] = AI_WEEK[k]; return { en: `${m.toLocaleString()} AI messages and ${p} photo reads a week`, ms: `${m.toLocaleString()} mesej AI dan ${p} bacaan foto seminggu`, zh: `每周 ${m.toLocaleString()} 次 AI 消息和 ${p} 次照片识别` } }
+// Monthly AI allowance per plan. Keep in step with PLANS in src/license.py (ai_month, photos_month).
+const AI_MONTH = { starter: [800, 30], standard: [4000, 150], pro: [16000, 500] } as const
+const aiLine = (k: Key): Text => { const [m, p] = AI_MONTH[k]; return { en: `${m.toLocaleString()} AI messages and ${p} photo reads a month`, ms: `${m.toLocaleString()} mesej AI dan ${p} bacaan foto sebulan`, zh: `每月 ${m.toLocaleString()} 次 AI 消息和 ${p} 次照片识别` } }
 
 const PLANS: { key: Key; name: string; seats: number; pop?: boolean; pts: Text[] }[] = [
   { key: 'starter', name: 'LARIS Lite', seats: 3, pts: [aiLine('starter'),

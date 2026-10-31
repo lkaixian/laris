@@ -27,7 +27,7 @@ def activity(days: int = Query(30, ge=1, le=90), ctx: Ctx = Depends(read_ctx)):
 
 @r.get("/ai/usage")
 def ai_usage(ctx: Ctx = Depends(read_ctx)):
-    """This week's AI messages and photo reads against the plan's allowance (the same for everyone in the business)."""
+    """This month's AI messages and photo reads against the plan's allowance (the same for everyone in the business)."""
     return reply(ctx, ai_quota.usage(ctx.conn, ctx.tenant_id))
 
 

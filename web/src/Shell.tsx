@@ -48,6 +48,9 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'followups', label: 'Follow-ups', icon: 'clock' },
   ] },
   { label: 'Suppliers', items: [
+    { key: 'suppliers', label: 'Supplier directory', icon: 'contacts' },
+    { key: 'products', label: 'Compare prices', icon: 'pipeline' },
+    { key: 'contracts', label: 'Contracts', icon: 'tracker' },
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
     { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
@@ -74,7 +77,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
 ]
 
 // Routes that are children of a nav item: the parent stays marked while you are on them.
-const PARENT: Record<string, string> = { doc: 'tracker', contact: 'contacts', purchase: 'licence' }
+const PARENT: Record<string, string> = { supplier: 'suppliers', product: 'products', contract: 'contracts', doc: 'tracker', contact: 'contacts', purchase: 'licence' }
 
 export const visibleNav = (me: Me | undefined, owner: boolean) =>
   NAV.map(g => ({ ...g, items: g.items.filter(i => canOpen(i.key, owner) && (i.when?.(me) ?? true)) })).filter(g => g.items.length)

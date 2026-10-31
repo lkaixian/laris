@@ -32,6 +32,8 @@ const S = {
   roleList: { en: 'Roles', ms: 'Peranan', zh: '角色', ta: 'பங்குகள்' },
   danger: { en: 'Delete this role', ms: 'Padam peranan ini', zh: '删除此角色', ta: 'இந்தப் பங்கை நீக்கு' },
   dangerHint: { en: 'This cannot be undone. A role people still hold cannot be deleted.', ms: 'Ini tidak boleh dibatalkan. Peranan yang masih dipegang tidak boleh dipadam.', zh: '此操作无法撤销。仍有人持有的角色不能删除。', ta: 'இதைத் திரும்பப் பெற முடியாது. இன்னும் பயன்படும் பங்கை நீக்க முடியாது.' },
+  expandAll: { en: 'Expand all', ms: 'Kembangkan semua', zh: '全部展开', ta: 'அனைத்தையும் விரி' },
+  collapseAll: { en: 'Collapse all', ms: 'Kuncupkan semua', zh: '全部收起', ta: 'அனைத்தையும் சுருக்கு' },
   newRole: { en: 'New role', ms: 'Peranan baharu', zh: '新角色', ta: 'புதிய பங்கு' },
 } satisfies Record<string, Text>
 const ofN = (a: number, b: number) => t({ en: `${a} of ${b} allowed`, ms: `${a} daripada ${b} dibenarkan`, zh: `允许 ${a}/${b} 项`, ta: `${b} இல் ${a} அனுமதிக்கப்பட்டது` })
@@ -56,6 +58,7 @@ function Editor({ role, data, onDone, focus, del }: { role: RoleRow | null; data
   const [name, setName] = useState(base.name)
   const [perms, setPerms] = useState<string[]>(base.perms)
   const [formErr, setFormErr] = useState('')
+  const [open, setOpen] = useState<Record<string, boolean>>({})  // which permission sections are expanded; they start collapsed, each header shows how many are on
   const a = useAction()
   const nameRef = useRef<HTMLInputElement>(null)
   const headRef = useRef<HTMLHeadingElement>(null)
@@ -92,33 +95,46 @@ function Editor({ role, data, onDone, focus, del }: { role: RoleRow | null; data
         {role?.is_system && <p className="text-sm text-muted">{readOnly ? t({ en: 'The Owner role is read only: it always holds every permission.', ms: 'Peranan Pemilik adalah baca sahaja: ia sentiasa memegang semua kebenaran.', zh: '“店主”角色为只读：它始终拥有所有权限。', ta: 'உரிமையாளர் பங்கு படிக்க மட்டும்: அது எப்போதும் எல்லா அனுமதிகளையும் கொண்டிருக்கும்.' }) : t({ en: 'The Staff role cannot be renamed, but its permissions can change.', ms: 'Peranan Kakitangan tidak boleh dinamakan semula, tetapi kebenarannya boleh diubah.', zh: '“员工”角色不能重命名，但可以更改其权限。', ta: 'ஊழியர் பங்கின் பெயரை மாற்ற முடியாது, ஆனால் அதன் அனுமதிகளை மாற்றலாம்.' })}</p>}
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-semibold text-muted" role="status">{t({ en: `${count} of ${data.catalog.length} permissions allowed`, ms: `${count} daripada ${data.catalog.length} kebenaran dibenarkan`, zh: `已允许 ${count}/${data.catalog.length} 项权限`, ta: `${data.catalog.length} அனுமதிகளில் ${count} அனுமதிக்கப்பட்டன` })}</p>
+          <button type="button" className="btn btn-sm" onClick={() => setOpen(Object.fromEntries([...groups, '__owner'].map(g => [g, true])))}>{t(S.expandAll)}</button>
+          <button type="button" className="btn btn-sm" onClick={() => setOpen({})}>{t(S.collapseAll)}</button>
           {!role && staff && <button type="button" className="btn btn-sm" onClick={() => setPerms(staff.permissions)}>{t({ en: 'Copy from Staff', ms: 'Salin daripada Kakitangan', zh: '从“员工”复制', ta: 'ஊழியர் பங்கிலிருந்து நகலெடு' })}</button>}
         </div>
       </div>
-      {groups.map(g => (
+      {groups.map(g => {
+        const items = data.catalog.filter(p => p.group === g)
+        const on = readOnly ? items.length : items.filter(p => perms.includes(p.key)).length
+        const edited = !readOnly && items.some(p => !same(p.key))
+        const isOpen = !!open[g], pid = `pg-${g.replace(/\W+/g, '-')}`
+        return (
         <section key={g} className="border-t border-hairline" aria-label={permGroup(g)}>
           <div className="flex items-center justify-between gap-2 bg-surface-2 px-3 py-1">
-            <h3 className="text-sm font-semibold">{permGroup(g)}</h3>
+            <button type="button" className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={isOpen} aria-controls={pid} onClick={() => setOpen({ ...open, [g]: !isOpen })}>
+              <Icon name={isOpen ? 'down' : 'right'} className="size-4 shrink-0 text-muted" />
+              <h3 className="text-sm font-semibold">{permGroup(g)}</h3>
+              <span className="text-xs text-muted tabular-nums">{on} / {items.length}</span>
+              {edited && <span className="badge">{t(S.changed)}</span>}
+            </button>
             {!readOnly && <span className="flex gap-1">
               <button type="button" className="btn btn-quiet btn-sm" onClick={() => setGroup(g, true)}>{t(S.allow)}<span className="sr-only"> {permGroup(g)}</span></button>
               <button type="button" className="btn btn-quiet btn-sm" onClick={() => setGroup(g, false)}>{t(S.clear)}<span className="sr-only"> {permGroup(g)}</span></button>
             </span>}
           </div>
-          <div className="divide-y divide-hairline">
-            {data.catalog.filter(p => p.group === g).map(p => (
+          {isOpen && <div id={pid} className="divide-y divide-hairline">
+            {items.map(p => (
               <Switch key={p.key} id={`pd-${p.key}`} label={permLabel(p.key, p.label)} desc={permDesc(p.key, p.description)} disabled={readOnly} on={readOnly || perms.includes(p.key)} changed={!readOnly && !same(p.key)} onChange={() => toggle(p.key)} />
             ))}
-          </div>
-        </section>
-      ))}
+          </div>}
+        </section>)
+      })}
       <section className="border-t border-hairline" aria-labelledby="oo" data-guide="rl-owner">
-        <div className="bg-surface-2 px-3 py-1.5">
-          <h3 id="oo" className="flex items-center gap-1.5 text-sm font-semibold"><Icon name="key" className="size-4" />{t(S.ownerOnly)}</h3>
-          <p className="text-xs text-muted">{t(S.ownerOnlyHint)}</p>
-        </div>
-        <div className="divide-y divide-hairline">
+        <button type="button" className="flex w-full items-center gap-2 bg-surface-2 px-3 py-1.5 text-left" aria-expanded={!!open.__owner} aria-controls="pg-owner" onClick={() => setOpen({ ...open, __owner: !open.__owner })}>
+          <Icon name={open.__owner ? 'down' : 'right'} className="size-4 shrink-0 text-muted" />
+          <span className="min-w-0"><h3 id="oo" className="flex items-center gap-1.5 text-sm font-semibold"><Icon name="key" className="size-4" />{t(S.ownerOnly)}</h3>
+            <span className="block text-xs text-muted">{t(S.ownerOnlyHint)}</span></span>
+        </button>
+        {open.__owner && <div id="pg-owner" className="divide-y divide-hairline">
           {data.non_assignable.map(p => <Switch key={p.key} id={`pd-${p.key}`} label={permLabel(p.key, p.label)} desc={permDesc(p.key, '')} disabled on={false} />)}
-        </div>
+        </div>}
       </section>
       <div className="sticky bottom-0 z-10 grid gap-2 rounded-b-card border-t border-line bg-surface p-3 max-sm:pr-28">
         {formErr && <p role="alert" className="text-sm text-warn">{formErr}</p>}

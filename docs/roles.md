@@ -6,6 +6,8 @@ Every person holds one role. A role has a **class**, `owner` or `staff`, and `us
 - **Staff** (system, class staff): its permissions are editable, it cannot be deleted or renamed. It stores no list, which means the defaults marked below, so existing staff behave exactly as before until an owner edits it.
 - **Custom roles**: always class staff (a database CHECK refuses an owner-class custom role). Create, rename, set permissions and delete under `/api/roles` (owner only, audited). Deleting is refused while anyone holds the role. Changing a person's role signs them out; changing a role's permissions applies at once (permissions are read on every request).
 
+A role saved before a permission was split keeps what it could do (migration 0009 rewrote the stored lists: `export_data` became the three export permissions, and a role with `upload_documents` also got `manage_catalog`).
+
 Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEFAULT_STAFF`). Routes call `require_perm(ctx, key)`; the cost scrubbing keys on `view_costs`, not on the role.
 
 ## Assignable permissions
@@ -22,7 +24,12 @@ Code: the catalog is one dict, `src/perms.py` (`CATALOG`, `NON_ASSIGNABLE`, `DEF
 | `ask_suppliers` | Suppliers | yes | Send a photographed item to suppliers |
 | `view_replies_prices` | Suppliers | no | Words and prices in suppliers' replies |
 | `manage_followups` | Quotes | no | Send or skip a follow-up |
-| `export_data` | Data | no | Contact book CSV (BOM and PO exports also need `view_costs`) |
+| `export_contacts` | Data | no | Contact book CSV |
+| `export_audit` | Data | no | Activity log as CSV or PDF (reading it needs `view_audit`) |
+| `export_documents` | Data | no | Internal quote file, BOM and PO exports (they carry cost, so they also need `view_costs`) |
+| `manage_catalog` | Catalog | yes | Read catalog photos, edit and confirm their products, keep the catalog's categories (add, rename, delete, move) |
+| `view_business_report` | Reports | no | The Business report (it shows costs, profit and what customers owe, so it also needs `view_costs` and `view_revenue`) |
+| `set_report_targets` | Reports | no | Change the targets and the cash on hand the Business report compares against (reading needs `view_business_report`) |
 | `view_audit` | Activity | yes | The activity feed (cost entries in it also need `view_costs`) |
 | `record_payments` | Orders | no | Record a deposit or balance payment, read a payment slip, see an order's payments, receipts and balance |
 | `issue_delivery` | Orders | no | Create a delivery order, get its customer sign link, read its PDF (prices stay off unless the owner switched them on). Not the order's money: that needs `record_payments` |
@@ -54,14 +61,16 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/documents/ingest`, `POST /api/documents/manual` | `upload_documents` |
 | `POST /api/documents/{id}/lines/{lid}` | `upload_documents`; sending `unit_price` also needs `view_costs` |
 | `POST /api/documents/{id}/transition` | owner-class moves: owner (database guard); any other caller needs `upload_documents` |
-| `POST /api/listings`, `PATCH /api/listings/{id}/items/{iid}` | `upload_documents` (a `price` in the patch also needs `view_costs`) |
+| `POST /api/listings`, `PATCH /api/listings/{id}/items/{iid}`, the cut-out routes, `POST /api/catalog/...` (categories, move, accept suggestions) | `manage_catalog` (a `price` in the patch also needs `view_costs`) |
+| `GET /api/reports`, `GET /api/reports/targets` | `view_business_report`, `view_costs` and `view_revenue` |
+| `PUT /api/reports/targets` | the three above and `set_report_targets` |
 | `POST /api/listings/{id}/items/{iid}/ask`, `POST /api/rfq` | `ask_suppliers` |
 | `POST /api/rfq/{id}/replies/{rid}/accept` | owner |
 | `POST /api/enquiries/simulate` | `manage_contacts` |
 | `POST /api/jobs` | `manage_contacts` (a job made by hand) |
 | `POST /api/jobs/{id}` | `manage_contacts` (status, due date, assignee, priority, notes) |
 | `GET /api/audit/search`, `GET /api/audit/facets` | `view_audit` |
-| `GET /api/audit/export` | `view_audit` and `export_data` |
+| `GET /api/audit/export` | `view_audit` and `export_audit` |
 | `GET /api/jobs`, `GET /api/jobs/agenda` | any role (selling totals only) |
 | `POST /api/followups/{id}` (and `GET /api/followups`) | `manage_followups` |
 | `POST /api/jobs/{id}/payments`, `POST /api/payments/propose-from-slip`, `GET /api/jobs/{id}/chain`, `GET /api/chain/receivables` | `record_payments` |
@@ -76,7 +85,7 @@ A custom role with **no** permissions is read-only. `tests/test_permissions.py` 
 | `POST /api/contacts/{id}` | `manage_contacts`; a supplier's name or number also `edit_supplier_contacts` (403 `owner_only`) |
 | `POST /api/settings`, `POST /api/settings/channels`, `POST /api/field-proposals/{id}/decide`, `POST /api/parties/{id}/erase` | owner |
 | `POST /api/documents/{id}/send` | owner (sending a quote to the customer is an owner action) |
-| `GET /api/documents/{id}/export?variant=internal` | `export_data` and `view_costs` (the customer variant and `/preview` need only read access and are scrubbed like `/pdf`) |
+| `GET /api/documents/{id}/export?variant=internal` | `export_documents` and `view_costs` (the customer variant and `/preview` need only read access and are scrubbed like `/pdf`) |
 | `POST /api/users`, `POST /api/users/{id}`, `POST/PATCH/DELETE /api/roles...`, `POST /api/invites`, `POST /api/invites/{id}/resend`, `DELETE /api/invites/{id}` | owner |
 | `POST /api/license`, `POST /api/license/request` | owner |
 

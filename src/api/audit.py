@@ -127,7 +127,7 @@ def audit_export(format: Literal["csv", "pdf"] = "csv", ids: str = Query("", max
                  action: AuditAction | None = None, q: str = Query("", max_length=100), ctx: Ctx = Depends(read_ctx)):
     """Download chosen activity log entries (ids=1,2,3) or, with no ids, every entry matching the filters, newest first, up to 1000."""
     require_perm(ctx, "view_audit")
-    require_perm(ctx, "export_data")
+    require_perm(ctx, "export_audit")
     try:
         chosen = sorted({int(x) for x in ids.split(",") if x.strip()}, reverse=True)
     except ValueError:

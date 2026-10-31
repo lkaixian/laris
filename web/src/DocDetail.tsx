@@ -170,7 +170,7 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
                 <span className="text-muted">{t(S.total)} {rm(d.doc.total)}</span>
               </>}
               actions={d.doc.direction === 'out' && !MOCK && <>
-                {can('export_data') && costs && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
+                {can('export_documents') && costs && ['accepted', 'sent', 'read', 'job_created'].includes(d.doc.status) && <>
                   <button type="button" className="btn" onClick={() => save(`/export/bom.xlsx?quote_id=${id}`, `bom-${d.doc.doc_no}.xlsx`)}>{t(S.bom)}</button>
                   <button type="button" className="btn" onClick={() => save(`/export/po.csv?quote_id=${id}`, `po-${d.doc.doc_no}.csv`)}>{t(S.po)}</button>
                 </>}

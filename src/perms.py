@@ -16,6 +16,8 @@ CATALOG = {
                         "description": "Create and edit customers, suppliers and contractors."},
     "upload_documents": {"label": "Upload supplier documents", "group": "Documents", "default": True,
                          "description": "Ingest a supplier file or pasted text, and key a document in by hand."},
+    "manage_catalog": {"label": "Manage the catalog", "group": "Catalog", "default": True,
+                       "description": "Read catalog photos, edit and confirm their products, and keep the catalog's own categories (add, rename, delete, move products)."},
     "ask_suppliers": {"label": "Ask suppliers for a price", "group": "Suppliers", "default": True,
                       "description": "Send a photographed item to suppliers on WhatsApp or Telegram."},
     "view_replies_prices": {"label": "See supplier replies and prices", "group": "Suppliers", "default": False,
@@ -26,8 +28,16 @@ CATALOG = {
                           "description": "Approve a contract worth no more than the limit in Supplier settings. Larger ones need the owner."},
     "manage_followups": {"label": "Send or skip follow-ups", "group": "Quotes", "default": False,
                          "description": "Send the suggested chase message to a customer, or skip it."},
-    "export_data": {"label": "Export data", "group": "Data", "default": False,
-                    "description": "Contact book CSV; the BOM and PO exports also need See costs and margins."},
+    "export_contacts": {"label": "Export the contact book", "group": "Data", "default": False,
+                        "description": "Download the contact book as CSV (names and numbers are personal data)."},
+    "export_audit": {"label": "Export the activity log", "group": "Data", "default": False,
+                     "description": "Download the activity log as CSV or PDF. Reading it needs See the activity feed."},
+    "export_documents": {"label": "Export quotes with costs (BOM, PO, internal file)", "group": "Data", "default": False,
+                         "description": "The internal quote file, bill of materials and purchase-order exports. They carry supplier cost, so they also need See costs and margins."},
+    "view_business_report": {"label": "See the business report", "group": "Reports", "default": False,
+                             "description": "The Business report page: KPIs against targets, operations and analytics. It shows costs, profit and what customers owe, so it also needs See costs and margins and See revenue and profit."},
+    "set_report_targets": {"label": "Set report targets and cash", "group": "Reports", "default": False,
+                           "description": "Change the targets and the cash on hand the Business report compares against. Reading the report needs See the business report."},
     "view_audit": {"label": "See the activity feed", "group": "Activity", "default": True,
                    "description": "The audit feed (cost entries in it also need See costs and margins)."},
     "record_payments": {"label": "Record payments", "group": "Orders", "default": False,
@@ -53,6 +63,18 @@ ALL = ASSIGNABLE  # the owner role holds every assignable permission (and the ow
 DEFAULT_STAFF = frozenset(k for k, v in CATALOG.items() if v["default"])
 
 
+# A role saved before a permission was split keeps what it could do: the old key grants every key that replaced it. (Migration 0009 rewrites the stored
+# lists once; this keeps a list from an older backup or import working the same.) upload_documents is not here on purpose: a role that has it and
+# lacks manage_catalog was set up that way deliberately after the split.
+LEGACY = {"export_data": ("export_contacts", "export_audit", "export_documents")}
+
+
 def grant(stored) -> frozenset:
     """What a staff-class role may do: NULL = defaults; stored keys outside the catalog (removed, or owner-only) never count."""
-    return DEFAULT_STAFF if stored is None else frozenset(stored) & ASSIGNABLE
+    if stored is None:
+        return DEFAULT_STAFF
+    keys = set(stored)
+    for old, new in LEGACY.items():
+        if old in keys:
+            keys.update(new)
+    return frozenset(keys) & ASSIGNABLE

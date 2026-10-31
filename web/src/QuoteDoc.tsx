@@ -199,7 +199,7 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
   const menuBtn = useRef<HTMLButtonElement>(null)
   const sendBtn = useRef<HTMLButtonElement>(null)
   const p = pv.data
-  const internal = can('export_data') && can('view_costs')
+  const internal = can('export_documents') && can('view_costs')
   const docNo = p?.doc_no ?? 'quote'
   const run = async (key: string, f: () => Promise<void>) => {
     if (pending) return

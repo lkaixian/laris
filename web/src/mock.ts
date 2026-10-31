@@ -212,7 +212,12 @@ const CATALOG = [
   { key: 'ask_suppliers', label: 'Request quotes', description: 'Send a photographed item to suppliers.', group: 'Suppliers', default: true },
   { key: 'view_replies_prices', label: 'See supplier reply prices', description: 'The words and prices in suppliers replies.', group: 'Suppliers', default: false },
   { key: 'manage_followups', label: 'Send or skip follow-ups', description: 'Act on quotes waiting for a reply.', group: 'Quotes', default: false },
-  { key: 'export_data', label: 'Export data', description: 'Download the contact book as CSV.', group: 'Data', default: false },
+  { key: 'manage_catalog', label: 'Manage the catalog', description: 'Read catalog photos, edit their products and keep the catalog categories.', group: 'Catalog', default: true },
+  { key: 'export_contacts', label: 'Export the contact book', description: 'Download the contact book as CSV.', group: 'Data', default: false },
+  { key: 'export_audit', label: 'Export the activity log', description: 'Download the activity log as CSV or PDF.', group: 'Data', default: false },
+  { key: 'export_documents', label: 'Export quotes with costs', description: 'The internal quote file, BOM and PO exports. Also needs See costs and prices.', group: 'Data', default: false },
+  { key: 'view_business_report', label: 'See the business report', description: 'KPIs against targets, operations and analytics. Also needs See costs and prices and See revenue and profit.', group: 'Reports', default: false },
+  { key: 'set_report_targets', label: 'Set report targets and cash', description: 'Change the targets and cash on hand the business report uses.', group: 'Reports', default: false },
   { key: 'view_audit', label: 'See the activity log', description: 'The activity feed.', group: 'Activity', default: true },
 ]
 const NON_ASSIGNABLE = [{ key: 'manage_team', label: 'Manage the team' }, { key: 'manage_roles', label: 'Manage roles' }, { key: 'manage_settings', label: 'Manage settings and branding' },
@@ -469,7 +474,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
       if (!['pdf', 'xlsx', 'csv'].includes(fmt) || !['customer', 'internal'].includes(variant)) throw new ApiError(400, 'bad_param', 'format or variant is not valid')
       if (variant === 'internal') {
         if (fmt === 'pdf') throw new ApiError(415, 'unsupported_media', 'internal PDF is not available')
-        perm('export_data'); perm('view_costs')
+        perm('export_documents'); perm('view_costs')
       }
       const type = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv' }[fmt]
       return new Blob([`SAMPLE ${variant} ${fmt} for ${d.doc.doc_no} (mock mode)\n`], { type })
@@ -740,7 +745,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     return { items: hit.slice(0, limit), has_more: hit.length > limit }
   }
   if (p === '/audit/export') {
-    perm('view_audit'); perm('export_data')
+    perm('view_audit'); perm('export_audit')
     const sp = new URLSearchParams(q), ids = (sp.get('ids') ?? '').split(',').filter(Boolean).map(Number)
     const rows = auditMatch(ids.length ? new URLSearchParams() : sp).filter(e => !ids.length || ids.includes(e.id))
     if (!rows.length) throw new ApiError(404, 'nothing_to_export', 'no entries match; choose some entries or widen the filters')

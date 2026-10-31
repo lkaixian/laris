@@ -164,7 +164,7 @@ def test_ask_suppliers_upload_and_other_gates(env):
 
 def test_replies_reports_followups_and_export_permissions(env):
     e = env
-    rich = member(e, role(e, "Rich", ["view_replies_prices", "view_reports", "manage_followups", "export_data"]), "Rich")
+    rich = member(e, role(e, "Rich", ["view_replies_prices", "view_reports", "manage_followups", "export_contacts"]), "Rich")
     assert e.c.get("/api/reports/margin", headers=rich).status_code == 200
     rep = e.c.get("/api/reports/margin", headers=rich).json()
     assert "cost" not in rep and "margin" not in rep and "stale_margin_lost" not in rep  # reports without view_costs: no cost or margin figures

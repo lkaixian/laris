@@ -27,7 +27,7 @@ interface SendResult { rfq_id: string; sends: { supplier_id: string; status: 'se
 
 // Permissions arrive on GET /api/me. Missing (mock mode, older server): show the page and let the server say no.
 const perms = (me?: Me) => (me as (Me & { permissions?: string[] }) | undefined)?.permissions
-export const canUpload = (me?: Me) => perms(me)?.includes('upload_documents') ?? true
+export const canUpload = (me?: Me) => perms(me)?.includes('manage_catalog') ?? true
 const canSeePrice = (me: Me | undefined, owner: boolean) => perms(me)?.includes('view_costs') ?? owner
 
 const BADGE: Record<Status, Text> = {

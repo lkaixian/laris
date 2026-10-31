@@ -61,7 +61,7 @@ export function ActivityView() {
   const filters = { ...f, q: qd }
   const active = Object.values(filters).some(v => v.trim())
   const key = qs(filters)
-  const exportOk = can('export_data')
+  const exportOk = can('export_audit')
   const entriesRef = useRef<HTMLElement>(null)
 
   useEffect(() => { const t = setTimeout(() => setQd(f.q), 300); return () => clearTimeout(t) }, [f.q])
@@ -205,7 +205,7 @@ export function ActivityView() {
                     <button type="button" className="btn" aria-disabled={!picked.size || !!busy || undefined} onClick={() => picked.size && exportAs('pdf', true)}>{busy === 'sel-pdf' ? tx('act.preparing') : tx('act.dlChosen', 'PDF')}</button>
                     <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('csv', false)}>{busy === 'all-csv' ? tx('act.preparing') : tx('act.dlAll', 'CSV')}</button>
                     <button type="button" className="btn" aria-disabled={!!busy || !rows.length || undefined} onClick={() => rows.length && exportAs('pdf', false)}>{busy === 'all-pdf' ? tx('act.preparing') : tx('act.dlAll', 'PDF')}</button>
-                  </> : <span className="text-sm text-muted">{tx('act.needExport', why('export_data'))}</span>}
+                  </> : <span className="text-sm text-muted">{tx('act.needExport', why('export_audit'))}</span>}
                 </div>
                 {dayLoading ? <Skeleton rows={4} shape="text" /> : <>
                   <label className="mb-1 flex min-h-11 items-center gap-3 px-1 text-sm font-semibold">

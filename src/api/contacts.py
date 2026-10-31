@@ -182,12 +182,12 @@ def dashboard(ctx: Ctx = Depends(read_ctx)):
 
 @r.get("/export/contacts.csv")
 def export_contacts(ctx: Ctx = Depends(read_ctx)):
-    """Download of the whole contact book (names and numbers are personal data, so export_data only)."""
+    """Download of the whole contact book (names and numbers are personal data, so export_contacts only)."""
     import csv
     import io
 
     from fastapi.responses import Response
-    require_perm(ctx, "export_data")
+    require_perm(ctx, "export_contacts")
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["type", "name", "chat_number", "email", "contact_person", "ssm_no", "address", "notes"])

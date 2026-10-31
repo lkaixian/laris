@@ -1,9 +1,9 @@
-"""Business report (GET /api/reports): the owner's key figures against their targets, an operations snapshot and the analytics behind it.
+"""Business report (GET /api/reports): the key figures against their targets, an operations snapshot and the analytics behind it.
 Every number is worked out from the records by fixed rules: money by src/revenue.py (the Revenue page's own definitions), counts here. The AI writes
 none of it. What the records cannot know is left out rather than guessed: a KPI with no target has no variance or status ("no_target"), and Cash
 Runway needs the cash on hand the owner records with the targets ("no_data" until then).
 
-Owner only: it shows costs, margins and what customers owe."""
+Needs view_business_report, view_costs and view_revenue (it shows costs, profit and what customers owe); changing targets needs set_report_targets."""
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Literal
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from .. import chain, pipeline, revenue
 from ..errors import ApiError
-from .deps import Ctx, audit, read_ctx, reply, require_owner, write_ctx
+from .deps import Ctx, audit, read_ctx, reply, require_perm, write_ctx
 from .revenue import EXPENSES, ORDERS, PAYMENTS
 
 r = APIRouter(prefix="/api")
@@ -72,9 +72,14 @@ def _supplier_spend(c, tid, a, b):
             where j.tenant_id=%s and {KL % 'j.created_at'} between %s and %s group by sp.name""", (tid, a, b)).fetchall()}
 
 
+def _may_read(ctx: Ctx):
+    for k in ("view_business_report", "view_costs", "view_revenue"):
+        require_perm(ctx, k)
+
+
 @r.get("/reports")
 def business_report(period: Literal["week", "last_week", "month"] = "week", lang: Literal["en", "ms", "zh", "ta"] = "en", ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    _may_read(ctx)
     c, t = ctx.conn, ctx.tenant_id
     today = pipeline.today_my()
     a, b, pa, pb = periods(period, today)
@@ -173,14 +178,15 @@ class TargetsIn(BaseModel, extra="forbid"):
 
 @r.get("/reports/targets")
 def get_targets(ctx: Ctx = Depends(read_ctx)):
-    require_owner(ctx)
+    _may_read(ctx)
     return reply(ctx, {"revenue_month": None, "margin_pct": None, "profit_month": None, "cac": None, "runway_months": None, "cash_on_hand": None, "cash_as_of": None} | _targets(ctx.conn, ctx.tenant_id))
 
 
 @r.put("/reports/targets")
 def put_targets(body: TargetsIn, ctx: Ctx = Depends(write_ctx)):
     """Replace the targets (a field left out or null is cleared). The date cash on hand was entered is kept, so the report can say how old it is."""
-    require_owner(ctx)
+    _may_read(ctx)
+    require_perm(ctx, "set_report_targets")
     v = body.model_dump()
     ctx.conn.execute(
         """insert into report_targets(tenant_id, revenue_month, margin_pct, profit_month, cac, runway_months, cash_on_hand, cash_as_of, updated_at)

@@ -173,12 +173,12 @@ MIMES = {"pdf": "application/pdf", "xlsx": "application/vnd.openxmlformats-offic
 @r.get("/documents/{doc_id}/export")
 def document_export(doc_id: UUID, format: str = Query("pdf"), variant: str = Query("customer"), ctx: Ctx = Depends(read_ctx)):
     """Quotation as PDF, XLSX or CSV. customer = what the customer sees (any role that can read the quote). internal = adds cost, margin
-    and the stale-cost flag: export_data and view_costs, audited, any status (XLSX or CSV only)."""
+    and the stale-cost flag: export_documents and view_costs, audited, any status (XLSX or CSV only)."""
     if format not in MIMES or variant not in ("customer", "internal"):
         raise ApiError(400, "bad_param", "format is pdf, xlsx or csv; variant is customer or internal")
     internal = variant == "internal"
     if internal:
-        require_perm(ctx, "export_data")
+        require_perm(ctx, "export_documents")
         require_perm(ctx, "view_costs")
     _out_doc(ctx, doc_id)
     if internal and format == "pdf":
@@ -660,7 +660,7 @@ def _bom_rows(ctx: Ctx, quote_id: UUID):
 
 @r.get("/export/bom.xlsx")
 def export_bom(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    require_perm(ctx, "export_data")
+    require_perm(ctx, "export_documents")
     require_perm(ctx, "view_costs")  # the file carries supplier cost
     no, rows = _bom_rows(ctx, quote_id)
     wb = Workbook()
@@ -681,7 +681,7 @@ def export_bom(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
 
 @r.get("/export/po.csv")
 def export_po(quote_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    require_perm(ctx, "export_data")
+    require_perm(ctx, "export_documents")
     require_perm(ctx, "view_costs")
     no, rows = _bom_rows(ctx, quote_id)
     agg: dict = {}

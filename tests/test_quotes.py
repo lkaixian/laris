@@ -232,9 +232,9 @@ def test_customer_exports_in_every_format_carry_no_cost(env):
 def test_internal_export_needs_both_permissions_and_is_audited(env):
     e = env
     q = seed_quote(e)
-    only_export = member(e, role(e, "Exporter", ["export_data"]), "Ex")
+    only_export = member(e, role(e, "Exporter", ["export_documents"]), "Ex")
     only_costs = member(e, role(e, "Coster", ["view_costs"]), "Co")
-    both = member(e, role(e, "Both", ["export_data", "view_costs"]), "Bo")
+    both = member(e, role(e, "Both", ["export_documents", "view_costs"]), "Bo")
     for who in (e.S, only_export, only_costs):
         for fmt in ("xlsx", "csv"):
             r = export(e, q, fmt, "internal", who)
@@ -340,7 +340,7 @@ def test_send_refuses_wrong_status_and_non_owner(env):
     r = send(e, d)
     assert r.status_code == 409 and r.json()["error"]["code"] == "not_sendable" and not e.svc.outbox  # a draft is approved first
     tr(e, d, "approved")
-    assert send(e, d, who=e.S).status_code == 403 and send(e, d, who=member(e, role(e, "Ex", ["export_data", "view_costs"]), "Ex")).status_code == 403
+    assert send(e, d, who=e.S).status_code == 403 and send(e, d, who=member(e, role(e, "Ex", ["export_documents", "view_costs"]), "Ex")).status_code == 403
     assert not e.svc.outbox
     send(e, d)
     tr(e, d, "accepted")

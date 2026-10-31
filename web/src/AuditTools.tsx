@@ -74,7 +74,7 @@ export function AuditTools({ people, module, action, q }: { people: string; modu
   const L = (['en', 'ms', 'zh', 'ta'].includes(lang) ? lang : 'en') as 'en' | 'ms' | 'zh' | 'ta'
   const [a, setA] = useState(''), [b, setB] = useState(''), [busy, setBusy] = useState(''), [err, setErr] = useState('')
   const [es, setEs] = useState<Entry[]>(), [more, setMore] = useState(false), [fp, setFp] = useState<ReturnType<typeof profile>>()
-  const ok = can('export_data')
+  const ok = can('export_audit')
   const query = () => { const p = new URLSearchParams({ limit: String(CAP) }); if (a) p.set('from', a); if (b) p.set('to', b); if (people) p.set('actor', people); if (module) p.set('module', module); if (action) p.set('action', action); if (q) p.set('q', q); return p.toString() }
 
   const gen = async () => {
@@ -127,7 +127,7 @@ export function AuditTools({ people, module, action, q }: { people: string; modu
         <div className="flex flex-wrap gap-2">{ok ? <>
           <button type="button" className="btn" onClick={() => save(`audit-summary-${a || 'start'}-to-${b || 'now'}.md`, summaryText(), 'text/markdown')}>{t(S.dlSum)}</button>
           <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => void full()}>{busy === 'full' ? t(S.working) : t(S.dlFull)}</button>
-        </> : <span className="text-sm text-muted">{t(S.needExport)} {why('export_data')}</span>}</div>
+        </> : <span className="text-sm text-muted">{t(S.needExport)} {why('export_audit')}</span>}</div>
       </div>)}
       <hr className="my-4 border-hairline" />
       <h3 className="rep-h">{t(S.file)}</h3>

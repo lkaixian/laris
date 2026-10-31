@@ -84,7 +84,7 @@ class RenameIn(BaseModel):
 
 @r.post("/categories")
 def add_category(body: NameIn, ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     n = clean(body.name)
     if not n:
         raise ApiError(422, "bad_name", "a category needs a name")
@@ -96,7 +96,7 @@ def add_category(body: NameIn, ctx: Ctx = Depends(write_ctx)):
 @r.post("/categories/rename")
 def rename_category(body: RenameIn, ctx: Ctx = Depends(write_ctx)):
     """Renaming onto an existing category merges the two."""
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     old, new = clean(body.old), clean(body.new)
     if not old or not new:
         raise ApiError(422, "bad_name", "a category needs a name")
@@ -113,7 +113,7 @@ def rename_category(body: RenameIn, ctx: Ctx = Depends(write_ctx)):
 @r.post("/categories/delete")
 def delete_category(body: NameIn, ctx: Ctx = Depends(write_ctx)):
     """Its products stay in the catalog, without a category."""
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     name, t = clean(body.name), ctx.tenant_id
     n = ctx.conn.execute("update listing_items set category=null where tenant_id=%s and lower(category)=lower(%s)", (t, name)).rowcount
     ctx.conn.execute("update listing_items set category_suggestion=null where tenant_id=%s and lower(category_suggestion)=lower(%s)", (t, name))
@@ -145,7 +145,7 @@ class MoveIn(BaseModel):
 
 @r.post("/items/move")
 def move(body: MoveIn, ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     cat = clean(body.category) or None
     if cat:  # use the spelling the business already has
         cat = next((c for c in category_names(ctx.conn, ctx.tenant_id) if c.lower() == cat.lower()), cat)
@@ -163,7 +163,7 @@ class AcceptIn(BaseModel):
 @r.post("/items/accept-suggestions")
 def accept(body: AcceptIn, ctx: Ctx = Depends(write_ctx)):
     """Confirm the suggested category on each product (creating it when it is new)."""
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     c, t = ctx.conn, ctx.tenant_id
     for x in c.execute("select distinct category_suggestion s from listing_items where tenant_id=%s and id = any(%s) and category_suggestion is not null", (t, body.item_ids)).fetchall():
         keep(c, t, x["s"])

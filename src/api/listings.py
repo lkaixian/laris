@@ -86,7 +86,7 @@ def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | 
     """No Depends(write_ctx): its transaction would stay open for the whole model call. Check inside one short transaction, read the photo
     with none open, then store in a second one."""
     with open_write(request) as ctx:
-        require_perm(ctx, "upload_documents")
+        require_perm(ctx, "manage_catalog")
         if miss := vision.missing_env():
             raise ApiError(503, "vision_not_configured", "vision not configured: set " + ", ".join(miss))
         ai_quota.check(ctx.conn, ctx.tenant_id, "photos")
@@ -197,7 +197,7 @@ def cutout(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(read_ctx)):
 def save_cutout(listing_id: UUID, item_id: UUID, file: UploadFile = File(...), ctx: Ctx = Depends(write_ctx)):
     """The product picture with a transparent background, drawn in the browser. Checked as a real PNG with an alpha channel; nothing else is stored."""
     from PIL import Image
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     data = read_capped(file, MAX_CUTOUT, "cut-out over 2 MB")
     try:
         im = Image.open(io.BytesIO(data))
@@ -215,7 +215,7 @@ def save_cutout(listing_id: UUID, item_id: UUID, file: UploadFile = File(...), c
 
 @r.delete("/listings/{listing_id}/items/{item_id}/cutout")
 def delete_cutout(listing_id: UUID, item_id: UUID, ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     if not ctx.conn.execute("update listing_items set cutout=null where id=%s and listing_id=%s and tenant_id=%s returning 1",
                             (item_id, listing_id, ctx.tenant_id)).fetchone():
         raise ApiError(404, "not_found", "product not found")
@@ -259,7 +259,7 @@ def _tiers(tiers: list[Tier], sizes: list[str]) -> list[dict]:
 
 @r.patch("/listings/{listing_id}/items/{item_id}")
 def edit_item(listing_id: UUID, item_id: UUID, body: ItemPatch, ctx: Ctx = Depends(write_ctx)):
-    require_perm(ctx, "upload_documents")
+    require_perm(ctx, "manage_catalog")
     ch = {k: getattr(body, k) for k in body.model_fields_set}
     if not ch or ("description" in ch and ch["description"] is None) or ("status" in ch and ch["status"] is None):
         raise ApiError(422, "empty", "nothing to change (description and status cannot be null)")

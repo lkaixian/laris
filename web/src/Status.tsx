@@ -119,9 +119,26 @@ const SVC_STATE: Record<SvcState, Text> = {
   down: { en: 'Down', ms: 'Terhenti', zh: '故障', ta: 'செயலிழந்தது' },
   off: { en: 'Not set up', ms: 'Belum disediakan', zh: '未设置', ta: 'அமைக்கப்படவில்லை' },
 }
+// One small indicator per service; the words (state, reason, response time) show as a tooltip on hover or focus, and are the accessible name.
+// The shape differs as well as the colour: check = working, ring = set up (not tested), dashed ring = not set up, ! = problem, x = down.
+const DOT: Record<SvcState, string> = {
+  ok: 'bg-accent text-on-accent', set: 'border-2 border-accent', off: 'border-2 border-dashed border-line', warn: 'bg-warn text-warn-bg', down: 'bg-warn text-warn-bg',
+}
+function SvcDot({ v }: { v: Service }) {
+  useLang()
+  const text = `${t(SVC_STATE[v.state])}${v.why && WHY[v.why] ? `: ${t(WHY[v.why])}` : v.ms !== undefined ? ` · ${v.ms} ms` : ''}`
+  return (
+    <span className="group relative inline-flex shrink-0" tabIndex={0} role="img" aria-label={text}>
+      <span aria-hidden="true" className={`grid size-5 place-items-center rounded-full ${DOT[v.state]}`}>
+        {v.state === 'ok' && <Icon name="check" className="size-3" />}{v.state === 'warn' && <Icon name="warn" className="size-3" />}{v.state === 'down' && <Icon name="close" className="size-3" />}
+      </span>
+      <span role="tooltip" aria-hidden="true" className="pointer-events-none absolute top-full right-0 z-30 mt-1 hidden w-max max-w-56 rounded-ui border border-hairline bg-surface px-2 py-1 text-xs shadow-2 group-hover:block group-focus-visible:block">{text}</span>
+    </span>
+  )
+}
 const SVC_ORDER: SvcState[] = ['down', 'warn', 'off', 'set', 'ok']
 const svcTitle = { en: 'Services', ms: 'Perkhidmatan', zh: '服务', ta: 'சேவைகள்' } satisfies Text
-const svcNote = { en: '"Working" was checked. "Set up" means the key or token is in place but not tested yet: press Check now to call each outside service (nothing about your customers is sent).', ms: '"Berfungsi" telah disemak. "Disediakan" bermakna kunci atau token ada tetapi belum diuji: tekan Semak sekarang untuk memanggil setiap perkhidmatan luar (tiada maklumat pelanggan dihantar).', zh: '“正常”表示已检查。“已设置”表示密钥或令牌已就位但尚未测试：点击“立即检查”会调用每个外部服务（不会发送任何客户信息）。', ta: '"செயல்படுகிறது" என்பது சரிபார்க்கப்பட்டது. "அமைக்கப்பட்டது" என்றால் சாவி அல்லது டோக்கன் உள்ளது ஆனால் இன்னும் சோதிக்கப்படவில்லை: ஒவ்வொரு வெளிச் சேவையையும் அழைக்க இப்போதே சரிபார் என்பதை அழுத்தவும் (வாடிக்கையாளர் தகவல் எதுவும் அனுப்பப்படாது).' } satisfies Text
+const svcNote = { en: 'Point at a dot to read its state. A check mark means working and checked; a ring means the key or token is in place but not tested yet: press Check now to call each outside service (nothing about your customers is sent).', ms: 'Halakan ke titik untuk membaca keadaannya. Tanda semak bermaksud berfungsi dan telah disemak; bulatan bermaksud kunci atau token ada tetapi belum diuji: tekan Semak sekarang untuk memanggil setiap perkhidmatan luar (tiada maklumat pelanggan dihantar).', zh: '将鼠标指向圆点可查看状态。对勾表示正常且已检查；圆圈表示密钥或令牌已就位但尚未测试：点击“立即检查”会调用每个外部服务（不会发送任何客户信息）。', ta: 'நிலையைப் படிக்க புள்ளியின் மீது சுட்டவும். சரிபார்ப்புக் குறி என்றால் செயல்படுகிறது மற்றும் சரிபார்க்கப்பட்டது; வளையம் என்றால் சாவி அல்லது டோக்கன் உள்ளது ஆனால் இன்னும் சோதிக்கப்படவில்லை: ஒவ்வொரு வெளிச் சேவையையும் அழைக்க இப்போதே சரிபார் என்பதை அழுத்தவும் (வாடிக்கையாளர் தகவல் எதுவும் அனுப்பப்படாது).' } satisfies Text
 const checkNow = { en: 'Check now', ms: 'Semak sekarang', zh: '立即检查', ta: 'இப்போதே சரிபார்' } satisfies Text
 const checking = { en: 'Checking…', ms: 'Menyemak…', zh: '检查中…', ta: 'சரிபார்க்கிறது…' } satisfies Text
 const lastChecked = { en: 'Last checked', ms: 'Disemak pada', zh: '上次检查', ta: 'கடைசியாகச் சரிபார்த்தது' } satisfies Text
@@ -155,8 +172,7 @@ function Services({ list, at, busy, onCheck }: { list: Service[]; at?: string; b
         {sorted.map(v => (
           <li key={v.key} className={`card flex items-center justify-between gap-2 ${bad(v.state) ? 'border-l-4 border-l-amber' : ''}`}>
             <span className="font-semibold">{SVC[v.key] ? t(SVC[v.key]) : v.key}</span>
-            <span className={`badge ${bad(v.state) ? 'badge-warn' : ''}`}>{bad(v.state) && <Icon name="warn" className="size-4" />}
-              {t(SVC_STATE[v.state])}{v.why && WHY[v.why] ? `: ${t(WHY[v.why])}` : v.ms !== undefined ? ` · ${v.ms} ms` : ''}</span>
+            <SvcDot v={v} />
           </li>
         ))}
       </ul>

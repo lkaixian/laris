@@ -514,11 +514,6 @@
 }
 @layer components { .rep-kpi .metric { font-size: clamp(1.35rem, 2.1vw, 1.9rem); white-space: nowrap; } }
 @layer components {
-  /* Open sidebar: the hint for the item you point at shows in a strip pinned to the bottom of the sidebar, so nothing floats over the page. */
-  .nav-hint { position: fixed; bottom: 12px; z-index: 60; min-height: 3.25rem; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--hairline); background: var(--surface-solid, var(--surface));
-    color: var(--ink); font-size: 0.8125rem; line-height: 1.35; opacity: 0; transition: opacity var(--dur-fast, 120ms); pointer-events: none; }
-  .nav-hint[data-on] { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) { .nav-hint { transition: none; } }
 }
 @layer components {
   .hello-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 16px 0; padding: 10px 44px 10px 14px; border-radius: 16px; border: 1px solid var(--glass-border, var(--hairline)); background: var(--surface); color: var(--ink); animation: tile-in 360ms var(--ease-tile, ease-out) both; }
@@ -567,7 +562,7 @@
   html:root[data-theme] { --ink: #111; --ink-2: #222; --muted: #444; --surface: #fff; --surface-2: #f3f6f4; --tint: #e3f1ea; --hairline: #c9d3cd; --accent: #00563f; --amber: #8a5a00; --warn: #9a2a1c; --warn-bg: #fbe3df; --soft: #dfe7e2; --glass-border: #c9d3cd; --shadow-glow: none; --glass-filter: none; --glass-highlight: none; }
   html, body { background: #fff !important; color: #111 !important; }
   body::before, body::after { display: none !important; }
-  body:has(.rep-sheet) :is(aside, nav, header:not(.rep-doc), [role="status"], [role="region"], [role="alert"], .bot, .hello-bar, .nav-hint, .toast) { display: none !important; }
+  body:has(.rep-sheet) :is(aside, nav, header:not(.rep-doc), [role="status"], [role="region"], [role="alert"], .bot, .hello-bar, .toast) { display: none !important; }
   .rep > :not(.rep-sheet) { display: none !important; }
   main#main { padding: 0 !important; max-width: none !important; }
   .rep-sheet { position: static; width: 100%; padding: 0; border: 0; background: #fff !important; box-shadow: none !important; animation: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

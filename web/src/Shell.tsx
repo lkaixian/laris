@@ -96,8 +96,8 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
   const here = PARENT[route] ?? route
   const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
   // A small pop-up beside the item you point at or tab to. It is fixed to the screen so the scrolling sidebar cannot cut it off.
-  const [tip, setTip] = useState<{ key: string; top: number; left: number; nl: number; nw: number } | null>(null)
-  const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); const n = el.closest('nav')?.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10, nl: (n?.left ?? 0) + 8, nw: Math.max(160, (n?.width ?? 224) - 16) }) }
+  const [tip, setTip] = useState<{ key: string; top: number; left: number } | null>(null)
+  const show = (key: string, el: HTMLElement) => { if (!collapsed) return; const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
   useEffect(() => { if (!tip) return; const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setTip(null) }, away = () => setTip(null); addEventListener('keydown', k); addEventListener('scroll', away, true); return () => { removeEventListener('keydown', k); removeEventListener('scroll', away, true) } }, [tip])
   const hint = tip ? NAV_HINTS[tip.key] : undefined
   // Folding: a group heading folds and unfolds its items (Suppliers shows Contacts, Ask suppliers, Catalog photos). Arriving on a page opens its group.
@@ -126,9 +126,10 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <ul aria-labelledby={`${idp}-${g.label}`} className="-m-1 grid min-h-0 gap-0.5 overflow-hidden p-1">
               {g.items.map(i => (
                 <li key={i.key} className="group relative" onMouseEnter={e => show(i.key, e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={e => show(i.key, e.currentTarget)} onBlur={() => setTip(null)}>
-                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={tip?.key === i.key ? `${idp}-tip` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={collapsed ? (tip?.key === i.key ? `${idp}-tip` : undefined) : NAV_HINTS[i.key] ? `${idp}-d-${i.key}` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
+                    {!collapsed && NAV_HINTS[i.key] && <span id={`${idp}-d-${i.key}`} className="sr-only">{t(NAV_HINTS[i.key])}</span>}
                   </a>
                   {!collapsed && help && (hasGuide(i.key) ? (
                     <button type="button" aria-label={tx('guide.open', txOr(`nav.${i.key}`, i.label))} onClick={() => { onNavigate?.(`#/${i.key}`); startGuide(i.key) }}
@@ -147,8 +148,6 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
           </li>
         ))}
       </ul>
-      {!collapsed && tip && hint && <div id={`${idp}-tip`} role="tooltip" className="sr-only">{t(hint)}</div>}
-      {!collapsed && <div className="nav-hint" aria-hidden="true" data-on={tip && hint ? '' : undefined} style={tip ? { left: tip.nl, width: tip.nw } : undefined}>{tip && hint ? t(hint) : ''}</div>}
     </nav>
   )
 }

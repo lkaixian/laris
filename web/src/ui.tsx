@@ -269,10 +269,12 @@ export function applyBrand(org?: Me['org']) {
 export function OrgMark({ org }: { org: Me['org'] }) {
   const [broken, setBroken] = useState(false)
   const initials = org.name.replace(/^SAMPLE\s+/i, '').split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
-  if (org.logo_url && !broken) return <img src={org.logo_url} alt={org.name} className="h-8 max-w-40 object-contain" onError={() => setBroken(true)} />
+  // The logo goes where the initials would, and the shop name always stays beside it.
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-ui bg-tint text-sm font-semibold text-accent">{initials}</span>
+      {org.logo_url && !broken
+        ? <img src={org.logo_url} alt="" className="h-8 max-w-24 shrink-0 object-contain" onError={() => setBroken(true)} />
+        : <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-ui bg-tint text-sm font-semibold text-accent">{initials}</span>}
       <span className="truncate text-sm font-semibold">{org.name}</span>
     </span>
   )

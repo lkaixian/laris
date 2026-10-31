@@ -243,7 +243,7 @@ function EntryDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const keys = d ? [...new Set([...Object.keys(d.before ?? {}), ...Object.keys(d.after ?? {})])].filter(k => show(d.before?.[k]) !== show(d.after?.[k])) : []
   return (
     <dialog ref={ref} aria-labelledby="ent-h" onCancel={e => { e.preventDefault(); onClose() }} onClose={onClose}
-      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-xl rounded-card bg-surface p-0 text-ink shadow-3 backdrop:bg-ink/50">
+      className="m-auto open:flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden w-[calc(100%-2rem)] max-w-xl glass-dialog p-0 text-ink shadow-3 backdrop:bg-ink/50">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-hairline p-4">
         <h2 id="ent-h" className="text-md font-semibold">{tx('act.details')}<span className="ml-2 text-sm font-normal text-muted">{tx('act.entry', id)}</span></h2>
         <button type="button" className="btn" onClick={onClose} autoFocus>{tx('as.close')}</button>

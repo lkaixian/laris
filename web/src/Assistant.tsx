@@ -148,7 +148,7 @@ export function AssistantWidget({ hidden }: { hidden?: boolean }) {
     <>
       <div aria-hidden="true" className="h-16" />{/* room at the end of every page, so the button never covers the last line */}
       <section ref={panel} role="dialog" aria-modal="false" aria-labelledby="ask-w-h" data-open={open}
-        className="ask-panel fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 rounded-card border border-hairline bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
+        className="ask-panel fixed inset-x-2 bottom-20 z-40 flex max-h-[70vh] flex-col gap-2 glass-lite p-3 shadow-lg sm:inset-x-auto sm:right-4 sm:w-[24rem]">
         <div className="flex items-center justify-between gap-2">
           <h2 id="ask-w-h" className="text-md font-semibold">{tx('as.title')}</h2>
           <button type="button" className="btn" onClick={() => { setOpen(false); btn.current?.focus() }}>{tx('as.close')}<span className="sr-only">{tx('as.theAssistant')}</span></button>

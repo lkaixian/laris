@@ -269,7 +269,7 @@ export function QuotePanel({ id, status, owner, onChanged }: { id: string; statu
       </div>
       <div id="quote-preview" className="mt-3" hidden={!open}>
         {p && (
-          <dl className="mb-3 grid grid-cols-2 gap-3 rounded-card border border-hairline bg-surface p-3 text-sm md:grid-cols-3">
+          <dl className="mb-3 grid grid-cols-2 gap-3 glass-lite p-3 text-sm md:grid-cols-3">
             <div><dt className="text-muted">{t(S.customer)}</dt><dd className="font-semibold">{p.customer.name}</dd></div>
             <div><dt className="text-muted">{t(S.total)}</dt><dd className="font-semibold tabular-nums">{rm(p.total)}</dd></div>
             <div><dt className="text-muted">{t(S.validUntil)}</dt><dd className="tabular-nums">{date(p.valid_until)}</dd></div>

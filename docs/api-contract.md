@@ -204,3 +204,19 @@ Health adds `ai_not_reviewed` (info) while no choice has been saved.
 | `POST /api/privacy/requests/{id}` | owner, audited. `{action: "erase"\|"dismiss"}` returns the updated row (same shape as above). `erase` runs `POST /api/parties/{id}/erase` for that customer, marks it `done`, then tells the customer "Your data has been erased." on the same channel (best effort: a failed send never fails the request). `dismiss` marks it `dismissed` and tells the customer the business could not erase it, with the data protection contact if set. 404 `not_found`, 409 `already_decided`, 409 `not_customer` (from the erase), 422 `bad_action` |
 
 Health adds `privacy_requests_waiting` (warn) when a request has been pending more than 3 days.
+
+
+## Quote-to-cash chain (`/api/chain`, step 215)
+
+Preparation only: payments are recorded, never taken; nothing is filed or sent. Write routes need `manage_contacts`; some moves are owner-only (403 for staff).
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/chain` | Create a customer PO (`cpo`), sales order (`so`) or supplier PO (`spo`). Body: `kind`, `customer_id` (the supplier for `spo`), `lines[{description, qty, uom, unit_price}]`, optional `ref`, `discount_pct`, `sst_rate`, `round5`, `note`. 409 `duplicate_po` for a repeated customer PO number. |
+| `POST /api/chain/from-quote/{quote_id}` | Make a `cpo` or `so` from an accepted outgoing quote. 409 `quote_not_accepted` for an expired, rejected or draft quote; 409 `already_converted`. |
+| `POST /api/chain/{id}/convert` | `to` is `so`, `pf` (needs `deposit_pct`), `do` (optional `qty` per order line, 1-based; 409 `over_delivery`) or `inv` (from a delivered DO, or from an order with no deliveries; `due_in_days`). |
+| `POST /api/chain/{id}/transition` | `{to, reason?}` along the state machine in `src/chain.py`. 409 `illegal_transition`; 403 `owner_only`; 422 `reason_required` for void, cancel, return. |
+| `POST /api/chain/{id}/payment` | `{amount, method}` on an issued invoice or sent proforma. Issues a receipt; 409 `overpayment`. |
+| `GET /api/chain?kind=&status=` | List; `status_effective` shows `overdue` for an unpaid invoice past due. |
+| `GET /api/chain/receivables` | Ageing buckets: current, 1-30, 31-60, 60+. |
+| `GET /api/chain/{id}` | The document, its Document Trail (`trail`) and its history. |

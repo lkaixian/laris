@@ -7,7 +7,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from src import clock, db
+from src import ai_log, clock, db
 from src.api import deps, webhooks
 from src.api.deps import Services
 from src.app import app
@@ -109,6 +109,7 @@ class Env:
 
 @pytest.fixture
 def env(pg_url, monkeypatch):
+    ai_log._pending.set([])  # a test that called the model helper directly leaves notes in this thread; the next test must not count them
     monkeypatch.setenv("DATABASE_URL", pg_url)
     monkeypatch.setenv("ILMU_API_KEY", "test-key")
     monkeypatch.setenv("DEMO_MODE", "1")  # header-only demo mode; tests of the real rule unset it

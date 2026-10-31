@@ -97,7 +97,9 @@ A customer sends a text or a Manglish voice note. ILMU transcribes it and extrac
 | AI / Compute | RunPod GPU (vLLM, Qwen2.5-VL-7B-Instruct); ILMU API (`ilmu-mini-v3.3`, `ilmu-asr-v4.2`); Tesseract OCR (PaddleOCR optional) |
 | Channels | Telegram Bot API (demo bot live), WhatsApp Business Cloud API (built, not connected) |
 | Email | Mailtrap API (verification, reset, invites, quotes, licences; sandbox inbox while testing) |
-| Licence | Ed25519-signed keys, verified in the app; signing in the browser (WebCrypto) |
+| Documents | reportlab + uharfbuzz (quote and report PDFs, Tamil shaping), openpyxl (XLSX), pypdf, Pillow |
+| Licence | Ed25519-signed keys (`cryptography`), verified in the app; signing in the browser (WebCrypto) |
+| Payments | Stripe Checkout (one-time licence purchase); a signed webhook issues and emails the key |
 | Hosting / Dev | Replit |
 
 The full model and library list with licences is in `submission/SDC2026_SparkSurge_TechDeclaration.pdf` and `docs/tech-and-tools-declaration.md`.

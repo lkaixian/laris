@@ -195,3 +195,10 @@ def test_staff_cannot_cancel_an_order(env):
     so = mk(e).json()
     assert go(e, so["id"], "cancelled", who=e.S, reason="x").status_code == 403
     assert go(e, so["id"], "cancelled", reason="customer changed mind").status_code == 200
+
+
+def test_received_quantities_are_written_plainly():
+    """A whole number of tens must not become scientific notation ('1E+2') on the note."""
+    po = [{"description": "PLA", "qty": "100", "uom": "spool", "unit_price": "10"}, {"description": "Nozzle", "qty": "2.50", "uom": "pc", "unit_price": "3"}]
+    got = chain.receive_lines(po, chain.receiving(po, []), [{"no": 1, "qty": D("100")}, {"no": 2, "qty": D("2.50")}])
+    assert [x["qty"] for x in got] == ["100", "2.5"]

@@ -44,7 +44,7 @@ def clean_lines(lines) -> list[dict]:
             raise ApiError(422, "bad_lines", f"line {n}: a description of 1 to 300 characters is needed")
         if not (0 < qty < MAX_QTY) or not (0 <= price < MAX_PRICE):
             raise ApiError(422, "bad_lines", f"line {n}: qty must be above 0 and price must not be negative")
-        out.append({"description": desc, "qty": str(qty.normalize() if qty == qty.to_integral() else qty), "uom": str(ln.get("uom") or "unit")[:20],
+        out.append({"description": desc, "qty": f"{qty.normalize():f}", "uom": str(ln.get("uom") or "unit")[:20],
                     "unit_price": str(money(price)), **({"src": ln["src"]} if ln.get("src") is not None else {})})
     return out
 
@@ -100,7 +100,7 @@ def receive_lines(ordered_lines: list[dict], already: list[dict], incoming) -> l
         if qty > left[no]:
             raise ApiError(409, "too_many", f"line {no}: only {left[no].normalize():f} still to come, not {qty.normalize():f}")
         src = ordered_lines[no - 1]
-        out.append({"src": no, "description": src["description"], "qty": str(qty.normalize() if qty == qty.to_integral() else qty), "uom": src.get("uom", "unit"),
+        out.append({"src": no, "description": src["description"], "qty": f"{qty.normalize():f}", "uom": src.get("uom", "unit"),
                     "unit_price": src["unit_price"]})
     if not out:
         raise ApiError(422, "bad_lines", "say what arrived")

@@ -8,9 +8,9 @@ import { SiteFooter, SiteHeader } from './SiteChrome'
 import type { NavItem } from './SiteChrome'
 
 // Public pricing page (#/pricing) and service status page (#/service-status). Both work signed out.
-// REAL DATA needed: the prices below are placeholders for the plan keys the server already knows (starter, standard, pro; seats in src/license.py).
-// The server's /license/plans still answers "Contact us" until real prices are decided; change PRICE here and nowhere else.
-const PRICE = { starter: 79, standard: 199, pro: 399 } as const
+// Prices in RM per year, per business, for the plan keys the server knows (starter is sold as LARIS Lite; seats in src/license.py).
+// The server's /license/plans still answers "Contact us"; change PRICE here and nowhere else.
+const PRICE = { starter: 299, standard: 599, pro: 999 } as const
 type Key = keyof typeof PRICE
 
 const S = {
@@ -19,8 +19,8 @@ const S = {
   navStatus: { en: 'Service status', ms: 'Status perkhidmatan', zh: '服务状态' },
   h1: { en: 'One price per business, not per quote', ms: 'Satu harga setiap perniagaan, bukan setiap sebut harga', zh: '按企业收费，不按报价次数' },
   lead: { en: 'Pick the number of seats your team needs. Every plan includes quoting from chat, rules-based pricing, the margin guard and the tracker.', ms: 'Pilih bilangan tempat untuk pasukan anda. Setiap pelan termasuk sebut harga dari sembang, harga berasaskan peraturan, pelindung margin dan penjejak.', zh: '按团队需要的席位数选择。每个套餐都包含聊天报价、规则定价、利润保护和追踪。' },
-  indicative: { en: 'Indicative prices in MYR per month, before SST. Final prices are confirmed when you request or buy a licence.', ms: 'Harga petunjuk dalam MYR sebulan, sebelum SST. Harga akhir disahkan semasa anda memohon atau membeli lesen.', zh: '价格为每月马币参考价，未含 SST。最终价格在申请或购买许可证时确认。' },
-  month: { en: '/ month', ms: '/ bulan', zh: '/ 月' },
+  indicative: { en: 'Prices in MYR per year, per business, before SST.', ms: 'Harga dalam MYR setahun, setiap perniagaan, sebelum SST.', zh: '价格为每家企业每年的马币价格，未含 SST。' },
+  month: { en: '/ year', ms: '/ tahun', zh: '/ 年' },
   seats: (n: number): Text => ({ en: `${n} seats`, ms: `${n} tempat`, zh: `${n} 个席位` }),
   current: { en: 'Your current plan', ms: 'Pelan semasa anda', zh: '您当前的套餐' },
   upgrade: { en: 'Upgrade to this plan', ms: 'Naik taraf ke pelan ini', zh: '升级到此套餐' },
@@ -42,17 +42,17 @@ const S = {
 }
 
 const PLANS: { key: Key; name: string; seats: number; pop?: boolean; pts: Text[] }[] = [
-  { key: 'starter', name: 'Starter', seats: 3, pts: [
+  { key: 'starter', name: 'LARIS Lite', seats: 3, pts: [
     { en: 'Quote from Telegram text and voice notes', ms: 'Sebut harga dari teks dan nota suara Telegram', zh: '用 Telegram 文字和语音报价' },
     { en: 'Rules pricing with your margin floor', ms: 'Harga ikut peraturan dengan lantai margin anda', zh: '规则定价，守住您的最低利润率' },
     { en: 'Quote tracker and follow-ups', ms: 'Penjejak sebut harga dan tindakan susulan', zh: '报价追踪与跟进' },
     { en: 'PDF, XLSX and CSV export', ms: 'Eksport PDF, XLSX dan CSV', zh: '导出 PDF、XLSX、CSV' }] },
-  { key: 'standard', name: 'Standard', seats: 10, pop: true, pts: [
+  { key: 'standard', name: 'LARIS Standard', seats: 10, pop: true, pts: [
     { en: 'Roles and permissions per staff member', ms: 'Peranan dan kebenaran bagi setiap staf', zh: '按员工设定角色与权限' },
     { en: 'Activity log with CSV and PDF download', ms: 'Log aktiviti dengan muat turun CSV dan PDF', zh: '活动记录，可下载 CSV 与 PDF' },
     { en: 'Job board from accepted quotes', ms: 'Papan kerja daripada sebut harga diterima', zh: '由已接受报价生成工作看板' },
     { en: 'Catalog photos and price list import', ms: 'Foto katalog dan import senarai harga', zh: '目录照片与价目表导入' }] },
-  { key: 'pro', name: 'Pro', seats: 25, pts: [
+  { key: 'pro', name: 'LARIS Pro', seats: 25, pts: [
     { en: 'Suppliers: directory, price comparison, contracts', ms: 'Pembekal: direktori, perbandingan harga, kontrak', zh: '供应商：名录、比价、合同' },
     { en: 'API access for your own tools', ms: 'Akses API untuk alat anda sendiri', zh: '为自有系统开放 API' },
     { en: 'Ask LARIS assistant', ms: 'Pembantu Tanya LARIS', zh: '问 LARIS 助手' },

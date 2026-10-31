@@ -521,3 +521,8 @@
   @media (max-width: 639px) { .hello-img { display: none; } }
   @media (prefers-reduced-motion: reduce) { .hello-bar { animation: none; } }
 }
+@layer components {
+  /* The "?" beside a page title is smaller than the title; its tap area stays 44px through the ::before. */
+  .guide-q { position: relative; width: 1.5rem; height: 1.5rem; font-size: .8125rem; vertical-align: middle; }
+  .guide-q::before { content: ""; position: absolute; inset: -.625rem; border-radius: 9999px; }
+}

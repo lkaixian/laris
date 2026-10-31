@@ -495,3 +495,4 @@
   @keyframes rep-grow { from { transform: scaleX(0) } } @keyframes rep-rise { from { opacity: 0; transform: translateY(14px) } }
   @media (prefers-reduced-motion: reduce) { .rep-line, .rep-area, .rep-dot, .rep-bt i, .rep-kpi, .rep-card { animation: none !important; stroke-dashoffset: 0; opacity: unset; } .rep-dot { opacity: 1 } .rep-area { opacity: .14 } }
 }
+@layer components { @media (max-width: 639px) { .bot-bubble .bot-sub, .bot-bubble .bot-ask { display: none; } .bot-bubble { max-width: min(13rem, calc(100vw - 32px)); } } }

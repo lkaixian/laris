@@ -20,7 +20,6 @@ const T = {
   tour: { en: 'Show me around', ms: 'Tunjukkan sekeliling', zh: '带我逛逛', ta: 'சுற்றிக் காட்டு' },
   ask: { en: 'Ask a question', ms: 'Tanya soalan', zh: '提问', ta: 'கேள்வி கேள்' },
   close: { en: 'Close', ms: 'Tutup', zh: '关闭', ta: 'மூடு' },
-  peek: { en: 'Peekaboo!', ms: 'Cak!', zh: '找到你啦！', ta: 'ஒளிந்து விளையாட்டு!' },
   think: { en: 'Thinking...', ms: 'Sedang berfikir...', zh: '思考中...', ta: 'யோசிக்கிறேன்...' },
 } satisfies Record<string, Text>
 
@@ -92,7 +91,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
     if (!name || !uid) return
     try { if (sessionStorage.getItem('laris.bot.intro') === uid) return; sessionStorage.setItem('laris.bot.intro', uid) } catch { /* private window: it may greet again */ }
     mark('hi-' + page())  // the introduction replaces the page offer on this first page
-    const id = setTimeout(() => { setIntro(true); setHop(n => n + 1); say(t(T.hi).replace('{name}', name), 8000, true) }, 900)
+    const id = setTimeout(() => { setIntro(true); setHop(n => n + 1); say(t(T.hi).replace('{name}', name), 6000, true) }, 900)
     return () => clearTimeout(id)
   }, [name, uid])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -106,7 +105,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
       if (busy()) return
       setHide(true); peeked = true
       clearTimeout(back)
-      back = window.setTimeout(() => { setHide(false); if (peeked) { peeked = false; setHop(n => n + 1); say(T.peek, 1400) } }, 1100)
+      back = window.setTimeout(() => { setHide(false); if (peeked) { peeked = false; setHop(n => n + 1) } }, 1100)
     }
     const away = (e: Event) => {
       if (!lineRef.current?.offer) return
@@ -143,10 +142,10 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
             ? <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="ask-dots inline-flex gap-1">{[0, 1, 2].map(i => <span key={i} style={{ ['--i' as string]: i }} className="size-1.5 rounded-full bg-current" />)}</span>{t(T.think)}</span>
             : <span>{typeof line.text === 'string' ? line.text : t(line.text)}</span>}
           {line.offer && <button type="button" aria-label={t(T.close)} className="bot-x" onClick={() => { clearTimeout(timer.current); setLine(null); setIntro(false) }}><span aria-hidden="true">×</span></button>}
-          {intro && <span className="mt-1 block text-muted">{t(T.hiSub)}</span>}
+          {intro && <span className="bot-sub mt-1 block text-muted">{t(T.hiSub)}</span>}
           {line.offer && <span className="mt-2 flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false); if (intro && !hasGuide(page())) onClick(); else startGuide(page()) }}>{t(intro ? T.tour : T.show)}</button>
-            {intro && <button type="button" className="btn min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false); onClick() }}>{t(T.ask)}</button>}
+            {intro && <button type="button" className="btn bot-ask min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false); onClick() }}>{t(T.ask)}</button>}
             <button type="button" className="btn min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false) }}>{t(T.no)}</button></span>}
         </div>)}
       <button ref={box} type="button" aria-expanded={open} data-open={open} data-guide="ask-laris" className="bot-btn" onPointerEnter={onWarm} onFocus={onWarm} onClick={onClick}>

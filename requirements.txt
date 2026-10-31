@@ -10,6 +10,8 @@ pypdf==6.21.4
 pillow==13.0.0
 pytesseract==0.3.13
 reportlab==5.0.1
+# Tamil shaping in PDFs (reportlab cannot shape complex scripts alone); Apache-2.0, abi3 wheel for Python 3.11+
+uharfbuzz==0.57.0
 psycopg[binary]==3.3.6
 # Ed25519 licence signature check (src/license.py); abi3 wheels for Python 3.11 through 3.14
 cryptography==50.0.2

@@ -188,7 +188,7 @@ function NextStep({ c, owner, run, busy, onLink }: { c: Chain; owner: boolean; r
   const left = c.delivery.lines.some(l => Number(l.issued) < Number(l.ordered))
   const mkDo = (override?: string) => run(async () => {
     const d = await api<{ id: string; doc_no: string }>('POST', `/jobs/${c.job.id}/delivery-orders`, override ? { override_reason: override } : {})
-    try { onLink(d.id, (await api<{ url: string }>('POST', `/deal-docs/${d.id}/delivery-link`)).url) } catch { /* no public address yet: the delivery panel offers the link again */ }
+    try { onLink(d.id, (await api<{ url: string }>('POST', `/deal-docs/${d.id}/delivery-link?send=1`)).url) } catch { /* no public address yet: the delivery panel offers the link again */ }
     return `${TT('delivery_order')} ${d.doc_no}`
   })
   const title = c.stage === 'paid' ? '' : c.stage === 'awaiting_deposit' ? TT(hasPf ? 'payDep' : 'issuePf') : c.stage === 'awaiting_payment' ? TT('payBal') : c.stage === 'in_production' ? (left ? TT('mkDo') : '') : TT('mkInv')
@@ -222,7 +222,7 @@ function Delivery({ c, owner, run, links, onLink }: { c: Chain; owner: boolean; 
   const toast = useToast()
   const ok = owner || can('issue_delivery')
   if (!c.delivery_orders.length) return null
-  const get = (id: string) => run(async () => { const r = await api<{ url: string }>('POST', `/deal-docs/${id}/delivery-link`); onLink(id, r.url); return TT('link') })
+  const get = (id: string, send = false) => run(async () => { const r = await api<{ url: string; sent?: Sent }>('POST', `/deal-docs/${id}/delivery-link${send ? '?send=1' : ''}`); onLink(id, r.url); return send && r.sent ? (r.sent.status === 'sent' ? t(D.done) : (r.sent.detail ?? t(D.failed))) : TT('link') })
   return (
     <section aria-label={TT('dels')} className="card mb-4 grid gap-3"><h2 className="text-lg font-semibold">{TT('dels')}</h2>
       <ul className="grid gap-3">{c.delivery_orders.filter(d => d.status !== 'void').map(d => (
@@ -233,6 +233,7 @@ function Delivery({ c, owner, run, links, onLink }: { c: Chain; owner: boolean; 
           {d.signature?.problems && <p className="text-sm text-warn">{TT('problem')} {d.signature.problems}</p>}
           <div className="flex flex-wrap items-center gap-2">
             {!d.signature && ok && <button className="btn" onClick={() => void get(d.id)}>{TT('link')}</button>}
+            {!d.signature && ok && <button className="btn" onClick={() => void get(d.id, true)}>{t(D.sendSign)}</button>}
             <button className="btn" onClick={() => void download(`/deal-docs/${d.id}/pdf`, `${d.doc_no}.pdf`).catch(e => toast(msg(e)))}>{TT('pdf')}</button>
           </div>
           {links[d.id] && <div className="grid gap-1"><label className="grid gap-1 text-sm"><span>{TT('linkL')}</span>
@@ -255,12 +256,16 @@ const D = {
   sent: { en: 'Sent', ms: 'Dihantar', zh: '已发送', ta: 'அனுப்பப்பட்டது' },
   failed: { en: 'Not sent', ms: 'Tidak dihantar', zh: '未发送', ta: 'அனுப்பப்படவில்லை' },
   skipped: { en: 'Customer not on Telegram', ms: 'Pelanggan tiada Telegram', zh: '客户未使用 Telegram', ta: 'வாடிக்கையாளர் Telegram இல் இல்லை' },
+  sendSign: { en: 'Send sign link on Telegram', ms: 'Hantar pautan tandatangan melalui Telegram', zh: '通过 Telegram 发送签收链接', ta: 'Telegram மூலம் கையொப்ப இணைப்பை அனுப்பு' },
+  stripeOff: { en: 'Stripe is not connected, so there is no online payment link yet.', ms: 'Stripe belum disambung, jadi belum ada pautan bayaran dalam talian.', zh: '尚未连接 Stripe，所以还没有在线付款链接。', ta: 'Stripe இணைக்கப்படவில்லை.' },
+  connect: { en: 'Connect Stripe', ms: 'Sambung Stripe', zh: '连接 Stripe', ta: 'Stripe ஐ இணை' },
   done: { en: 'Done.', ms: 'Siap.', zh: '完成。', ta: 'முடிந்தது.' },
 } satisfies Record<string, Text>
 
 function DepositCard({ c, run, busy }: { c: Chain; run: Run; busy: boolean }) {
   const l = c.deposit_link
-  if (!c.stripe_on || !c.deposit) return null
+  if (!c.deposit) return null
+  if (!c.stripe_on) return <section className="card mb-4 flex flex-wrap items-center gap-3" aria-label={t(D.h)}><h2 className="text-lg font-semibold">{t(D.h)}</h2><span className="text-sm text-muted">{t(D.stripeOff)}</span><a className="btn" href="#/settings/channels">{t(D.connect)}</a></section>
   const pay = () => void run(async () => { const r = await api<{ sent: Sent }>('POST', `/jobs/${c.job.id}/deposit-link`); return r.sent.status === 'sent' ? t(D.done) : (r.sent.detail ?? t(D.failed)) })
   const check = () => void run(async () => { await api('POST', `/jobs/${c.job.id}/deposit/check`); return t(D.done) })
   return (

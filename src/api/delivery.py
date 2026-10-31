@@ -77,7 +77,7 @@ def issue_delivery_order(job_id: UUID, request: Request, body: DeliveryIn = Deli
 
 
 @r.post("/deal-docs/{doc_id}/delivery-link")
-def delivery_link(doc_id: UUID, ctx: Ctx = Depends(write_ctx)):
+def delivery_link(doc_id: UUID, request: Request, send: bool = False, ctx: Ctx = Depends(write_ctx)):
     """A fresh sign link for an unsigned delivery order (30 days); older links of it stop working. Returns the URL only: the repo has no QR
     library, so the screen draws the code from the URL. The URL is shown once, only its SHA-256 is stored."""
     require_perm(ctx, "issue_delivery")
@@ -96,7 +96,12 @@ def delivery_link(doc_id: UUID, ctx: Ctx = Depends(write_ctx)):
     exp = c.execute("""insert into delivery_links(tenant_id, deal_doc_id, token_hash, created_by, expires_at) values (%s,%s,%s,%s, now() + interval '30 days')
                        returning expires_at""", (ctx.tenant_id, doc_id, auth.token_hash(tok), ctx.user_id)).fetchone()["expires_at"]
     audit(ctx, "jobs", d["job_id"], f"delivery link created for {d['doc_no']}", None, {"deal_doc_id": doc_id})
-    return reply(ctx, {"url": f"{base}/#/d/{tok}", "expires_at": exp})
+    url = f"{base}/#/d/{tok}"
+    out = {"url": url, "expires_at": exp}
+    if send:  # the customer gets the link on Telegram to confirm what arrived
+        from . import deposits  # local: deposits imports chain
+        out["sent"] = deposits.send_text(c, request.app.state.svc, ctx.tenant_id, doc_id, f"Delivery order {d['doc_no']}: please check what arrived and confirm it here: {url}")
+    return reply(ctx, out)
 
 
 # ---------------------------------------------------------------- public

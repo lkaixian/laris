@@ -225,3 +225,20 @@ def test_no_deposit_agreed_means_no_automatic_proforma(accept_env, stripe):
     e.sql("update documents set deposit_pct=null where id=%s", (d,))
     assert accept(e, link(e, d)).status_code == 200
     assert e.sql("select count(*) n from deal_docs where kind='proforma'")[0]["n"] == 0                          # the owner decides the deposit by hand, as before
+
+
+def test_the_sign_link_goes_to_the_customer_on_telegram(env, monkeypatch):
+    e = env
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://shop.test")
+    j = order(e)
+    d = pf(e, j)
+    assert pay(e, j, d["extra"]["deposit_amount"]).status_code == 201                                         # deposit covered, so a delivery order can be issued
+    r = e.c.post(f"/api/jobs/{j}/delivery-orders", json={}, headers=e.O)
+    assert r.status_code == 201, r.text
+    did = r.json()["id"]
+    assert e.svc.docs[-1][2].startswith(r.json()["doc_no"].replace("/", "_"))                                  # the delivery order PDF went out when issued
+    n = len(e.svc.sent)
+    out = e.c.post(f"/api/deal-docs/{did}/delivery-link?send=1", headers=e.O)
+    assert out.status_code == 200 and out.json()["sent"]["status"] == "sent"
+    assert len(e.svc.sent) == n + 1 and out.json()["url"] in e.svc.sent[-1][2] and e.svc.sent[-1][1] == "5551234"
+    assert "sent" not in e.c.post(f"/api/deal-docs/{did}/delivery-link", headers=e.O).json()                   # without ?send nothing is sent

@@ -132,6 +132,22 @@ def ensure_link(ctx: Ctx, job_id, pf) -> dict | None:
                      (ctx.tenant_id, job_id, pf["id"], sess["id"], sess["url"], due)).fetchone()
 
 
+def send_text(conn, s, tenant_id, doc_id, text: str) -> dict:
+    """A short Telegram message about an issued document (its sign link). Never raises; the outcome is written to deal_doc_sends and returned."""
+    d = conn.execute("select job_id from deal_docs where id=%s and tenant_id=%s", (doc_id, tenant_id)).fetchone()
+    tgt = _target(conn, d["job_id"]) if d else None
+    if not tgt:
+        return _note(conn, tenant_id, doc_id, "skipped", "no Telegram chat on file for this customer")
+    try:
+        s.send("telegram", tgt["to"], text, tgbots.via(conn, tenant_id, "telegram", tgt["pn"]))
+    except RuntimeError as e:
+        return _note(conn, tenant_id, doc_id, "failed", str(e))
+    except Exception as e:
+        log.warning("deal doc %s: Telegram message failed (%s)", doc_id, type(e).__name__)
+        return _note(conn, tenant_id, doc_id, "failed", "Telegram did not accept it; try again")
+    return _note(conn, tenant_id, doc_id, "sent")
+
+
 def after_proforma(ctx: Ctx, s, pf: dict) -> None:
     """A proforma was issued: make the deposit link (when Stripe is connected) and send the proforma on Telegram. Never raises, never undoes the proforma."""
     try:

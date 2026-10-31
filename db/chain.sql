@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS deal_docs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants,
   job_id uuid NOT NULL,
-  kind text NOT NULL CHECK (kind IN ('proforma','delivery_order','invoice','receipt')),
+  kind text NOT NULL CHECK (kind IN ('proforma','delivery_order','invoice','receipt','credit_note')),
   doc_no text NOT NULL CHECK (length(doc_no) <= 40),
   status text NOT NULL DEFAULT 'issued' CHECK (status IN ('issued','signed','void')),
   lines jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(lines) = 'array'),          -- frozen quote_doc lines (decimals as strings)
@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS deal_docs (
   CONSTRAINT receipt_has_payment CHECK ((kind = 'receipt') = (payment_id IS NOT NULL)),
   CONSTRAINT void_has_reason CHECK ((status = 'void') = (void_reason IS NOT NULL AND voided_at IS NOT NULL))
 );
+-- Databases made before credit notes: widen the kind check once (the name is the one Postgres gave the inline check).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_docs_kind_check' AND conrelid = 'deal_docs'::regclass AND pg_get_constraintdef(oid) NOT LIKE '%credit_note%') THEN
+    ALTER TABLE deal_docs DROP CONSTRAINT deal_docs_kind_check;
+    ALTER TABLE deal_docs ADD CONSTRAINT deal_docs_kind_check CHECK (kind IN ('proforma','delivery_order','invoice','receipt','credit_note'));
+  END IF;
+END $$;
 -- One live proforma and one live invoice per order; delivery orders are many (no unique); one receipt per payment.
 CREATE UNIQUE INDEX IF NOT EXISTS deal_docs_one_proforma ON deal_docs (job_id) WHERE kind = 'proforma' AND status <> 'void';
 CREATE UNIQUE INDEX IF NOT EXISTS deal_docs_one_invoice ON deal_docs (job_id) WHERE kind = 'invoice' AND status <> 'void';

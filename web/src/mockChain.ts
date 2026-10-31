@@ -10,13 +10,13 @@ interface D { id: string; kind: string; doc_no: string; status: string; deal_id:
   total: string; created_at: string; note: string | null }
 const DAY = 864e5
 const iso = (n: number) => new Date(Date.now() + n * DAY).toISOString().slice(0, 10)
-const PFX: Record<string, string> = { cpo: 'CPO', so: 'SO', spo: 'SPO' }
-const NAMES: Record<string, string> = { cpo: 'Customer PO (received)', so: 'Sales Order', spo: 'Supplier PO (sent)' }
+const PFX: Record<string, string> = { cpo: 'CPO', so: 'SO', spo: 'SPO', grn: 'GRN' }
+const NAMES: Record<string, string> = { cpo: 'Customer PO (received)', so: 'Sales Order', spo: 'Supplier PO (sent)', grn: 'Goods Received' }
 const NEXT: Record<string, Record<string, string[]>> = {
   cpo: { received: ['confirmed', 'cancelled'], confirmed: ['cancelled'] }, so: { confirmed: ['cancelled'] },
   spo: { draft: ['pending_approval', 'cancelled'], pending_approval: ['sent', 'draft', 'cancelled'], sent: ['partially_received', 'received', 'cancelled'], partially_received: ['received', 'cancelled'] } }
 const OWNER = ['spo:sent', 'so:cancelled', 'cpo:confirmed']
-const START: Record<string, string> = { cpo: 'received', so: 'confirmed', spo: 'draft' }
+const START: Record<string, string> = { cpo: 'received', so: 'confirmed', spo: 'draft', grn: 'received' }
 const sum = (ls: Ln[]) => ls.reduce((a, l) => a + Math.round(Number(l.qty) * Number(l.unit_price) * 100), 0) / 100
 const m2 = (n: number) => n.toFixed(2)
 const cents = (s: string | number) => Math.round(Number(s) * 100)
@@ -38,10 +38,14 @@ function seed() {
   add('cpo', 'deal-3', null, 'SAMPLE Kopi Corner', [{ description: 'Coffee beans 1 kg', qty: '12', uom: 'bag', unit_price: '48.00' }], { ref: 'KC-PO-2291', job_id: 'job-3' })
   add('spo', 'deal-4', null, 'SAMPLE Pasar Borong', [{ description: 'Chicken 1 kg', qty: '40', uom: 'kg', unit_price: '9.80' }], { status: 'pending_approval' })
 }
+const receivingOf = (spo: D) => spo.lines.map((l, i) => {
+  const got = docs.filter(x => x.kind === 'grn' && x.parent_id === spo.id).reduce((a, g) => a + g.lines.filter(x => x.src === i + 1).reduce((b, x) => b + Number(x.qty), 0), 0)
+  return { no: i + 1, description: l.description, uom: l.uom, ordered: String(Number(l.qty)), received: String(got), left: String(Math.max(Number(l.qty) - got, 0)) }
+})
 const shape = (d: D) => ({ ...d, kind_label: NAMES[d.kind], discount_pct: '0.00', sst_rate: '0.00', round5: false, subtotal: d.total, discount: '0.00', sst: '0.00', rounding: '0.00', quote_id: null, void_reason: null })
 
 // ---- the order chain on a job
-interface OD { id: string; kind: 'proforma' | 'delivery_order' | 'invoice' | 'receipt'; doc_no: string; status: 'issued' | 'signed' | 'void'; subtotal: string; tax_total: string | null; total: string
+interface OD { id: string; kind: 'proforma' | 'delivery_order' | 'invoice' | 'receipt' | 'credit_note'; doc_no: string; status: 'issued' | 'signed' | 'void'; subtotal: string; tax_total: string | null; total: string
   extra: Record<string, unknown>; issued_at: string; void_reason: string | null; payment_id: string | null; qty?: Record<number, number>; token?: string; sig?: { name: string; at: string; problems: string | null; has_mark: boolean } }
 interface Pay { id: string; job_id: string; amount: string; method: string; reference: string | null; paid_on: string; purpose: 'deposit' | 'balance'; recorded_by: string; reverses_payment_id: string | null
   reversal_reason: string | null; created_at: string; key: string }
@@ -49,7 +53,7 @@ interface Ord { id: string; title: string; customer: string; total: number; quot
 const ITEMS = [{ no: 1, description: 'SAMPLE acrylic signboard 60x30, gloss', ordered: 40 }, { no: 2, description: 'SAMPLE vinyl lettering, per metre', ordered: 20 }]
 const orders = new Map<string, Ord>()
 const odSeq: Record<string, number> = {}
-const PREFIX = { proforma: 'PF', delivery_order: 'DO', invoice: 'INV', receipt: 'RC' }
+const PREFIX = { proforma: 'PF', delivery_order: 'DO', invoice: 'INV', receipt: 'RC', credit_note: 'CN' }
 function issue(o: Ord, kind: OD['kind'], total: string, extra: Record<string, unknown>, over: Partial<OD> = {}): OD {
   const n = (odSeq[kind] = (odSeq[kind] ?? 0) + 1)
   const d: OD = { id: `od-${kind}-${n}`, kind, doc_no: `${PREFIX[kind]}-${new Date().getFullYear()}-${String(n).padStart(4, '0')}`, status: 'issued', subtotal: total, tax_total: null, total, extra, issued_at: new Date().toISOString(),
@@ -104,6 +108,7 @@ function chainOf(o: Ord) {
   const rev = new Set(o.pays.map(p => p.reverses_payment_id))
   return { job: { id: o.id, title: o.title, quote_id: null, status: 'doing', customer: o.customer, quote_deposit_pct: o.quotePct == null ? null : String(o.quotePct) },
     total: m2(total), paid: m2(pd), balance: m2(total - pd),
+    credited: m2(o.docs.filter(x => x.kind === 'credit_note' && x.status !== 'void').reduce((a, x) => a + Number(x.total), 0)),
     deposit: pf ? { pct: pf.extra.deposit_pct, amount: pf.extra.deposit_amount, paid: m2(dep) } : null, stage: stageOf(o), overdue: null,
     delivery: { lines: d, complete: d.every(x => Number(x.signed) >= Number(x.ordered)) },
     delivery_orders: dos.map(x => ({ id: x.id, doc_no: x.doc_no, status: x.status, issued_at: x.issued_at, override_reason: x.extra.override_reason ?? null, signature: x.sig ?? null })),
@@ -156,7 +161,7 @@ export function mockDelivery(method: string, p: string, body: Record<string, unk
 export function mockChain(method: string, p: string, q: string, owner: boolean, body: Record<string, unknown>): unknown {
   let m: RegExpMatchArray | null
   // ---- the order chain on a job
-  if ((m = p.match(/^\/jobs\/([^/]+)\/(chain|proforma|payments|delivery-orders|invoice)$/))) {
+  if ((m = p.match(/^\/jobs\/([^/]+)\/(chain|proforma|payments|delivery-orders|invoice|credit-notes)$/))) {
     const [, id, act] = m
     needPay(owner)
     const o = order(id)
@@ -165,8 +170,8 @@ export function mockChain(method: string, p: string, q: string, owner: boolean, 
     if (act === 'proforma') {
       needOwner(owner)
       if (live(o, 'proforma')) throw new ApiError(409, 'already_issued', 'this order already has a proforma; void it first to issue another')
-      const pct = body.deposit_pct == null ? o.quotePct : Number(body.deposit_pct)
-      if (pct == null) throw new ApiError(422, 'deposit_pct_needed', 'the quote has no deposit percentage; give deposit_pct')
+      let pct = body.deposit_pct == null ? o.quotePct : Number(body.deposit_pct)
+      if (pct == null) pct = 50  // nothing agreed: 50%
       const d = issue(o, 'proforma', m2(o.total), { deposit_pct: String(pct), deposit_amount: m2(Math.round(o.total * pct) / 100) })
       return { id: d.id, doc_no: d.doc_no, kind: d.kind, status: d.status, total: d.total }
     }
@@ -189,6 +194,17 @@ export function mockChain(method: string, p: string, q: string, owner: boolean, 
       if (!left.length) throw new ApiError(409, 'nothing_to_deliver', 'everything ordered is already on a delivery order')
       const d = issue(o, 'delivery_order', m2(o.total), gated ? { override_reason: String(body.override_reason) } : {}, { qty: Object.fromEntries(left.map(x => [x.no, x.q])) })
       return { id: d.id, doc_no: d.doc_no, status: d.status, issued_at: d.issued_at, override: gated, lines: left.map(x => ({ no: x.no, description: ITEMS[x.no - 1].description, qty: String(x.q), uom: 'unit' })) }
+    }
+    if (act === 'credit-notes') {
+      needOwner(owner)
+      const inv0 = live(o, 'invoice'), amt = Number(body.amount), why = String(body.reason ?? '').trim()
+      if (!inv0) throw new ApiError(409, 'no_invoice', 'a credit note is made against an invoice; issue the invoice first')
+      if (!(amt > 0) || why.length < 3) throw new ApiError(422, 'validation_error', 'give an amount above zero and a reason')
+      if (cents(amt) >= cents(o.total)) throw new ApiError(409, 'too_big', `the order is RM${m2(o.total)}; to cancel all of it, void the invoice instead`)
+      if (cents(o.total - amt) < cents(paid(o))) throw new ApiError(409, 'already_paid', `RM${m2(paid(o))} has been paid, so at most RM${m2(o.total - paid(o))} can be credited; any refund is made outside LARIS`)
+      const d = issue(o, 'credit_note', m2(amt), { invoice_id: inv0.id, invoice_no: inv0.doc_no, reason: why })
+      o.total = Math.round((o.total - amt) * 100) / 100
+      return { id: d.id, doc_no: d.doc_no, kind: d.kind, status: d.status, total: d.total }
     }
     needOwner(owner)  // invoice
     if (live(o, 'invoice')) throw new ApiError(409, 'already_issued', 'this order already has an invoice; void it first to issue another')
@@ -246,7 +262,26 @@ export function mockChain(method: string, p: string, q: string, owner: boolean, 
   }
   if ((m = p.match(/^\/chain\/([^/]+)$/)) && method === 'GET') {
     const d = find(m[1])
-    return { ...shape(d), trail: docs.filter(x => x.deal_id === d.deal_id).map(shape), history: [{ at: d.created_at, event: `${NAMES[d.kind]} ${d.doc_no} created`, actor: 'SAMPLE Owner' }] }
+    return { ...shape(d), receiving: d.kind === 'spo' ? receivingOf(d) : null, trail: docs.filter(x => x.deal_id === d.deal_id).map(shape), history: [{ at: d.created_at, event: `${NAMES[d.kind]} ${d.doc_no} created`, actor: 'SAMPLE Owner' }] }
+  }
+  if ((m = p.match(/^\/chain\/([^/]+)\/receive$/)) && method === 'POST') {
+    const d = find(m[1])
+    if (d.kind !== 'spo') throw new ApiError(409, 'not_a_supplier_po', 'goods are received against a supplier PO')
+    if (!['sent', 'partially_received'].includes(d.status)) throw new ApiError(409, 'not_sent', `this supplier PO is ${d.status}; goods can be received once it has been sent`)
+    const left = receivingOf(d), got: Ln[] = [], seen = new Set<number>()
+    for (const x of (body.lines as { no: number; qty: number }[] | undefined) ?? []) {
+      const row = left.find(r => r.no === x.no)
+      if (!row) throw new ApiError(422, 'bad_line', `the supplier PO has no line ${x.no}`)
+      if (seen.has(x.no)) throw new ApiError(422, 'bad_line', `line ${x.no} is listed twice`)
+      seen.add(x.no)
+      if (!(Number(x.qty) > 0)) throw new ApiError(422, 'bad_qty', `line ${x.no}: the quantity received must be above zero`)
+      if (Number(x.qty) > Number(row.left)) throw new ApiError(409, 'too_many', `line ${x.no}: only ${row.left} still to come, not ${x.qty}`)
+      got.push({ description: row.description, qty: String(x.qty), uom: row.uom, unit_price: d.lines[x.no - 1].unit_price, src: x.no })
+    }
+    if (!got.length) throw new ApiError(422, 'bad_lines', 'say what arrived')
+    const note = add('grn', d.deal_id, d, d.party, got, { job_id: d.job_id, note: String(body.note ?? '').trim() || null })
+    d.status = receivingOf(d).every(r => Number(r.left) === 0) ? 'received' : 'partially_received'
+    return { note: shape(note), status: d.status, receiving: receivingOf(d) }
   }
   if ((m = p.match(/^\/chain\/([^/]+)\/convert$/)) && method === 'POST') {
     const d = find(m[1])

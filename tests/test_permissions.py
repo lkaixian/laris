@@ -45,6 +45,8 @@ REQ = {
     ("POST", "/api/chain"): {"json": {"kind": "so", "customer_id": ID, "lines": [{"description": "x", "qty": 1, "unit_price": 1}]}},
     ("POST", "/api/chain/from-quote/{quote_id}"): {"json": {}},
     ("POST", "/api/chain/{doc_id}/convert"): {"json": {"to": "so"}},
+    ("POST", "/api/chain/{doc_id}/receive"): {"json": {"lines": [{"no": 1, "qty": 1}]}},
+    ("POST", "/api/jobs/{job_id}/credit-notes"): {"json": {"amount": "10.00", "reason": "test"}},
     ("POST", "/api/chain/{doc_id}/transition"): {"json": {"to": "cancelled", "reason": "x"}},
     ("POST", "/api/chain/buy/compare"): {"json": {"quotes": [{"supplier": "A", "total": 1}, {"supplier": "B", "total": 2}]}},
     ("POST", "/api/chain/buy/margin"): {"json": {"sell_total": 2, "cost_total": 1}},

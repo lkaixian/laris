@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS chain_docs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants,
-  kind text NOT NULL CHECK (kind IN ('cpo','so','spo')),
+  kind text NOT NULL CHECK (kind IN ('cpo','so','spo','grn')),
   doc_no text NOT NULL,
   status text NOT NULL,
   deal_id uuid NOT NULL,                                  -- every document of one deal shares this id (the Document Trail)
@@ -32,6 +32,12 @@ ALTER TABLE chain_docs ADD COLUMN IF NOT EXISTS job_id uuid;   -- the order (job
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chain_docs_job_fk') THEN
     ALTER TABLE chain_docs ADD CONSTRAINT chain_docs_job_fk FOREIGN KEY (tenant_id, job_id) REFERENCES jobs (tenant_id, id);   -- same tenant only
+  END IF;
+END $$;
+DO $$ BEGIN   -- databases made before goods received: widen the kind check once
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chain_docs_kind_check' AND conrelid = 'chain_docs'::regclass AND pg_get_constraintdef(oid) NOT LIKE '%grn%') THEN
+    ALTER TABLE chain_docs DROP CONSTRAINT chain_docs_kind_check;
+    ALTER TABLE chain_docs ADD CONSTRAINT chain_docs_kind_check CHECK (kind IN ('cpo','so','spo','grn'));
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS chain_docs_job_idx ON chain_docs (job_id);

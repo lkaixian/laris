@@ -54,6 +54,14 @@ const B = {
   match: { en: 'Orders, goods and bills', ms: 'Pesanan, barang dan bil', zh: '订单、收货与账单', ta: 'ஆணைகள், பொருட்கள், பில்கள்' },
   matchOk: { en: 'Everything lines up', ms: 'Semuanya sepadan', zh: '全部吻合', ta: 'எல்லாம் பொருந்துகிறது' },
   look: { en: 'Needs a look', ms: 'Perlu semakan', zh: '需要核对', ta: 'பார்வை தேவை' },
+  arrH: { en: 'Goods arrived?', ms: 'Barang sudah sampai?', zh: '货到了吗？', ta: 'பொருட்கள் வந்துவிட்டனவா?' },
+  arrHint: { en: 'Type what came in. A part delivery is fine: the rest stays on the list until it arrives.', ms: 'Taip apa yang sampai. Penghantaran separa tidak mengapa: baki kekal dalam senarai sehingga tiba.', zh: '填写到货数量。分批到货也可以，其余的会留在清单上直到到齐。', ta: 'வந்ததை எழுதுங்கள். பகுதி டெலிவரி சரி; மீதம் வரும் வரை பட்டியலில் இருக்கும்.' },
+  arrQty: { en: 'Arrived', ms: 'Sampai', zh: '到货', ta: 'வந்தது' },
+  arrNote: { en: 'Note (optional), e.g. 1 spool damaged', ms: 'Nota (pilihan), cth. 1 gelendong rosak', zh: '备注（可选），例如：1 卷损坏', ta: 'குறிப்பு (விருப்பம்), எ.கா. 1 ஸ்பூல் சேதம்' },
+  arrGo: { en: 'Record goods received', ms: 'Rekod barang diterima', zh: '记录收货', ta: 'பெற்ற பொருட்களைப் பதிவு செய்' },
+  arrDone: { en: 'Goods received recorded', ms: 'Penerimaan barang direkodkan', zh: '收货已记录', ta: 'பெற்ற பொருட்கள் பதிவு செய்யப்பட்டன' },
+  arrAll: { en: 'Everything on this purchase order has arrived.', ms: 'Semua dalam pesanan belian ini telah sampai.', zh: '这张采购订单的货已全部到齐。', ta: 'இந்தக் கொள்முதல் ஆணையின் அனைத்தும் வந்துவிட்டன.' },
+  arrLeft: { en: 'still to come', ms: 'belum sampai', zh: '未到', ta: 'வர வேண்டியது' },
   needOwner: { en: 'Only the owner can approve a purchase order.', ms: 'Hanya pemilik boleh meluluskan pesanan belian.', zh: '只有业主可以批准采购订单。', ta: 'கொள்முதல் ஆணையை உரிமையாளர் மட்டுமே அனுமதிக்கலாம்.' },
 }
 const SAMPLE: Q[] = [
@@ -73,6 +81,36 @@ function Stamp({ n, label, state, road }: { n: number; label: Text; state: 'done
       </span>
       <span className="text-xs text-muted">{road ? t(B.road) : t(s)}</span>
     </li>
+  )
+}
+
+interface Row { no: number; description: string; uom: string; ordered: string; received: string; left: string }
+
+// Goods arrived against a sent supplier PO: one box per line, pre-filled with what is still to come. POST /api/chain/{id}/receive (src/api/deals.py).
+function Receive({ po, onChanged }: { po: Doc; onChanged: () => void }) {
+  const d = useFetch<{ receiving: Row[] | null }>(`/chain/${po.id}`)
+  const toast = useToast()
+  const [qty, setQty] = useState<Record<number, string>>({})
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const rows = d.data?.receiving ?? []
+  const open = rows.filter(r => Number(r.left) > 0)
+  const go = async () => {
+    const lines = open.map(r => ({ no: r.no, qty: qty[r.no] ?? r.left })).filter(x => Number(x.qty) > 0)
+    setBusy(true)
+    try { await api('POST', `/chain/${po.id}/receive`, { lines, note: note.trim() || undefined }); toast(t(B.arrDone)); setQty({}); setNote(''); d.reload(); onChanged() } catch (e) { toast(msg(e)) } finally { setBusy(false) }
+  }
+  if (!d.data) return null
+  return (
+    <form className="grid gap-3 rounded-ui border border-hairline p-3" aria-label={t(B.arrH)} onSubmit={e => { e.preventDefault(); void go() }}>
+      <div><h3 className="font-semibold">{t(B.arrH)} <span className="text-sm font-normal text-muted">{po.doc_no}</span></h3>{open.length ? <p className="text-sm text-muted">{t(B.arrHint)}</p> : <p className="text-sm">{t(B.arrAll)}</p>}</div>
+      {open.map(r => (
+        <label key={r.no} className="grid gap-1 text-sm sm:grid-cols-[1fr_8rem] sm:items-center"><span>{r.description} <span className="text-muted">({r.received}/{r.ordered} {r.uom}; {r.left} {t(B.arrLeft)})</span></span>
+          <input className="input" inputMode="decimal" aria-label={`${t(B.arrQty)}: ${r.description}`} value={qty[r.no] ?? r.left} onChange={e => setQty(q => ({ ...q, [r.no]: e.target.value }))} /></label>))}
+      {open.length > 0 && <>
+        <label className="grid gap-1 text-sm"><span>{t(B.arrNote)}</span><input className="input" maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label>
+        <div><button className="btn btn-primary" disabled={busy}>{t(B.arrGo)}</button></div></>}
+    </form>
   )
 }
 
@@ -129,6 +167,7 @@ export function BuyLane({ trail, owner, onChanged }: { trail: Doc[]; owner: bool
     <section className="glass-lite mb-4 grid gap-4 p-4" aria-label={t(B.head)} data-guide="buy-lane">
       <h2 className="text-lg font-semibold">{t(B.head)}</h2>
       <ol className="flex flex-wrap gap-2" aria-label={t(B.head)}>{steps.map(([k, label, road], i) => <Stamp key={k} n={i + 1} label={label} road={road} state={stage(k)} />)}</ol>
+      {spos.filter(d => d.status === 'sent' || d.status === 'partially_received').map(d => <Receive key={`${d.id}-${d.status}`} po={d} onChanged={onChanged} />)}
       <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
         <div className="grid content-start justify-items-center gap-2 sm:grid-cols-[auto_1fr] sm:justify-items-start lg:grid-cols-1" aria-live="polite">
           <svg viewBox="0 0 100 100" className="size-28" role="img" aria-label={`${t(B.profit)}: ${mg ? `${mg.margin_pct}% ${mgLabel}` : t(B.noCost)}`}>

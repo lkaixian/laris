@@ -114,7 +114,7 @@ def test_validate_rejects_anything_outside_the_allowed_set():
     bad(font_size=True)
     bad(show_prices="yes")
     bad(show_prices=1)
-    bad(kind="credit_note")
+    bad(kind="statement")
     bad(title={"en": "x", "fr": "y"})
     bad(title={"en": ""})
     bad(title={"en": "x" * 61})

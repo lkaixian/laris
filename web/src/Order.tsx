@@ -13,13 +13,13 @@ import type { Text } from './i18n'
 // POST /deal-docs/{id}/delivery-link, GET /deal-docs/{id}/pdf, POST /payments/propose-from-slip. Every rule is enforced by the server; the
 // buttons only offer what the stage allows. LARIS records payments, it never takes money. Demo / synthetic data only in mock mode.
 type Stage = 'awaiting_deposit' | 'in_production' | 'delivered' | 'awaiting_payment' | 'paid'
-interface Doc { id: string; kind: 'proforma' | 'delivery_order' | 'invoice' | 'receipt'; doc_no: string; status: string; total: string; extra: Record<string, unknown>; issued_at: string; payment_id: string | null }
+interface Doc { id: string; kind: 'proforma' | 'delivery_order' | 'invoice' | 'receipt' | 'credit_note'; doc_no: string; status: string; total: string; extra: Record<string, unknown>; issued_at: string; payment_id: string | null }
 interface Pay { id: string; amount: string; method: string; reference: string | null; paid_on: string; purpose: string; reverses_payment_id: string | null; reversed: boolean }
 interface Sig { name: string; at: string; problems: string | null; has_mark: boolean }
 interface DO { id: string; doc_no: string; status: string; issued_at: string; override_reason: string | null; signature: Sig | null }
 interface Chain {
   job: { id: string; title: string; quote_id: string | null; customer: string | null; quote_deposit_pct: string | null }
-  total: string | null; paid: string; balance: string | null; deposit: { pct: string; amount: string; paid: string } | null; stage: Stage; overdue: string | null
+  total: string | null; paid: string; balance: string | null; credited?: string; deposit: { pct: string; amount: string; paid: string } | null; stage: Stage; overdue: string | null
   delivery: { lines: { no: number; ordered: string; issued: string; signed: string }[]; complete: boolean }
   delivery_orders: DO[]; problems: { doc_no: string; note: string; at: string }[]
   invoice: { id: string; doc_no: string; due_on: string | null } | null; documents: Doc[]; payments: Pay[]
@@ -34,6 +34,14 @@ const O = {
   quote: { en: 'Quote', ms: 'Sebut harga', zh: '报价', ta: 'மேற்கோள்' }, order: { en: 'Order', ms: 'Pesanan', zh: '订单', ta: 'ஆர்டர்' },
   proforma: { en: 'Proforma', ms: 'Proforma', zh: '形式发票', ta: 'புரோஃபார்மா' }, delivery: { en: 'Delivery', ms: 'Penghantaran', zh: '送货', ta: 'டெலிவரி' },
   invoice: { en: 'Invoice', ms: 'Invois', zh: '发票', ta: 'இன்வாய்ஸ்' }, receipt: { en: 'Receipt', ms: 'Resit', zh: '收据', ta: 'ரசீது' },
+  credit_note: { en: 'Credit note', ms: 'Nota kredit', zh: '贷项通知单', ta: 'கிரெடிட் நோட்' },
+  credited: { en: 'Credited', ms: 'Dikreditkan', zh: '已抵减', ta: 'குறைக்கப்பட்டது' },
+  crH: { en: 'Failed reprint? Give a credit', ms: 'Cetakan semula gagal? Beri kredit', zh: '重印失败？开具贷项通知单', ta: 'மறுஅச்சு தோல்வியா? கிரெடிட் கொடு' },
+  crHint: { en: 'A credit note lowers what the customer owes. LARIS does not refund money: any refund is made outside it.', ms: 'Nota kredit mengurangkan jumlah yang pelanggan berhutang. LARIS tidak membuat bayaran balik: sebarang bayaran balik dibuat di luar.', zh: '贷项通知单会减少客户应付的金额。LARIS 不处理退款，退款需在系统外办理。', ta: 'கிரெடிட் நோட் வாடிக்கையாளர் செலுத்த வேண்டியதைக் குறைக்கும். LARIS பணத்தைத் திருப்பித் தராது; அது வெளியே செய்யப்படும்.' },
+  crAmount: { en: 'Credit amount (RM)', ms: 'Jumlah kredit (RM)', zh: '抵减金额（RM）', ta: 'கிரெடிட் தொகை (RM)' },
+  crWhy: { en: 'What went wrong? (printed on the note)', ms: 'Apa yang tidak kena? (dicetak pada nota)', zh: '出了什么问题？（印在单据上）', ta: 'என்ன தவறு? (நோட்டில் அச்சிடப்படும்)' },
+  crMake: { en: 'Issue credit note', ms: 'Keluarkan nota kredit', zh: '开具贷项通知单', ta: 'கிரெடிட் நோட் வழங்கு' },
+  crDone: { en: 'Credit note issued', ms: 'Nota kredit dikeluarkan', zh: '已开具贷项通知单', ta: 'கிரெடிட் நோட் வழங்கப்பட்டது' },
   delivery_order: { en: 'Delivery order', ms: 'Pesanan penghantaran', zh: '送货单', ta: 'டெலிவரி ஆணை' },
   done: { en: 'done', ms: 'siap', zh: '已完成', ta: 'முடிந்தது' }, now: { en: 'now', ms: 'sekarang', zh: '进行中', ta: 'இப்போது' }, todo: { en: 'not yet', ms: 'belum', zh: '尚未', ta: 'இன்னும் இல்லை' },
   none: { en: 'none (made by hand)', ms: 'tiada (dibuat sendiri)', zh: '无（手动创建）', ta: 'இல்லை (கைமுறையாக)' },
@@ -50,7 +58,7 @@ const O = {
   noPerm: { en: 'You do not have permission for this step. Ask the owner.', ms: 'Anda tiada kebenaran untuk langkah ini. Tanya pemilik.', zh: '您没有此步骤的权限，请询问老板。', ta: 'இந்தப் படிக்கு உங்களுக்கு அனுமதி இல்லை. உரிமையாளரிடம் கேளுங்கள்.' },
   pctL: { en: 'Deposit %', ms: 'Deposit %', zh: '订金 %', ta: 'முன்பண %' },
   pctHint: { en: 'Filled in from the quote. Change it if you agreed something else.', ms: 'Diisi daripada sebut harga. Ubah jika anda bersetuju lain.', zh: '取自报价，如另有约定请修改。', ta: 'மேற்கோளிலிருந்து நிரப்பப்பட்டது. வேறு ஒப்புக்கொண்டிருந்தால் மாற்றவும்.' },
-  pctNone: { en: 'The quote has no deposit percentage. Type one.', ms: 'Sebut harga tiada peratus deposit. Taip satu.', zh: '报价没有订金百分比，请输入。', ta: 'மேற்கோளில் முன்பண சதவீதம் இல்லை. ஒன்றை உள்ளிடவும்.' },
+  pctNone: { en: 'The quote has no deposit percentage, so 50% is suggested. Change it if you agreed something else.', ms: 'Sebut harga tiada peratus deposit, jadi 50% dicadangkan. Ubah jika anda bersetuju sebaliknya.', zh: '报价没有订金百分比，因此建议 50%。如有其他约定，请修改。', ta: 'மேற்கோளில் முன்பண சதவீதம் இல்லை, எனவே 50% பரிந்துரைக்கப்படுகிறது. வேறு ஒப்பந்தம் இருந்தால் மாற்றுங்கள்.' },
   issuePf: { en: 'Issue proforma', ms: 'Keluarkan proforma', zh: '开具形式发票', ta: 'புரோஃபார்மா வழங்கு' },
   pfDone: { en: 'Proforma issued', ms: 'Proforma dikeluarkan', zh: '已开具形式发票', ta: 'புரோஃபார்மா வழங்கப்பட்டது' },
   payDep: { en: 'Record the deposit', ms: 'Rekod deposit', zh: '记录订金', ta: 'முன்பணத்தைப் பதிவு செய்' }, payBal: { en: 'Record a payment', ms: 'Rekod bayaran', zh: '记录付款', ta: 'பணத்தைப் பதிவு செய்' },
@@ -149,9 +157,28 @@ function PayForm({ c, purpose, run }: { c: Chain; purpose: 'deposit' | 'balance'
   )
 }
 
+function CreditForm({ c, run, busy }: { c: Chain; run: Run; busy: boolean }) {
+  const [amount, setAmount] = useState('')
+  const [why, setWhy] = useState('')
+  const max = Number(c.balance ?? 0)
+  const n = Number(amount)
+  return (
+    <details className="card mb-4"><summary className="min-h-11 cursor-pointer py-2 text-lg font-semibold">{TT('crH')}</summary>
+      <form className="mt-2 grid gap-3" onSubmit={e => { e.preventDefault(); void run(async () => { const r = await api<{ doc_no: string }>('POST', `/jobs/${c.job.id}/credit-notes`, { amount: amount.trim(), reason: why.trim() }); setAmount(''); setWhy(''); return `${TT('crDone')} ${r.doc_no}` }) }}>
+        <p className="text-sm text-muted">{TT('crHint')}</p>
+        <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+          <label className="grid gap-1 text-sm"><span>{TT('crAmount')}</span><input className="input" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></label>
+          <label className="grid gap-1 text-sm"><span>{TT('crWhy')}</span><input className="input" maxLength={200} value={why} onChange={e => setWhy(e.target.value)} /></label>
+        </div>
+        <div><button className="btn btn-primary" disabled={busy || !(n > 0 && n < Number(c.total ?? 0) && n <= max) || why.trim().length < 3}>{TT('crMake')}</button></div>
+      </form>
+    </details>
+  )
+}
+
 function NextStep({ c, owner, run, busy, onLink }: { c: Chain; owner: boolean; run: Run; busy: boolean; onLink: (id: string, url: string) => void }) {
   const ok = (k: string) => owner || can(k)
-  const [pct, setPct] = useState(c.job.quote_deposit_pct ? String(Number(c.job.quote_deposit_pct)) : '')
+  const [pct, setPct] = useState(c.job.quote_deposit_pct ? String(Number(c.job.quote_deposit_pct)) : '50')  // 50 = the server's default when nothing is agreed (DEFAULT_DEPOSIT_PCT)
   const [due, setDue] = useState('')
   const [why, setWhy] = useState('')
   const hasPf = c.documents.some(d => d.kind === 'proforma' && d.status !== 'void')
@@ -251,12 +278,14 @@ export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 tabular-nums">
               <dt className="text-muted">{TT('total')}</dt><dd className="text-right text-lg font-semibold">{rm(c.total)}</dd>
               {c.deposit && <><dt className="text-muted">{TT('deposit')} ({Number(c.deposit.pct)}%)</dt><dd className="text-right">{rm(c.deposit.paid)} / {rm(c.deposit.amount)}</dd></>}
+              {Number(c.credited) > 0 && <><dt className="text-muted">{TT('credited')}</dt><dd className="text-right">-{rm(c.credited)}</dd></>}
               <dt className="text-muted">{TT('paidL')}</dt><dd className="text-right">{rm(c.paid)}</dd>
               <dt className="text-muted">{TT('balance')}</dt><dd className="text-right font-semibold">{rm(c.balance)}</dd>
             </dl>
           </section>
           <NextStep c={c} owner={owner} run={run} busy={busy} onLink={onLink} />
           <Delivery c={c} owner={owner} run={run} links={links} onLink={onLink} />
+          {owner && c.invoice && Number(c.balance) > 0 && <CreditForm c={c} run={run} busy={busy} />}
           {(linked.length > 0 || c.job.quote_id) && <section aria-label={TT('linked')} className="card mb-4 grid gap-2"><h2 className="text-lg font-semibold">{TT('linked')}</h2>
             <ul className="grid gap-1">{linked.map(d => <li key={d.id} className="flex flex-wrap items-center gap-2"><a href={`#/deals/d:${d.id}`}>{d.doc_no}</a><Status v={d.status} /><span className="tabular-nums text-muted">{rm(d.total)}</span></li>)}</ul>
             {c.job.quote_id && !so && (owner || can('manage_contacts')) && <div><button className="btn" disabled={busy} onClick={() => void run(async () => { await api('POST', `/chain/from-quote/${c.job.quote_id}`, { to: 'so' }); return TT('soMade') })}>{TT('mkSo')}</button></div>}

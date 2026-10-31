@@ -147,7 +147,7 @@ def test_uniqueness_rules_one_live_proforma_and_invoice_many_delivery_orders_one
     with pytest.raises(psycopg.errors.CheckViolation):  # a receipt needs its payment, and nothing else carries one
         mkdoc(e, j, "receipt", "RC-2026-0009")
     with pytest.raises(psycopg.Error):
-        mkdoc(e, j, "credit_note", "CN-1")
+        mkdoc(e, j, "quotation", "QT-1")
 
 
 def test_column_rules(env):

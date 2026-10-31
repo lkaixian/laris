@@ -13,7 +13,7 @@ import type { Text } from './i18n'
 
 type Kind = 'customer' | 'supplier' | 'contractor'
 interface Contact {
-  id: string; role: Kind; name: string; contact: string | null; email: string | null; attention: string | null
+  id: string; role: Kind; name: string; contact: string | null; phone?: string | null; tg_username?: string | null; email: string | null; attention: string | null
   ssm_no: string | null; address: string | null; notes: string | null; documents: number; last_activity: string | null; value: string | null
 }
 interface ContactDetail extends Contact {
@@ -46,10 +46,14 @@ const COSTS = (): Col<NonNullable<ContactDetail['current_costs']>[number]>[] => 
 ]
 const day = (s: string | null) => (s ? s.slice(0, 10) : t({ en: 'No activity yet', ms: 'Belum ada aktiviti', zh: '暂无活动', ta: 'இன்னும் செயல்பாடு இல்லை' }))
 
+// A Telegram customer is stored as tg:<chat id>, which means nothing to a person: show their @username and the number they gave us.
+const chatLabel = (c: Contact): string | null => c.tg_username || c.phone || /^\s*(tg|telegram):/i.test(c.contact ?? '')
+  ? [c.tg_username && '@' + c.tg_username, c.phone].filter(Boolean).join(' · ') || 'Telegram'
+  : c.contact
 const cols = (owner: boolean): Col<Contact>[] => [
   { key: 'name', head: t({ en: 'Name', ms: 'Nama', zh: '姓名', ta: 'பெயர்' }), cell: c => <a href={`#/contact/${c.id}`}>{c.name}</a>, mobile: 'title' },
   { key: 'role', head: t({ en: 'Role', ms: 'Peranan', zh: '角色', ta: 'பங்கு' }), cell: c => <span className="badge">{t(KIND_ONE[c.role])}</span>, mobile: 'badge' },
-  { key: 'phone', head: t({ en: 'Phone', ms: 'Telefon', zh: '电话', ta: 'தொலைபேசி' }), cell: c => c.contact ?? <span className="text-muted">{t(S.none)}</span>, mobile: 'sub', className: 'whitespace-nowrap tabular-nums' },
+  { key: 'phone', head: t({ en: 'Phone', ms: 'Telefon', zh: '电话', ta: 'தொலைபேசி' }), cell: c => chatLabel(c) ?? <span className="text-muted">{t(S.none)}</span>, mobile: 'sub', className: 'whitespace-nowrap tabular-nums' },
   { key: 'docs', head: t(S.documents), cell: c => c.documents, num: true },
   ...(owner ? [{ key: 'value', head: t({ en: 'Value', ms: 'Nilai', zh: '金额', ta: 'மதிப்பு' }), cell: (c: Contact) => c.value && Number(c.value) > 0 ? rm(c.value) : '', num: true }] : []),
   { key: 'last', head: t({ en: 'Last activity', ms: 'Aktiviti terakhir', zh: '最近活动', ta: 'கடைசி செயல்பாடு' }), cell: c => day(c.last_activity), mobile: 'meta' as const, className: 'whitespace-nowrap tabular-nums' },

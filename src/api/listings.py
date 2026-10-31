@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import vision
+from .. import ai_quota, vision
 from ..errors import ApiError
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_perm, svc, throttle, write_ctx
 from .routes import MAGIC, read_capped
@@ -89,6 +89,7 @@ def upload(request: Request, image: UploadFile = File(...), supplier_id: UUID | 
         require_perm(ctx, "upload_documents")
         if miss := vision.missing_env():
             raise ApiError(503, "vision_not_configured", "vision not configured: set " + ", ".join(miss))
+        ai_quota.check(ctx.conn, ctx.tenant_id, "photos")
         throttle(f"listing:{ctx.tenant_id}", 10, 600, "Too many catalog photos in 10 minutes. Wait a while.")  # each one is a GPU call
         data = read_capped(image, MAX_IMAGE, "photo over 8 MB")
         mime = next((m for sig, m in MAGIC if data.startswith(sig)), None)

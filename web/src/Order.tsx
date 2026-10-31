@@ -28,7 +28,7 @@ interface Linked { id: string; kind: string; doc_no: string; status: string; tot
 interface Slip { amount: string | null; paid_on: string | null; reference: string | null; payer: string | null; confidence: number | null; notice: string }
 
 const O = {
-  deals: { en: 'Deals', ms: 'Urusan', zh: '交易', ta: 'ஒப்பந்தங்கள்' },
+  deals: { en: 'Customers', ms: 'Pelanggan', zh: '客户', ta: 'வாடிக்கையாளர்கள்' },
   deal: { en: 'Order', ms: 'Pesanan', zh: '订单', ta: 'ஆர்டர்' },
   trail: { en: 'Document trail', ms: 'Jejak dokumen', zh: '单据轨迹', ta: 'ஆவணத் தடம்' },
   quote: { en: 'Quote', ms: 'Sebut harga', zh: '报价', ta: 'மேற்கோள்' }, order: { en: 'Order', ms: 'Pesanan', zh: '订单', ta: 'ஆர்டர்' },
@@ -266,7 +266,7 @@ export function OrderPage({ id, owner }: { id: string; owner: boolean }) {
   const so = linked.find(d => d.kind === 'so' || d.kind === 'cpo')
   return (
     <>
-      <PageHeader title={c ? c.job.title : TT('deal')} back={{ href: '#/deals', label: TT('deals') }} />
+      <PageHeader title={c ? c.job.title : TT('deal')} back={{ href: '#/customers', label: TT('deals') }} />
       <Async s={s} empty={!c}>
         {c && <>
           <nav aria-label={TT('trail')} className="relative mb-4 overflow-x-auto" data-guide="deals-pipeline">

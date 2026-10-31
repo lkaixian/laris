@@ -160,7 +160,7 @@ const denied403 = (e: unknown) => { if (isDenied(e) && Date.now() - lastPerms > 
 const NEED: Record<string, string> = { reports: 'view_costs', alerts: 'view_costs', activity: 'view_audit', ask: 'ask_suppliers', followups: 'manage_followups' }
 const SUPPLIER_PAGES = ['suppliers', 'supplier', 'products', 'product', 'contracts', 'contract']  // supplier prices: See costs, or a buyer role with Draft contracts
 // Revenue shows costs, so it needs both permissions (the server asks for both too).
-export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings'].includes(route) ? owner : SUPPLIER_PAGES.includes(route) ? can('view_costs') || can('manage_contracts') : route === 'revenue' ? can('view_revenue') && can('view_costs') : !NEED[route] || can(NEED[route])
+export const canOpen = (route: string, owner: boolean) => ['team', 'roles', 'settings', 'status', 'privacy', 'api-access', 'ai-settings', 'templates'].includes(route) ? owner : SUPPLIER_PAGES.includes(route) ? can('view_costs') || can('manage_contracts') : route === 'revenue' ? can('view_revenue') && can('view_costs') : !NEED[route] || can(NEED[route])
 
 // ---- sign-in. The session token lives in sessionStorage (this tab only); only its hash is stored on the server.
 export const getToken = (): string | null => { try { return sessionStorage.getItem('token') } catch { return null } }
@@ -323,6 +323,9 @@ export async function download(path: string, filename: string, opts?: ReqOpts): 
 export async function blobUrl(path: string, opts?: ReqOpts): Promise<string> {
   return URL.createObjectURL(await request<Blob>('GET', path, { ...opts, auth: true, user: true, as: 'blob' }))
 }
+
+// A file as a Blob, left to the caller to name and save (the extension depends on what the server made, e.g. .docx or .pdf).
+export const fileBlob = (path: string, opts?: ReqOpts): Promise<Blob> => request<Blob>('GET', path, { ...opts, auth: true, user: true, as: 'blob' })
 
 // Image for <img>: the API needs the identity headers, so fetch it as a blob. Mock data and data/blob URLs pass through.
 export async function imageUrl(path: string, opts?: ReqOpts): Promise<string> {

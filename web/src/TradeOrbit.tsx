@@ -114,9 +114,9 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
     { id: 'customer', x: 100, r: 40, name: S.customer, sub: S.buys }, { id: 'business', x: 380, r: 52, name: S.business, sub: S.you }, { id: 'supplier', x: 660, r: 40, name: S.supplier, sub: S.sells },
   ]
   const panel = {
-    customer: { a: [t(S.owedIn), rm(String(d.owedIn))], b: [t(S.openSell), String(d.openSell)], n: d.late ? `${t(S.nextC)} (${d.late})` : t(S.nextC), href: '#/deals' },
-    business: { a: [t(S.openSell), String(d.openSell)], b: [t(S.openBuy), String(d.openBuy)], n: t(S.nextB), href: '#/deals' },
-    supplier: { a: [t(S.owedOut), rm(String(d.owedOut))], b: [t(S.openBuy), String(d.openBuy)], n: t(S.nextS), href: '#/deals' },
+    customer: { a: [t(S.owedIn), rm(String(d.owedIn))], b: [t(S.openSell), String(d.openSell)], n: d.late ? `${t(S.nextC)} (${d.late})` : t(S.nextC), href: '#/customers' },
+    business: { a: [t(S.openSell), String(d.openSell)], b: [t(S.openBuy), String(d.openBuy)], n: t(S.nextB), href: '#/customers' },
+    supplier: { a: [t(S.owedOut), rm(String(d.owedOut))], b: [t(S.openBuy), String(d.openBuy)], n: t(S.nextS), href: '#/customers' },
   }[open]
   return (
     <div ref={box} className="orbit-wrap" data-run={run && !paused ? '1' : '0'} data-guide="orbit">
@@ -125,7 +125,7 @@ export function TradeOrbit({ data, story, onGo }: { data?: OrbitData; story?: bo
         {(Object.keys(PATH) as Lane[]).map(l => (
           <g key={l}>
             <path className="orb-lane" d={PATH[l]} data-on={cur?.lane === l || chain === LANE_CHAIN[l] ? '1' : undefined} />
-            <path className="orb-hit" d={PATH[l]} onClick={() => { const c = LANE_CHAIN[l]; setChain(x => (x === c ? null : c)); go('#/deals') }}>
+            <path className="orb-hit" d={PATH[l]} onClick={() => { const c = LANE_CHAIN[l]; setChain(x => (x === c ? null : c)); go('#/customers') }}>
               <title>{t(LANE_CHAIN[l] === 'sell' ? S.sell : S.buy)}</title></path>
           </g>
         ))}

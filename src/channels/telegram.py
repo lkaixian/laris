@@ -35,6 +35,7 @@ def parse_update(update: dict) -> InboundMessage | None:
         text=m.get("text") or m.get("caption"),
         at=datetime.fromtimestamp(m["date"], timezone.utc),
     )
+    msg.username = (m.get("from") or {}).get("username")
     if (rt := m.get("reply_to_message")) and "message_id" in rt:
         msg.reply_to = f"{m['chat']['id']}:{rt['message_id']}"  # same shape send_message/send_photo return
     if "voice" in m or "audio" in m:

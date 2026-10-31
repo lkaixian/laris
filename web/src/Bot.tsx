@@ -10,8 +10,6 @@ import { tx } from './strings'
 // is about, thinks while an answer is being worked out, and talks while it is given. Only transform and opacity animate; with reduced
 // motion it simply appears where it should be. It never reads or changes your data: it only reacts to messages from bot.ts.
 const T = {
-  look: { en: 'Look here!', ms: 'Tengok sini!', zh: '看这里！', ta: 'இங்கே பாருங்கள்!' },
-  tap: { en: 'Try clicking it!', ms: 'Cuba klik!', zh: '点一下试试！', ta: 'கிளிக் செய்து பாருங்கள்!' },
   hello: { en: "Hi! I'm Ask Laris. Want a quick tour of this page?", ms: 'Hai! Saya Ask Laris. Nak lawatan ringkas halaman ini?', zh: '你好！我是 Ask Laris。要不要快速看看这一页？', ta: 'வணக்கம்! நான் Ask Laris. இந்தப் பக்கத்தின் சிறு சுற்றுலா வேண்டுமா?' },
   show: { en: 'Show me', ms: 'Tunjukkan', zh: '带我看看', ta: 'காட்டு' },
   no: { en: 'Not now', ms: 'Bukan sekarang', zh: '以后再说', ta: 'இப்போது வேண்டாம்' },
@@ -26,7 +24,6 @@ const T = {
 const page = () => (location.hash.split('/')[1] || 'home').split('?')[0]
 const seen = (k: string) => { try { return sessionStorage.getItem('laris.bot.' + k) === '1' } catch { return false } }
 const mark = (k: string) => { try { sessionStorage.setItem('laris.bot.' + k, '1') } catch { /* private window: it may greet again */ } }
-const overlap = (a: BotHole, b: BotHole) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y))
 
 export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onClick: () => void; onWarm: () => void; name?: string; uid?: string }) {
   useLang()
@@ -58,32 +55,18 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
   }
 
   useEffect(() => {
-    let wait = 0
     const on = (e: Event) => {
       const m = (e as CustomEvent<BotMsg>).detail
       if (m.kind === 'state') { setS(m.s); if (m.s === 'think') { if (!isOpen.current) say(T.think, 0) } else setLine(l => (l && l.text === T.think ? null : l)); return }
       if (m.kind === 'say') { say(m.text, m.ms ?? 3200); return }
-      if (m.kind === 'home') { clearTimeout(wait); setSpot(false); setLine(null); fly(null); return }
-      // spot: wait a beat so the guide panel has settled in its corner, then stand where neither the part nor the panel is covered
-      setIntro(false); setLine(l => (l?.offer ? null : l))  // a guide has started: drop the offer so it cannot sit on the guide panel
-      clearTimeout(wait)
-      wait = window.setTimeout(() => {
-        const z = size(), h0 = home(), hole = m.hole
-        if (overlap(hole, h0) > h0.w * h0.h * 0.4) { setSpot(false); fly(null); return }  // the step is about the robot itself
-        const pe = document.querySelector('.guide-panel, [data-tour-panel]') as HTMLElement | null
-        const pr = pe?.getBoundingClientRect(), panel: BotHole | null = pr ? { x: pr.x, y: pr.y, w: pr.width, h: pr.height } : null
-        const g = 8, clampX = (x: number) => Math.max(g, Math.min(innerWidth - z.w - g, x)), clampY = (y: number) => Math.max(g, Math.min(innerHeight - z.h - g, y))
-        const cands = [
-          { x: hole.x - z.w - g, y: hole.y }, { x: hole.x + hole.w + g, y: hole.y },
-          { x: hole.x + hole.w - z.w, y: hole.y - z.h - g }, { x: hole.x, y: hole.y + hole.h + g },
-        ].map(c => ({ x: clampX(c.x), y: clampY(c.y) }))
-        const score = (c: { x: number; y: number }) => { const b = { x: c.x, y: c.y, w: z.w, h: z.h }; return overlap(b, hole) * 10 + (panel ? overlap(b, panel) : 0) }
-        const best = cands.reduce((a, c) => (score(c) < score(a) ? c : a))
-        setSpot(true); fly(best); say(m.act ? T.tap : T.look, 2600)
-      }, 520)
+      if (m.kind === 'home') { setSpot(false); setLine(null); fly(null); return }
+      // spot: a guide or tour step is pointing at a part of the page. The robot stays in its corner, above the dimmed page, so it is always in view
+      // (it used to fly next to the part and could land behind the highlight or off the screen).
+      setIntro(false); setLine(l => (l?.offer ? null : l))  // drop the offer so it cannot sit on the guide panel
+      setSpot(true); fly(null)
     }
     addEventListener(BOT_EVENT, on)
-    return () => { removeEventListener(BOT_EVENT, on); clearTimeout(wait) }
+    return () => removeEventListener(BOT_EVENT, on)
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Right after sign-in the robot introduces itself by name (once per sign-in).

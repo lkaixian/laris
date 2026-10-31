@@ -8,17 +8,19 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from collections import defaultdict, deque
 from datetime import datetime
 from typing import NamedTuple
 
 import psycopg
+from psycopg.types.json import Jsonb
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
-from .. import availability, db, pipeline, tgbots
+from .. import ai_quota, availability, db, pipeline, tgbots
 from .. import license as lic
 from ..channels import telegram, whatsapp
 from ..errors import ApiError
@@ -137,9 +139,50 @@ STAFF_Q = r"""select id, tenant_id from users
 # a `tg:<chat id>` contact belongs to that exact Telegram chat only (never read as a phone number)
 PARTY_Q = r"""select id, tenant_id, role from parties
               where ((%(ch)s = 'whatsapp' and coalesce(contact,'') !~* '^\s*(tg|telegram):' and regexp_replace(coalesce(contact,''), '\D', '', 'g') = %(d)s)
-                     or (%(ch)s = 'telegram' and lower(btrim(coalesce(contact,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)))
+                     or (%(ch)s = 'telegram' and (lower(btrim(coalesce(contact,''))) in ('tg:' || %(s)s, 'telegram:' || %(s)s)
+                                             or (role = 'customer' and btrim(coalesce(contact,'')) = %(s)s))))  -- a customer's contact is the bare chat id; renaming them must not lose them
                 and (%(scope)s::uuid is null or tenant_id = %(scope)s)
               order by (role = 'supplier') desc, id"""
+
+
+PHONE = re.compile(r"\+?\d[\d \-]{6,16}\d")
+LABELS = re.compile(r"\b(my|name|nama|phone|number|tel|telefon|hp|and|dan|is|ialah)\b", re.I)
+PROFILE_TRIES = 2  # asks this many times, then the enquiry goes on without a number
+
+
+def parse_profile(text: str) -> tuple[str, str]:
+    """A reply like "Ah Seng 012-3456789" -> (name, phone); phone is "" when there is no usable number."""
+    m = PHONE.search(text or "")
+    digits = re.sub(r"\D", "", m.group()) if m else ""
+    if not 8 <= len(digits) <= 15:
+        return "", ""
+    rest = LABELS.sub(" ", (text[:m.start()] + " " + text[m.end():]))
+    name = " ".join(re.sub(r"[^\w .'’@-]", " ", rest).split())[:60]
+    return name, ("+" if m.group().lstrip().startswith("+") else "") + digits
+
+
+def _profile_on(m) -> bool:
+    return m.channel == "telegram" and os.environ.get("TELEGRAM_ASK_PROFILE", "1") != "0"
+
+
+def _profile_answer(conn, tid, pid, text, lang):
+    """The customer's reply to "your name and phone number?" -> (reply, None) to ask again, or (None, (kept text, kept id, thanks)) to go on
+    with the enquiry we kept (answered, or asked enough times)."""
+    row = conn.execute("select pending_enquiry pe, profile_tries n, name from parties where id=%s for update", (pid,)).fetchone()
+    pe = row["pe"]
+    name, phone = parse_profile(text)
+    if phone:
+        new = name or row["name"]
+        while name and conn.execute("select 1 from parties where tenant_id=%s and role='customer' and name=%s and id<>%s", (tid, new, pid)).fetchone():
+            new = f"{name} {secrets.token_hex(2)}"
+        # the contact (the chat id) stays the routing key; the name and number are for people
+        conn.execute("update parties set phone=%s, name=%s, pending_enquiry=null where id=%s", (phone, new, pid))
+        return None, (pe["text"], pe["ext"], T[lang]["profile_ok"].format(name=name) + " " if name else "")
+    if row["n"] + 1 < PROFILE_TRIES:
+        conn.execute("update parties set profile_tries=profile_tries+1 where id=%s", (pid,))
+        return T[lang]["ask_profile_again"], None
+    conn.execute("update parties set profile_tries=%s, pending_enquiry=null where id=%s", (PROFILE_TRIES, pid))
+    return None, (pe["text"], pe["ext"], "")
 
 
 def resolve_tenant(conn, m, digits):
@@ -250,6 +293,8 @@ def _handle(conn, s, m):
         return None
     if p is None:
         p = {"id": pipeline.party(conn, tid, "customer", f"{m.channel} {m.sender}"[:100], m.sender), "role": "customer"}
+    if m.channel == "telegram" and m.username and p["role"] == "customer" and p["id"]:
+        conn.execute("update parties set tg_username=%s where id=%s and tg_username is distinct from %s", (m.username, p["id"], m.username))
     if p["role"] == "customer" and (out := _rights(conn, tid, p["id"], m, cfg, digits)) is not None:  # never staff or suppliers
         return out
     if p["role"] == "supplier":
@@ -257,6 +302,10 @@ def _handle(conn, s, m):
             pipeline.record_rfq_reply(conn, send, m, s.ilmu)  # an answer to "how much for this photo?", not a document
             return "Thanks, we have your reply."
         if m.media_kind == "image" and CATALOG.match(m.text or ""):  # a caption "/catalog" or "catalog": a many-product photo, not a document
+            try:
+                ai_quota.check(conn, tid, "photos")
+            except ApiError as e:
+                return e.message
             throttle(f"listing:{tid}:{digits}", 10, 600, "too many catalog photos")
             data, _ = _dl(s, m)
             return Catalog(tid, actor, p["id"], data, m)  # the model runs after this transaction has closed (see _catalog)
@@ -285,17 +334,31 @@ def _handle(conn, s, m):
     if not text:
         raise ApiError(415, "unsupported_media", "enquiries: send text or a voice note")
     lang = _lang(cfg, text)
-    if (r := availability.answer(conn, tid, p["id"], text, s.ilmu, channel=m.channel, external_id=m.external_id)) is not None:
+    thanks, ext = "", m.external_id
+    held = conn.execute("select pending_enquiry is not null h from parties where id=%s", (p["id"],)).fetchone()["h"] if _profile_on(m) else False
+    if held:  # this message answers "your name and phone number?"; the first enquiry is still waiting
+        out, kept = _profile_answer(conn, tid, p["id"], text, lang)
+        if out is not None:
+            return out
+        text, ext, thanks = kept
+    elif (r := availability.answer(conn, tid, p["id"], text, s.ilmu, channel=m.channel, external_id=m.external_id)) is not None:
         return r
     if pipeline.classify_reply(text) and (hit := pipeline.record_reply(conn, p["id"], m.channel, text, m.external_id)):
         return T[lang]["noted"].format(doc=hit["doc_no"]) + _closed(cfg, lang)  # the owner records accept or decline
+    if _profile_on(m) and not held:  # a new Telegram customer: name and number first, then the quote
+        who = conn.execute("select phone, profile_tries n from parties where id=%s", (p["id"],)).fetchone()
+        if not who["phone"] and who["n"] < PROFILE_TRIES:
+            conn.execute("update parties set pending_enquiry=%s where id=%s", (Jsonb({"text": text, "ext": m.external_id}), p["id"]))
+            return T[lang]["ask_profile"]
     try:
-        res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=m.external_id, ilmu_client=s.ilmu)
+        res = pipeline.handle_enquiry(conn, tid, p["id"], m.channel, text, external_id=ext, ilmu_client=s.ilmu)
     except ApiError as e:
+        if e.code == "ai_limit":
+            return T[lang]["limit"]
         if e.code not in CLARIFY:  # anything else (no cost on file, AI down) is our problem, not the customer's
             raise
         return _clarify(conn, tid, lang)
-    return T[lang]["thanks"].format(doc=res["doc_no"]) + _closed(cfg, lang)
+    return thanks + T[lang]["thanks"].format(doc=res["doc_no"]) + _closed(cfg, lang)
 
 
 def _catalog(s, j: Catalog) -> str | None:

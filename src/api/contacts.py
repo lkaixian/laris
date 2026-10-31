@@ -30,7 +30,7 @@ def list_contacts(ctx: Ctx, q: str = "", role: str | None = None, limit: int = 2
                 from documents d join document_lines l on l.document_id = d.id and not l.is_header
                 where d.party_id = p.id and d.status not in ('cancelled', 'superseded', 'rejected'))""" if ctx.costs else "null"
     return ctx.conn.execute(
-        f"""select p.id, p.role, p.name, p.contact, p.email, p.attention, p.ssm_no, p.address, p.notes,
+        f"""select p.id, p.role, p.name, p.contact, p.phone, p.tg_username, p.email, p.attention, p.ssm_no, p.address, p.notes,
                    (select count(*) from documents d where d.party_id = p.id) as documents,
                    (select max(d.created_at) from documents d where d.party_id = p.id) as last_activity,
                    {value} as value

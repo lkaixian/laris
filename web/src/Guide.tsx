@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { guideFor } from './guides'
 import { t, useLang } from './i18n'
 import { tx } from './strings'
+import { bot } from './bot'
 
 // The "?" guide: one step at a time, beside the page, pointing at the part of the page each step is about.
 // A step that points at a part of the page blurs and dims the rest (a mask with a hole over that part); a step with nothing
@@ -39,14 +40,14 @@ export function GuidePanel() {
     addEventListener(EVENT, h)
     return () => removeEventListener(EVENT, h)
   }, [])
-  const close = () => { setKey(null); setSpot(null); lastFocus.current?.focus?.() }
+  const close = () => { setKey(null); setSpot(null); bot({ kind: 'home' }); lastFocus.current?.focus?.() }
   const go = (n: number) => { dir.current = n >= i ? 1 : -1; setI(n) }
   // Going to another page ends the guide (the sidebar "?" for another page closes this one and opens that page's guide).
   useEffect(() => {
     if (!key) return
     const page = () => (location.hash.split('/')[1] || 'home').split('?')[0]
     const here = page()
-    const h = () => { if (page() !== here) { setKey(null); setSpot(null) } }  // a filter changing ?query on the same page keeps it open
+    const h = () => { if (page() !== here) { setKey(null); setSpot(null); bot({ kind: 'home' }) } }  // a filter changing ?query on the same page keeps it open
     addEventListener('hashchange', h)
     return () => removeEventListener('hashchange', h)
   }, [key])
@@ -66,7 +67,7 @@ export function GuidePanel() {
     const target = guide?.steps[i]?.target
     const el = target ? [...document.querySelectorAll<HTMLElement>(`[data-guide="${target}"]`)].find(x => x.getClientRects().length > 0) : undefined
     setMissing(!!target && !el)
-    if (!el) { setSpot(null); return () => clearTimeout(gt) }  // otherwise the old ring stays until here, so it can slide to the next part
+    if (!el) { setSpot(null); bot({ kind: 'home' }); return () => clearTimeout(gt) }  // otherwise the old ring stays until here, so it can slide to the next part
     el.classList.add('guide-spot')
     if (guide!.steps[i].act) el.classList.add('guide-try')
     // On a phone the guide covers the lower half, so the part it points at goes to the top of the screen.
@@ -79,6 +80,7 @@ export function GuidePanel() {
       const x0 = Math.max(4, r.left - pad), y0 = Math.max(4, r.top - pad), x1 = Math.min(innerWidth - 4, r.right + pad), y1 = Math.min(innerHeight - 4, r.bottom + pad)
       const hole = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) }
       setSpot({ top: Math.max(8, y0 - 6), left: Math.max(8, x0 - 6), n: i + 1, hole })
+      bot({ kind: 'spot', hole, act: !!guide!.steps[i].act })
       const p = box.current
       if (p && !phone) {  // first corner where the panel and the ringed part do not overlap
         const pw = p.offsetWidth, ph = p.offsetHeight, m = 16

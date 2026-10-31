@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { api, can, canOpen } from './api'
 import type { Me } from './api'
 import { t, useLang } from './i18n'
+import { bot as robot } from './bot'
 import { FirstRun } from './FirstRun'
 import { applyOnb, buildSteps, firstRunVisible, kindFor, resumable, routeOf } from './tours'
 import type { Onb, OnbPatch, TourKind } from './tours'
@@ -181,6 +182,9 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
   }
 
   const pad = 6, r = box && { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), w: box.w + pad * 2, h: box.h + pad * 2 }
+  // The robot walks to whatever this step points at (and goes home when the tour ends).
+  useEffect(() => { if (r) robot({ kind: 'spot', hole: r, act: !!(step?.doClick || step?.doRoute) }); else robot({ kind: 'home' }) }, [r?.x, r?.y, r?.w, r?.h, step?.id])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { robot({ kind: 'home' }) }, [])
   const narrow = innerWidth < 640, W = Math.min(352, innerWidth - 16)
   let pos: React.CSSProperties = { left: Math.max(8, (innerWidth - W) / 2), top: Math.max(8, (innerHeight - ch) / 2), width: W }
   if (narrow) pos = { left: 0, right: 0, bottom: 0 }
@@ -200,7 +204,7 @@ function Tour({ kind, i }: { kind: TourKind; i: number }) {
         <div aria-hidden="true" className="tour-glide pointer-events-none fixed z-[80] rounded-ui border-2 border-accent" style={{ top: r.y, left: r.x, width: r.w, height: r.h }} />
       </> : <div aria-hidden="true" className={dim} style={{ inset: 0 }} />}
       <div ref={card} role="dialog" aria-modal="true" aria-label={t({ en: 'Guided tour', ms: 'Lawatan berpandu' })} tabIndex={-1} onKeyDown={keys}
-        className="tour-fade tour-glide card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
+        data-tour-panel="" className="tour-fade tour-glide card fixed z-[81] border-accent shadow-3 outline-none" style={pos}>
         <p aria-live="polite" className="sr-only">{`${idx + 1} / ${total}. ${title}. ${body}`}</p>
         <p className="text-sm font-semibold text-muted">{t({ en: `${idx + 1} of ${total}`, ms: `${idx + 1} daripada ${total}` })}</p>
         <h2 className="mt-1 text-lg font-semibold">{title}</h2>

@@ -153,6 +153,7 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
   const link = d?.doc.accept_link ?? null
   // While the customer's link is live it records their answer, so the buttons that record it by hand are not offered (they come back if the link ends unused).
   const waitingOnLink = !!d && !!link && d.doc.direction === 'out' && ['sent', 'read'].includes(d.doc.status)
+  useEffect(() => { if (!waitingOnLink || MOCK) return; const i = setInterval(() => { if (!document.hidden) s.reload() }, 8000); return () => clearInterval(i) }, [waitingOnLink, s.reload])  // the page follows the customer's answer by itself
   const actions = (d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []).filter(a => !(waitingOnLink && ['accepted', 'rejected'].includes(a.to)))
   const edit = !!d && d.doc.direction === 'in' && REVIEWABLE.includes(d.doc.status)
   const docNo = d?.doc.id === id ? d.doc.doc_no ?? t(S.document) : undefined

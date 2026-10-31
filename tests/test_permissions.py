@@ -28,6 +28,7 @@ OPEN = {
     ("POST", "/api/assistant/guide"),  # navigation help for any signed-in user; 403 ai_off unless the owner turned it on, tests/test_ai_guide.py
     ("POST", "/api/mcp"),  # no user session: an owner-issued MCP key bound to a staff role is the credential; read-only search, tests/test_mcp.py
     ("POST", "/api/assistant"),  # answers questions with the caller's own scrubbed read access; changes nothing
+    ("POST", "/api/contracts/{cid}/transition"),  # gated inside, after the contract is found (404 for an unknown id): approval limits and manage_contracts, tests/test_suppliers_api.py
 }
 ID = str(uuid4())
 SEND = {"to": "parsed"}
@@ -82,6 +83,19 @@ REQ = {
     ("POST", "/api/license/accept-offer"): {},
     ("POST", "/api/license/request"): {"json": {"plan": "starter", "seats": 1}},
     ("POST", "/api/license/checkout"): {"json": {"plan": "starter"}},
+    ("PUT", "/api/suppliers/{sid}/profile"): {"json": {}},
+    ("POST", "/api/products"): {"json": {"name": "x", "base_uom": "kg"}},
+    ("PUT", "/api/offers"): {"json": {"supplier_id": ID, "product_id": ID, "tiers": [[1, "1.00"]]}},
+    ("POST", "/api/offers/from-reply/{reply_id}"): {"json": {"product_id": ID}},
+    ("POST", "/api/offers/{oid}/to-cost-book"): {},
+    ("POST", "/api/products/{pid}/recommendation"): {},
+    ("PUT", "/api/products/{pid}/shortlist/{oid}"): {},
+    ("POST", "/api/contracts"): {"json": {"supplier_id": ID, "name": "x", "items": [{"product_id": ID, "price_per_pack": "1.00"}], "start_on": "2026-01-01", "end_on": "2026-12-31"}},
+    ("POST", "/api/contracts/{cid}/acknowledge"): {},
+    ("POST", "/api/purchases/check"): {"json": {"product_id": ID, "supplier_id": ID, "qty": "1", "amount": "1.00"}},
+    ("POST", "/api/purchases"): {"json": {"product_id": ID, "supplier_id": ID, "qty": "1", "amount": "1.00"}},
+    ("POST", "/api/purchases/{pid}/decide"): {"params": {"approve": "true"}},
+    ("POST", "/api/suppliers-demo"): {},
 }
 
 

@@ -19,6 +19,7 @@ const money = (n: number) => n.toFixed(4)
 const supA = { id: 'p1', name: 'SAMPLE Supplier A Acrylic Sdn Bhd' }
 const cust = { id: 'p3', name: 'SAMPLE Customer Cafe (synthetic)' }
 const REVIEWABLE = ['received', 'parsed']
+const linked = new Set<string>()  // quotes whose customer link was sent in this demo session
 const live = ['draft', 'approved', 'sent', 'read']
 const ago = (days: number) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
 
@@ -400,7 +401,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     const services = base.map(([key, state]) => ({ key, state, ...(isLive ? found[key] : {}) }))
     return { level: items.length ? rank[Math.max(...items.map(i => rank.indexOf(i.level)))] : 'ok', items, services, ...(isLive ? { checked_at: new Date().toISOString() } : {}) }
   }
-  { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) return r }
+  { const r = mockAccept(method, p, body, owner, id => docs[id]?.doc.status); if (r !== undefined) { const lk = p.match(/^\/documents\/([^/]+)\/accept-link$/); if (lk && method === 'POST') linked.add(lk[1]); return r } }
   { const r = mockDelivery(method, p, body); if (r !== undefined) return r }
   if (p === '/me/onboarding') return mockOnboarding(method, owner, body)
   { const r = mockPrivacy(method, p, owner, body); if (r !== undefined) return r }
@@ -494,7 +495,8 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   if ((m = p.match(/^\/documents\/([^/]+)$/))) {
     const d = docs[m[1]]
     if (!d) throw new ApiError(404, 'not_found', 'Document not found.')
-    return owner ? withProv(d) : staffView(withProv(d))
+    const full = owner ? withProv(d) : staffView(withProv(d))
+    return d.doc.direction === 'out' && linked.has(m[1]) && ['sent', 'read'].includes(d.doc.status) ? { ...full, doc: { ...full.doc, accept_link: { created_at: new Date().toISOString(), first_viewed_at: null, expires_at: new Date(Date.now() + 30 * 864e5).toISOString() } } } : full
   }
   if ((m = p.match(/^\/documents\/([^/]+)\/transition$/)) && method === 'POST') {
     const d = docs[m[1]]

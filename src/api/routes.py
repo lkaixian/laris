@@ -130,6 +130,12 @@ def document(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
            "messages": ctx.conn.execute(  # supplier chat text carries their prices: owner only
                "select direction, channel, body, created_at as at from messages where document_id=%s order by created_at, id",
                (doc_id,)).fetchall() if ctx.costs or d["direction"] == "out" else []}
+    if d["direction"] == "out":
+        # a live accept link records the customer's answer by itself (db/accept.sql), so nobody needs to record it by hand
+        out["doc"]["accept_link"] = ctx.conn.execute(
+            """select created_at, first_viewed_at, expires_at from quote_accept_links
+               where quote_id=%s and tenant_id=%s and revoked_at is null and decided_at is null and expires_at > now() order by created_at desc limit 1""",
+            (doc_id, ctx.tenant_id)).fetchone()
     if ctx.costs and d["direction"] == "out":
         out["provenance"] = ctx.conn.execute(
             """select line_id, cost_item_id, supplier, source_doc_id, source_doc_no, source_line_id, cost_date, unit_cost,

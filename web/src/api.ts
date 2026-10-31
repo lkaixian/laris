@@ -25,8 +25,10 @@ export interface Provenance {
   current_unit_cost: string; cost_is_stale: boolean; line_margin: string
 }
 export interface Me { id: string; role: Role; role_key?: string; role_name?: string; permissions?: string[]; telegram_linked?: boolean; ai_guide?: boolean; name: string; org: { name: string; brand_color?: string | null; logo_url: string | null } }
+// A live customer link (not used, revoked or expired) records the customer's accept or decline by itself.
+export interface AcceptLink { created_at: string; first_viewed_at: string | null; expires_at: string }
 export interface DocDetail {
-  doc: DocSummary
+  doc: DocSummary & { accept_link?: AcceptLink | null }
   lines: Line[]
   provenance?: Provenance[]
   messages: { direction: string; channel: string; body: string; at: string }[]

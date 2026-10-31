@@ -6,7 +6,7 @@ import { Timeline } from './Timeline'
 import { useToast } from './Toast'
 import { rm, stageLabel, msg, REVIEWABLE, focusTop, useFetch, Async, PageHeader, TableRegion, Status } from './ui'
 import type { DocDetail, Line, Field } from './api'
-import { t, useLang } from './i18n'
+import { locale, t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { tx } from './strings'
 
@@ -55,6 +55,8 @@ const S = {
   thPrice: { en: 'Unit price', ms: 'Harga seunit', zh: '单价', ta: 'அலகு விலை' },
   thAction: { en: 'Action', ms: 'Tindakan', zh: '操作', ta: 'செயல்' },
   decision: { en: 'Decision', ms: 'Keputusan', zh: '决定', ta: 'முடிவு' },
+  linkWaiting: { en: 'The customer answers on the link we sent, and their answer is recorded here by itself. There is nothing to record by hand.', ms: 'Pelanggan menjawab melalui pautan yang kami hantar, dan jawapan mereka direkodkan di sini secara automatik. Tiada apa perlu direkod secara manual.', zh: '客户在我们发出的链接上作答，答复会自动记录在这里，无需手动记录。', ta: 'நாங்கள் அனுப்பிய இணைப்பில் வாடிக்கையாளர் பதிலளிக்கிறார்; அவர் பதில் இங்கே தானாகப் பதிவாகும். கையால் பதிவு செய்ய எதுவும் இல்லை.' },
+  linkSent: { en: 'Link sent', ms: 'Pautan dihantar', zh: '链接已发出', ta: 'இணைப்பு அனுப்பப்பட்டது' }, linkOpened: { en: 'opened by the customer', ms: 'dibuka oleh pelanggan', zh: '客户已打开', ta: 'வாடிக்கையாளர் திறந்தார்' }, linkNotOpened: { en: 'not opened yet', ms: 'belum dibuka', zh: '尚未打开', ta: 'இன்னும் திறக்கப்படவில்லை' }, linkEnds: { en: 'Works until', ms: 'Sah sehingga', zh: '有效期至', ta: 'செல்லுபடியாகும் வரை' },
   ownerDecides: { en: 'Only the owner can decide on this quote. Switch the simulated role to owner to try it.', ms: 'Hanya pemilik boleh membuat keputusan mengenai sebut harga ini. Tukar peranan simulasi kepada pemilik untuk mencubanya.', zh: '只有所有者可以对此报价作决定。将模拟角色切换为所有者即可试用。', ta: 'இந்த மேற்கோளில் உரிமையாளர் மட்டுமே முடிவு செய்ய முடியும். முயற்சிக்க, உருவகப்படுத்தப்பட்ட பங்கை உரிமையாளராக மாற்றவும்.' },
   reason: { en: 'Reason (optional, saved to the activity log)', ms: 'Sebab (pilihan, disimpan dalam log audit)', zh: '原因（可选，将保存到审计日志）', ta: 'காரணம் (விருப்பம், தணிக்கைப் பதிவில் சேமிக்கப்படும்)' },
   working: { en: 'Working...', ms: 'Memproses...', zh: '处理中...', ta: 'செயல்படுகிறது...' },
@@ -143,7 +145,10 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
   const toast = useToast()
   const d = s.data
   const cols = (f.data ?? []).filter(x => x.show_in_grid).sort((a, b) => a.sort_order - b.sort_order)
-  const actions = d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []
+  const link = d?.doc.accept_link ?? null
+  // While the customer's link is live it records their answer, so the buttons that record it by hand are not offered (they come back if the link ends unused).
+  const waitingOnLink = !!d && !!link && d.doc.direction === 'out' && ['sent', 'read'].includes(d.doc.status)
+  const actions = (d ? NEXT[d.doc.direction][d.doc.status] ?? [] : []).filter(a => !(waitingOnLink && ['accepted', 'rejected'].includes(a.to)))
   const edit = !!d && d.doc.direction === 'in' && REVIEWABLE.includes(d.doc.status)
   const docNo = d?.doc.id === id ? d.doc.doc_no ?? t(S.document) : undefined
   // Arrived by navigation (focus is parked on main): move it to the heading once the document is there.
@@ -212,7 +217,9 @@ export function DetailView({ id, owner }: { id: string; owner: boolean }) {
             <aside className="grid gap-6 lg:order-2">
             <section className="card" aria-labelledby="actions">
               <h2 id="actions" className="text-md font-semibold">{t(S.decision)}</h2>
-              {!actions.length && <p className="text-sm text-muted">{t({ en: `This document is ${stageLabel(d.doc.status)}. No further actions.`, ms: `Dokumen ini ${stageLabel(d.doc.status)}. Tiada tindakan lanjut.`, zh: `此文档状态为${stageLabel(d.doc.status)}。无需进一步操作。`, ta: `இந்த ஆவணம் ${stageLabel(d.doc.status)}. மேலும் செயல்கள் இல்லை.` })}</p>}
+              {waitingOnLink && link && <div className="mt-2 grid gap-1 text-sm"><p>{t(S.linkWaiting)}</p>
+                <p className="text-muted">{t(S.linkSent)} {new Date(link.created_at).toLocaleDateString(locale())}, {t(link.first_viewed_at ? S.linkOpened : S.linkNotOpened)}. {t(S.linkEnds)} {new Date(link.expires_at).toLocaleDateString(locale())}.</p></div>}
+              {!actions.length && !waitingOnLink && <p className="text-sm text-muted">{t({ en: `This document is ${stageLabel(d.doc.status)}. No further actions.`, ms: `Dokumen ini ${stageLabel(d.doc.status)}. Tiada tindakan lanjut.`, zh: `此文档状态为${stageLabel(d.doc.status)}。无需进一步操作。`, ta: `இந்த ஆவணம் ${stageLabel(d.doc.status)}. மேலும் செயல்கள் இல்லை.` })}</p>}
               {actions.length > 0 && !owner && !actions.some(a => !a.owner) && <p className="text-sm text-muted">{t(S.ownerDecides)}</p>}
               {actions.some(a => !a.owner || owner) && (
                 <>

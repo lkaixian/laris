@@ -15,7 +15,7 @@ def test_app_role_url_keeps_host_and_escapes_password():
 
 def test_one_url_switches_to_laris_app(pg_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.delenv("DATABASE_URL_OWNER", raising=False)
+    monkeypatch.setenv("DATABASE_URL_OWNER", "")  # falsy = unset for apply_schema; monkeypatch restores what the switch overwrites
     monkeypatch.setenv("LARIS_APP_PASSWORD", "app-pw-1")
     db.apply_schema(seed=True)
     import os

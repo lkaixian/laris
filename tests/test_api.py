@@ -144,11 +144,12 @@ def test_inbound_review_flow_and_line_rules(env):
     assert e.c.post(url, json={"qty": 3}, headers=e.S).status_code == 409  # locked after review
     assert tr(e, doc["id"], "accepted", e.S).status_code == 403
     assert tr(e, doc["id"], "accepted", e.O).status_code == 200
-    # out line price is rules-only
+    # out line price: rules, or the owner's own while it is a draft
     q = seed_quote(e)
     ql = e.sql("select id from document_lines where document_id=%s", (q,))[0]["id"]
-    for who in (e.S, e.O):
-        assert e.c.post(f"/api/documents/{q}/lines/{ql}", json={"unit_price": 1}, headers=who).status_code == 403
+    url = f"/api/documents/{q}/lines/{ql}"
+    assert e.c.post(url, json={"unit_price": 1}, headers=e.S).status_code == 403  # staff never; the owner only while the quote is a draft (tests/test_line_unit.py)
+    assert e.c.post(url, json={"unit_price": 1}, headers=e.O).status_code == 409
 
 
 # ---------------------------------------------------------------- stale alerts

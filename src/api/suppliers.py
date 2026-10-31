@@ -194,8 +194,14 @@ def summary(ctx: Ctx = Depends(read_ctx)):
                                     coalesce(sum(amount) filter (where status='approved' and contract_id is not null),0) in_contract,
                                     coalesce(sum(amount) filter (where status='approved' and off_contract_reason is not null),0) off_contract
                              from purchases where tenant_id=%s and bought_on >= %s""", (ctx.tenant_id, t - timedelta(days=90))).fetchone()
-    sv = ctx.conn.execute("""select coalesce(sum((result->>'saving_vs_last_paid')::numeric),0) s from recommendations
-                             where tenant_id=%s and created_at >= date_trunc('month', now())""", (ctx.tenant_id,)).fetchone()
+    # Saved = what approved orders this month cost less than the same product's previous price (the latest earlier day's order, its cheapest if
+    # there were several). Counts real orders only: a saved recommendation nobody acted on, or saved twice, adds nothing.
+    sv = ctx.conn.execute("""select coalesce(sum(greatest(prev.pp - pu.amount / pu.qty, 0) * pu.qty), 0) s
+                             from purchases pu
+                             join lateral (select p2.amount / p2.qty pp from purchases p2
+                                           where p2.tenant_id = pu.tenant_id and p2.product_id = pu.product_id and p2.status = 'approved' and p2.bought_on < pu.bought_on
+                                           order by p2.bought_on desc, p2.amount / p2.qty limit 1) prev on true
+                             where pu.tenant_id=%s and pu.status = 'approved' and pu.bought_on >= date_trunc('month', %s::date)::date""", (ctx.tenant_id, t)).fetchone()
     pending = ctx.conn.execute("select count(*) n from purchases where tenant_id=%s and status='pending'", (ctx.tenant_id,)).fetchone()["n"]
     waiting = ctx.conn.execute("select count(*) n from contracts where tenant_id=%s and state='pending_approval'", (ctx.tenant_id,)).fetchone()["n"]
     total = sp["total"] or D(0)

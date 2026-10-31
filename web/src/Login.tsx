@@ -7,6 +7,7 @@ import { t, useLang } from './i18n'
 import type { Text } from './i18n'
 
 const S = {
+  home: { en: 'Back to home', ms: 'Kembali ke laman utama', zh: '返回首页', ta: 'முகப்புக்குத் திரும்பு' },
   goSignIn: { en: 'LARIS, go to sign in', ms: 'LARIS, pergi ke log masuk', zh: 'LARIS，前往登录', ta: 'LARIS, உள்நுழைவுக்குச் செல்' },
   title: { en: 'Sign in', ms: 'Log masuk', zh: '登录', ta: 'உள்நுழை' },
   need: { en: 'Enter your email or username and your password.', ms: 'Masukkan e-mel atau nama pengguna dan kata laluan anda.', zh: '请输入您的邮箱或用户名以及密码。', ta: 'உங்கள் மின்னஞ்சல் அல்லது பயனர்பெயரையும் கடவுச்சொல்லையும் உள்ளிடவும்.' },
@@ -49,7 +50,10 @@ export function AuthPage({ dark, setDark, children, onBrand }: { dark: boolean; 
     <main id="main" className="mx-auto grid min-h-screen max-w-md grid-cols-[minmax(0,1fr)] content-center gap-6 px-4 py-8">
       <div className="auth-head flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <a href="#/login" aria-label={t(S.goSignIn)} onClick={onBrand} className="inline-flex min-h-11 items-center"><Brand dark={dark} /></a>
-        <ThemeToggle dark={dark} setDark={setDark} />
+        <div className="flex items-center gap-2">
+          <a href="#/welcome" onClick={onBrand} className="link inline-flex min-h-11 items-center text-sm">{t(S.home)}</a>
+          <ThemeToggle dark={dark} setDark={setDark} />
+        </div>
       </div>
       <div className="auth-card grid gap-6">{children}</div>
     </main>

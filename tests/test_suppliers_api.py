@@ -239,3 +239,22 @@ def test_pending_list_and_event_order(env):
     cid = e.sql("select id from contracts where name='Cooking oil supply 2026'")[0]["id"]
     ev = e.c.get(f"/api/contracts/{cid}", headers=e.O).json()["events"]
     assert [x["to_state"] for x in ev] == ["draft", "pending_approval", "active"]
+
+
+def test_savings_this_month_counts_only_real_cheaper_orders(env):
+    e = env
+    pid, sid = setup(e)
+    before = D(e.c.get("/api/suppliers/summary", headers=e.O).json()["savings_this_month"])
+    e.c.post(f"/api/products/{pid('Takeaway box 750ml')}/recommendation?qty=100", headers=e.O)  # advice nobody acted on, saved twice
+    e.c.post(f"/api/products/{pid('Takeaway box 750ml')}/recommendation?qty=100", headers=e.O)
+    assert D(e.c.get("/api/suppliers/summary", headers=e.O).json()["savings_this_month"]) == before
+    p = e.c.post("/api/products", json={"name": "Savings probe", "base_uom": "kg"}, headers=e.O).json()["id"]
+    today = e.sql("select (now() at time zone 'Asia/Kuala_Lumpur')::date d")[0]["d"]
+    tid = e.sql("select id from tenants limit 1")[0]["id"]
+    s_ = sid("Selangor")
+    buy = lambda on, amt, st="approved": e.sql("insert into purchases(tenant_id,product_id,supplier_id,bought_on,qty,amount,status) values (%s,%s,%s,%s,10,%s,%s)", (tid, p, s_, on, amt, st))
+    buy(today - timedelta(days=40), 100)     # last paid: 10.00 a kg
+    buy(today, 80)                           # now 8.00 a kg: 20.00 saved
+    buy(today, 50, "pending")                # not approved: counts for nothing
+    buy(today, 120)                          # dearer than last paid: never a negative saving
+    assert D(e.c.get("/api/suppliers/summary", headers=e.O).json()["savings_this_month"]) - before == D("20")

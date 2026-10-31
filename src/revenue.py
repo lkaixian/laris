@@ -1,7 +1,7 @@
 """Revenue and profit for a period. Pure: rows in, a fully worked answer out. No database, no clock.
 
 The definitions (kept deliberately plain, and shown to the owner on the Revenue page):
-  Sales          the value of the orders won in the period, without SST (a sale is counted on the day the quote was accepted)
+  Sales          the value of the orders won in the period, without SST (a sale is counted on the day its job was created, which is when the quote is accepted; there is no separate accepted-date column)
   Cost of goods  what those same orders cost to make or buy, from the supplier cost book (the basis the margin report already uses)
   Untung kasar   (gross profit)  Sales - Cost of goods
   Running costs  rent, wages, bills and the like that the owner has recorded for the period

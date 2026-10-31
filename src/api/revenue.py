@@ -17,7 +17,7 @@ r = APIRouter(prefix="/api")
 
 # One row per order won. Sales come from the quote's own lines (without SST); cost from the cost book, and `complete` says whether EVERY priced line
 # had a cost (v_quote_margin only holds lines that do, so a quote with an uncosted line must not look cheaper than it is).
-# A job made by hand has an agreed amount and no cost. The day an order counts is the day it was accepted, in Malaysia time.
+# A job made by hand has an agreed amount and no cost. The day an order counts is the day its job was created (the quote being accepted creates it), in Malaysia time.
 ORDERS = """
 select j.id, coalesce(q.doc_no, j.title) as ref, coalesce(pq.name, pj.name) as customer,
        (j.created_at at time zone 'Asia/Kuala_Lumpur')::date as "on",

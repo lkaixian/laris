@@ -366,6 +366,7 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
     require_perm(ctx, "record_payments")
     c = ctx.conn
     j = _job(ctx, job_id)
+    party = (c.execute("select name from parties where id=%s", (j["party_id"],)).fetchone() or {}).get("name")
     total, (paid, dep_paid) = _total(ctx, j), _net(c, job_id)
     docs = c.execute("""select id, kind, doc_no, status, subtotal, tax_total, total, extra, issued_at, void_reason, payment_id
                         from deal_docs where job_id=%s order by issued_at, doc_no""", (job_id,)).fetchall()
@@ -384,7 +385,8 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
     st = stage(total, paid, dep_due, dep_paid, inv is not None, bool(dl) and all(x["signed"] >= x["ordered"] for x in dl))
     since = pf["issued_at"] if st == "awaiting_deposit" and pf else inv["issued_at"] if st == "awaiting_payment" else None
     return reply(ctx, {
-        "job": {"id": j["id"], "title": j["title"], "quote_id": j["quote_id"], "status": j["status"]},
+        "job": {"id": j["id"], "title": j["title"], "quote_id": j["quote_id"], "status": j["status"], "customer": party,
+                "quote_deposit_pct": c.execute("select deposit_pct from documents where id=%s", (j["quote_id"],)).fetchone()["deposit_pct"] if j["quote_id"] else None},
         "total": total, "paid": paid, "balance": total - paid if total is not None else None,
         "deposit": {"pct": pf["extra"]["deposit_pct"], "amount": dep_due, "paid": dep_paid} if pf else None,
         "stage": st, "overdue": tr.overdue_reason("order", st, since, datetime.now(timezone.utc), valid_until=due) if since else None,

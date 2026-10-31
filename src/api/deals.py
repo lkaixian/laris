@@ -203,7 +203,10 @@ def receivables(ctx: Ctx = Depends(read_ctx)):
             b = buckets[chain.ageing_bucket((today - x["due_on"]).days) if x["due_on"] else "current"]
             b["count"] += 1
             b["outstanding"] += x["owed"]
-    return reply(ctx, {"as_of": today, "buckets": buckets, "total": sum((b["outstanding"] for b in buckets.values()), Decimal(0)),
+    waiting = ctx.conn.execute("""select count(*) as n from deal_docs d where d.tenant_id=%s and d.kind='proforma' and d.status <> 'void'
+                                  and (select coalesce(sum(case when reverses_payment_id is null then amount else -amount end), 0) from payments p
+                                       where p.job_id = d.job_id and p.purpose = 'deposit') < (d.extra->>'deposit_amount')::numeric""", (ctx.tenant_id,)).fetchone()["n"]
+    return reply(ctx, {"as_of": today, "deposits_waiting": waiting, "buckets": buckets, "total": sum((b["outstanding"] for b in buckets.values()), Decimal(0)),
                        "note": "Reminders are drafts for the owner to send; LARIS sends nothing by itself."})
 
 

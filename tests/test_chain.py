@@ -88,7 +88,9 @@ def test_a_sales_order_is_an_order_and_the_old_money_paths_are_gone(env):
     assert job and e.sql("select amount from jobs where id=%s", (job,))[0]["amount"] == D("137.00")
     # the money for it lives on the job, through the order chain
     assert e.c.post(f"/api/jobs/{job}/proforma", json={"deposit_pct": 30}, headers=e.O).status_code == 201
-    assert e.c.get(f"/api/jobs/{job}/chain", headers=e.O).json()["total"] == "137.00"
+    c = e.c.get(f"/api/jobs/{job}/chain", headers=e.O).json()
+    assert c["total"] == "137.00" and c["job"]["quote_deposit_pct"] is None and c["job"]["customer"]
+    assert e.c.get("/api/chain/receivables", headers=e.O).json()["deposits_waiting"] == 1  # the proforma's deposit is not recorded yet
     # their pf / do / inv / rcp paths are gone
     assert e.c.post(f"/api/chain/{so['id']}/payment", json={"amount": "1"}, headers=e.O).status_code in (404, 405)
     for to in ("pf", "do", "inv"):

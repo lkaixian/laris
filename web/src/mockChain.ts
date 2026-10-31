@@ -300,3 +300,58 @@ export function mockChain(method: string, p: string, q: string, owner: boolean, 
   }
   return undefined
 }
+
+// ---- Customers (GET /customers/flow, /customers/docs, /customers/{stage}/{id}/file) and the owner's templates (/settings/doc-templates): src/api/customers.py
+const STAGE_LIST = ['purchase_order', 'sales_order', 'proforma', 'delivery_order', 'invoice', 'receipt'] as const
+type StageKey = (typeof STAGE_LIST)[number]
+const templates = new Map<string, { filename: string; uploaded_at: string; size: number }>()
+const FIELD_HELP: Record<string, string> = { doc_no: 'Document number', doc_type: 'Document title, e.g. Invoice', date: 'Date issued (dd/mm/yyyy)', customer_name: 'Customer name', customer_address: 'Customer address',
+  company_name: 'Your business name', company_address: 'Your address', currency: 'Currency, e.g. RM', subtotal: 'Total before tax', tax: 'SST amount', total: 'Total to pay',
+  'line.description': 'Item name (put in a table row; the row repeats for every item)', 'line.qty': 'Item quantity', 'line.unit_price': 'Item price', 'line.amount': 'Item amount' }
+interface Row { id: string; doc_no: string; status: string; total: string; made_at: string; job_id: string | null; ref: string | null; customer: string | null; stage: StageKey; attention: boolean }
+function stageRows(stage: StageKey): Row[] {
+  seed(); order('job-1'); order('job-2')
+  const kind = stage === 'purchase_order' ? 'cpo' : stage === 'sales_order' ? 'so' : null
+  if (kind) return docs.filter(d => d.kind === kind).map(d => ({ id: d.id, doc_no: d.doc_no, status: d.status, total: d.total, made_at: d.created_at, job_id: d.job_id, ref: d.ref, customer: d.party, stage,
+    attention: kind === 'cpo' ? d.status === 'received' : d.status === 'confirmed' && !d.job_id }))
+  return [...orders.values()].flatMap(o => o.docs.filter(d => d.kind === stage).map(d => ({ id: d.id, doc_no: d.doc_no, status: d.status, total: d.total, made_at: d.issued_at, job_id: o.id, ref: null, customer: o.customer, stage,
+    attention: d.status !== 'void' && (stage === 'delivery_order' ? d.status === 'issued' : stage === 'proforma' ? paid(o, 'deposit') < Number(d.extra.deposit_amount) - 1e-9 : stage === 'invoice' ? o.total - paid(o) > 0 : false) })))
+}
+export function mockCustomers(method: string, p: string, q: string, owner: boolean, body: unknown): unknown {
+  if (!p.startsWith('/customers') && !p.startsWith('/settings/doc-templates')) return undefined
+  const ST = new URLSearchParams(q)
+  if (p.startsWith('/settings/doc-templates')) {
+    needOwner(owner)
+    let m = p.match(/^\/settings\/doc-templates(?:\/([^/]+))?(\/starter)?$/)
+    if (!m) return undefined
+    const stage = m[1]
+    if (!stage && method === 'GET') return { stages: STAGE_LIST.map(s => ({ stage: s, filename: templates.get(s)?.filename ?? null, uploaded_at: templates.get(s)?.uploaded_at ?? null, size: templates.get(s)?.size ?? null })),
+      fields: Object.entries(FIELD_HELP).map(([name, help]) => ({ name, help })) }
+    if (!(STAGE_LIST as readonly string[]).includes(stage)) throw new ApiError(404, 'not_found', 'unknown document type')
+    if (m[2]) return new Blob([`SAMPLE starter template for ${stage}`], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    if (method === 'PUT') {
+      const f = body instanceof FormData ? body.get('file') : null
+      if (!(f instanceof File) || !f.name.toLowerCase().endsWith('.docx')) throw new ApiError(422, 'bad_template', 'upload a Word file ending in .docx')
+      templates.set(stage, { filename: f.name, uploaded_at: new Date().toISOString(), size: f.size })
+      return { stage, filename: f.name, size: f.size, uploaded_at: templates.get(stage)!.uploaded_at, placeholders: ['doc_no', 'line.description'], unknown: [], repeats_lines: true, warnings: [] }
+    }
+    if (method === 'DELETE') { if (!templates.delete(stage)) throw new ApiError(404, 'not_found', 'no template is uploaded for this document type'); return { stage, removed: true } }
+    return undefined
+  }
+  needPay(owner)
+  if (p === '/customers/flow') return { stages: STAGE_LIST.map(s => { const r = stageRows(s).filter(x => x.status !== 'void' && x.status !== 'cancelled')
+    return { stage: s, count: r.length, attention: r.filter(x => x.attention).length, template: templates.has(s) ? { filename: templates.get(s)!.filename, uploaded_at: templates.get(s)!.uploaded_at } : null } }) }
+  if (p === '/customers/docs') {
+    const s = ST.get('stage') as StageKey
+    if (!(STAGE_LIST as readonly string[]).includes(s)) throw new ApiError(422, 'invalid_request', 'stage: not a customer document type')
+    return stageRows(s).map(({ attention, ...x }) => x)
+  }
+  const m = p.match(/^\/customers\/([^/]+)\/([^/]+)\/file$/)
+  if (m) {
+    const r = (STAGE_LIST as readonly string[]).includes(m[1]) ? stageRows(m[1] as StageKey).find(x => x.id === m[2]) : undefined
+    if (!r) throw new ApiError(404, 'not_found', 'document not found')
+    const own = templates.has(m[1]) && ST.get('format') !== 'pdf'
+    return new Blob([`SAMPLE ${m[1]} ${r.doc_no} (mock mode)\n`], { type: own ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf' })
+  }
+  return undefined
+}

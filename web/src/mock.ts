@@ -11,7 +11,7 @@ import { mockListings } from './mockListings'
 import { mockPrivacy } from './mockPrivacy'
 import { mockAi, mockAiOn } from './mockAi'
 import { mockAccept } from './mockAccept'
-import { mockChain, mockDelivery } from './mockChain'
+import { mockChain, mockCustomers, mockDelivery } from './mockChain'
 import { mockReports } from './mockReports'
 import { mockRevenue } from './mockRevenue'
 import { mockTrack, jobStats, dashTrack, extraMembers, heatOf, mockJobMove } from './mockTrack'
@@ -629,6 +629,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
   }
   { const r = mockReports(method, p, q, owner); if (r !== undefined) return r }
   { const r = mockChain(method, p, q, owner, body); if (r !== undefined) return r }
+  { const r = mockCustomers(method, p, q, owner, body); if (r !== undefined) return r }
   { const r = mockRevenue(method, p, q, { owner, perm }, body); if (r !== undefined) return r }
   { const r = mockTrack(method, p, q, { owner, me: owner ? 'sample-owner' : 'sample-staff', perm, people: members.filter(x => x.active).map(x => x.id), doc: id => docs[id]?.doc }, body); if (r !== undefined) return r }
   // Telegram. Switches: ?tg=1 connected, ?tg=none (or no switch) shows one-tap create and flips to connected after about 3 polls, ?tg=link_first, ?tg=unavailable, ?tg=attention, ?tg=env, ?tg=checking, ?helper=off. Token "bad", "inuse", "down", "nourl", "nokey" give each error.

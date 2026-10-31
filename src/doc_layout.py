@@ -4,7 +4,7 @@ Pure functions, no DB. quote_pdf.render() draws a spec. ONE language per busines
 import copy
 
 LANGS = ("en", "ms", "zh", "ta")
-KINDS = ("quotation", "proforma", "delivery_order", "invoice", "receipt", "credit_note")
+KINDS = ("quotation", "proforma", "delivery_order", "invoice", "receipt", "credit_note", "purchase_order", "sales_order")
 BLOCKS = ("header", "parties", "meta", "lines", "totals", "deposit", "terms", "bank", "signature", "chop", "footer")
 COLS = ("no", "description", "qty", "uom", "unit_price", "discount", "amount")
 PRICE_COLS = ("unit_price", "discount", "amount")  # hidden, with the totals and deposit blocks, when show_prices is false
@@ -101,6 +101,8 @@ DEFAULTS = {
     "invoice": _spec("invoice", _t("Invoice", "Invois", "发票", "இன்வாய்ஸ்"), title_sst=_t("Tax Invoice", "Invois Cukai", "税务发票", "வரி இன்வாய்ஸ்"),
                      blocks=[b for b in _ALL if b not in ("signature", "chop")]),
     "receipt": _spec("receipt", _t("Receipt", "Resit", "收据", "ரசீது"), blocks=["header", "meta", "parties", "deposit", "footer"]),
+    "purchase_order": _spec("purchase_order", _t("Purchase Order", "Pesanan Belian", "采购订单", "கொள்முதல் ஆணை"), blocks=[b for b in _ALL if b not in ("deposit", "signature", "chop")]),
+    "sales_order": _spec("sales_order", _t("Sales Order", "Pesanan Jualan", "销售订单", "விற்பனை ஆணை"), blocks=[b for b in _ALL if b not in ("deposit", "signature", "chop")]),
     "credit_note": _spec("credit_note", _t("Credit Note", "Nota Kredit", "贷项通知单", "கிரெடிட் நோட்"), blocks=["header", "meta", "parties", "lines", "totals", "footer"]),
 }
 

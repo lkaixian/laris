@@ -63,6 +63,8 @@ REQ = {
     ("POST", "/api/expenses"): {"json": {"spent_on": "2026-01-01", "category": "rent", "amount": "1.00"}},
     ("POST", "/api/expenses/{expense_id}/void"): {"json": {"reason": "typed twice"}},
     ("PUT", "/api/settings/doc-layout/{kind}"): {"json": {}},
+    ("PUT", "/api/settings/doc-templates/{stage}"): {"files": {"file": ("t.docx", b"x", "application/octet-stream")}},
+    ("DELETE", "/api/settings/doc-templates/{stage}"): {},
     ("POST", "/api/field-proposals/{pid}/decide"): {"json": {"decision": "ignore"}},
     ("POST", "/api/enquiries/simulate"): {"json": {"channel": "web", "text": "x"}},
     ("POST", "/api/documents/ingest"): {"data": {"text": "x"}},

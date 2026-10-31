@@ -444,17 +444,9 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
 
 
 # ---------------------------------------------------------------- PDF
-@r.get("/deal-docs/{doc_id}/pdf")
-def deal_doc_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
-    """The issued document as a PDF: its frozen lines and totals and the layout snapshot from the day it was issued, in the business's document language."""
-    if not ctx.perms & {"record_payments", "issue_delivery"}:
-        require_perm(ctx, "record_payments")
+def deal_doc_model(ctx: Ctx, d: dict) -> dict:
+    """The quote_doc model of an issued document: issuer, customer and terms read live, lines and totals from its frozen snapshot."""
     c = ctx.conn
-    d = c.execute("select * from deal_docs where id=%s and tenant_id=%s", (doc_id, ctx.tenant_id)).fetchone()
-    if not d:
-        raise ApiError(404, "not_found", "document not found")
-    if d["kind"] != "delivery_order":
-        require_perm(ctx, "record_payments")
     j = _job(ctx, d["job_id"])
     m = _order_model(ctx, j)  # issuer, customer and terms are read live; lines and totals come from the snapshot
     m.update(doc_no=d["doc_no"], status=d["status"], issued_on=d["issued_at"].date(), valid_until=None, subtotal=d["subtotal"], tax_total=d["tax_total"],
@@ -468,8 +460,23 @@ def deal_doc_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
     elif d["kind"] == "invoice":
         m.update(deposit={"paid": Decimal(d["extra"]["deposit_paid"])}, balance_due=Decimal(d["extra"]["balance_due"]), due_on=d["extra"].get("due_on"))
     elif d["kind"] == "delivery_order" and d["status"] == "signed":
-        s = c.execute("select signer_name, signed_at, mark, problems_note from delivery_signatures where deal_doc_id=%s", (doc_id,)).fetchone()
+        s = c.execute("select signer_name, signed_at, mark, problems_note from delivery_signatures where deal_doc_id=%s", (d["id"],)).fetchone()
         m["signature"] = {"name": s["signer_name"], "at": s["signed_at"].astimezone(pipeline.MY), "mark": s["mark"], "problems": s["problems_note"]}
+    return m
+
+
+@r.get("/deal-docs/{doc_id}/pdf")
+def deal_doc_pdf(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
+    """The issued document as a PDF: its frozen lines and totals and the layout snapshot from the day it was issued, in the business's document language."""
+    if not ctx.perms & {"record_payments", "issue_delivery"}:
+        require_perm(ctx, "record_payments")
+    c = ctx.conn
+    d = c.execute("select * from deal_docs where id=%s and tenant_id=%s", (doc_id, ctx.tenant_id)).fetchone()
+    if not d:
+        raise ApiError(404, "not_found", "document not found")
+    if d["kind"] != "delivery_order":
+        require_perm(ctx, "record_payments")
+    m = deal_doc_model(ctx, d)
     lang = c.execute("select doc_language from tenants where id=%s", (ctx.tenant_id,)).fetchone()["doc_language"]
     name = re.sub(r"[^A-Za-z0-9_-]", "_", d["doc_no"])
     return Response(quote_pdf.render(d["kind"], m, d["layout_snapshot"], lang), media_type="application/pdf",

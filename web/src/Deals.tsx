@@ -38,7 +38,7 @@ const label = (s: string) => s.replace(/_/g, ' ').replace(/^./, c => c.toUpperCa
 const MAKE: Partial<Record<DocKind, DocKind[]>> = { cpo: ['so'] }
 const MOVES: Record<string, Record<string, string[]>> = {
   cpo: { received: ['confirmed', 'cancelled'], confirmed: ['cancelled'] }, so: { confirmed: ['cancelled'] },
-  spo: { draft: ['pending_approval', 'cancelled'], pending_approval: ['sent', 'draft', 'cancelled'], sent: ['partially_received', 'received', 'cancelled'], partially_received: ['received', 'cancelled'] },
+  spo: { draft: ['pending_approval', 'cancelled'], pending_approval: ['sent', 'draft', 'cancelled'], sent: ['cancelled'], partially_received: ['cancelled'] },  // goods arriving is recorded with "Goods arrived?" (POST /chain/{id}/receive), not moved by hand
 }
 const OWNER_MOVES = ['spo:sent', 'so:cancelled', 'cpo:confirmed']
 const NEEDS_REASON = ['void', 'cancelled', 'returned']

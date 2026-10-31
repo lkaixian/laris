@@ -4,7 +4,8 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from .errors import ApiError
 
-KINDS = {"cpo": ("CPO", "Customer PO (received)"), "so": ("SO", "Sales Order"), "spo": ("SPO", "Supplier PO (sent)")}
+KINDS = {"cpo": ("CPO", "Customer PO (received)"), "so": ("SO", "Sales Order"), "spo": ("SPO", "Supplier PO (sent)"), "grn": ("GRN", "Goods Received")}
+DEFAULT_DEPOSIT_PCT = Decimal(50)  # the proforma deposit when neither the owner nor the quote gives one
 CENT, SEN5 = Decimal("0.01"), Decimal("0.05")
 MAX_LINES, MAX_QTY, MAX_PRICE = 200, Decimal(10) ** 7, Decimal(10) ** 9
 
@@ -12,14 +13,15 @@ MAX_LINES, MAX_QTY, MAX_PRICE = 200, Decimal(10) ** 7, Decimal(10) ** 9
 FLOW = {
     "cpo": {"received": {"confirmed", "cancelled"}, "confirmed": {"cancelled"}},
     "so": {"confirmed": {"cancelled"}},
+    "grn": {"received": set()},  # a goods-received note is a record: it is never edited or moved
     "spo": {"draft": {"pending_approval", "cancelled"}, "pending_approval": {"sent", "draft", "cancelled"},
             "sent": {"partially_received", "received", "cancelled"}, "partially_received": {"received", "cancelled"}},
 }
-START = {"cpo": "received", "so": "confirmed", "spo": "draft"}
+START = {"cpo": "received", "so": "confirmed", "spo": "draft", "grn": "received"}
 # Moves only an owner may make (staff can draft and submit, not approve or reverse).
 OWNER_ONLY = {("spo", "sent"), ("so", "cancelled"), ("cpo", "confirmed")}
 # parent kind -> kinds that can be made from it with one click
-CONVERT = {"quote": {"cpo", "so"}, "cpo": {"so"}, "so": set(), "spo": set()}
+CONVERT = {"quote": {"cpo", "so"}, "cpo": {"so"}, "so": set(), "spo": set(), "grn": set()}
 PARENT_OK_STATUS = {"cpo": {"received", "confirmed"}}
 
 
@@ -67,3 +69,39 @@ def check_move(kind: str, old: str, new: str, owner: bool) -> None:
 
 def ageing_bucket(days_over: int) -> str:
     return "current" if days_over <= 0 else "1-30" if days_over <= 30 else "31-60" if days_over <= 60 else "60+"
+
+
+def receiving(ordered_lines: list[dict], notes: list[list[dict]]) -> list[dict]:
+    """Per supplier-PO line: how much was ordered, how much the goods-received notes add up to, and what is still to come. A note's lines name the
+    PO line they answer by `src` (1-based). Quantities are strings, so no float touches them."""
+    got = [Decimal(0)] * len(ordered_lines)
+    for lines in notes:
+        for ln in lines:
+            got[ln["src"] - 1] += Decimal(str(ln["qty"]))
+    return [{"no": i + 1, "description": ln["description"], "uom": ln.get("uom", "unit"), "ordered": str(Decimal(str(ln["qty"]))),
+             "received": str(got[i]), "left": str(max(Decimal(str(ln["qty"])) - got[i], Decimal(0)))} for i, ln in enumerate(ordered_lines)]
+
+
+def receive_lines(ordered_lines: list[dict], already: list[dict], incoming) -> list[dict]:
+    """Check what arrived against what is still to come and return the note's lines (description, uom and price copied from the PO line).
+    Refuses an unknown line, a repeated line, a quantity of zero or less, or more than is still due."""
+    left = {row["no"]: Decimal(row["left"]) for row in already}
+    seen, out = set(), []
+    for x in incoming:
+        no = x["no"]
+        if no not in left:
+            raise ApiError(422, "bad_line", f"the supplier PO has no line {no}")
+        if no in seen:
+            raise ApiError(422, "bad_line", f"line {no} is listed twice")
+        seen.add(no)
+        qty = Decimal(str(x["qty"]))
+        if qty <= 0:
+            raise ApiError(422, "bad_qty", f"line {no}: the quantity received must be above zero")
+        if qty > left[no]:
+            raise ApiError(409, "too_many", f"line {no}: only {left[no].normalize():f} still to come, not {qty.normalize():f}")
+        src = ordered_lines[no - 1]
+        out.append({"src": no, "description": src["description"], "qty": str(qty.normalize() if qty == qty.to_integral() else qty), "uom": src.get("uom", "unit"),
+                    "unit_price": src["unit_price"]})
+    if not out:
+        raise ApiError(422, "bad_lines", "say what arrived")
+    return out

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from .. import ai_log, doc_layout, ilmu, pipeline, quote_doc, quote_pdf
 from .. import track_rules as tr
+from ..chain import DEFAULT_DEPOSIT_PCT
 from ..errors import ApiError
 from ..parse_util import _date, _dec, contact_names
 from .deps import Ctx, audit, guarded, read_ctx, reply, require_owner, require_perm, svc, throttle, write_ctx
@@ -46,7 +47,7 @@ def _json(o) -> Jsonb:
 def next_doc_no(c, tenant_id, kind: str) -> str:
     """<prefix>-<year>-NNNN, one counter per tenant, kind and year; the advisory lock serialises concurrent issues (unique index behind it)."""
     c.execute("select pg_advisory_xact_lock(hashtext(%s))", (f"deal-no:{tenant_id}:{kind}",))
-    prefix = c.execute(f"select {kind}_prefix as p from tenants where id=%s", (tenant_id,)).fetchone()["p"]  # kind is one of the four fixed names
+    prefix = "CN" if kind == "credit_note" else c.execute(f"select {kind}_prefix as p from tenants where id=%s", (tenant_id,)).fetchone()["p"]  # kind is one of the five fixed names; credit notes use CN
     year = pipeline.today_my().year
     n = c.execute("""select coalesce(max(substring(doc_no from '[0-9]+$')::int), 0) as n from deal_docs
                      where tenant_id=%s and kind=%s and doc_no ~ %s""", (tenant_id, kind, f"-{year}-[0-9]+$")).fetchone()["n"]
@@ -154,7 +155,7 @@ def issue_proforma(job_id: UUID, body: ProformaIn = ProformaIn(), ctx: Ctx = Dep
     if pct is None and j["quote_id"]:
         pct = c.execute("select deposit_pct from documents where id=%s", (j["quote_id"],)).fetchone()["deposit_pct"]
     if pct is None:
-        raise ApiError(422, "deposit_pct_needed", "the quote has no deposit percentage; give deposit_pct")
+        pct = DEFAULT_DEPOSIT_PCT  # nothing agreed: 50%, which the owner can change on the screen before issuing
     pct = Decimal(f"{pct.normalize():f}")  # 30.00 and 30 are the same percentage
     m = _order_model(ctx, j)
     if j["order_total"] is None:
@@ -172,7 +173,7 @@ class VoidIn(BaseModel, extra="forbid"):
 
 @r.post("/deal-docs/{doc_id}/void")
 def void_doc(doc_id: UUID, body: VoidIn, ctx: Ctx = Depends(write_ctx)):
-    """Void a proforma, delivery order or invoice (owner). A receipt is voided by reversing its payment; a document with money on it needs a credit note (later)."""
+    """Void a proforma, delivery order, invoice or credit note (owner). A receipt is voided by reversing its payment; an invoice with money on it needs a credit note."""
     require_owner(ctx)
     c = ctx.conn
     d = c.execute("select id, job_id, kind, doc_no, status from deal_docs where id=%s and tenant_id=%s for update", (doc_id, ctx.tenant_id)).fetchone()
@@ -187,6 +188,8 @@ def void_doc(doc_id: UUID, body: VoidIn, ctx: Ctx = Depends(write_ctx)):
         raise ApiError(409, "has_payments", "money has been received on this order; reverse the payment first")
     with guarded():
         c.execute("update deal_docs set status='void', void_reason=%s, voided_at=now(), voided_by=%s where id=%s", (body.reason.strip(), ctx.user_id, doc_id))
+        if d["kind"] == "credit_note":  # the credit is withdrawn: the customer owes that amount again
+            c.execute("update jobs set order_total = order_total + (select total from deal_docs where id=%s) where id=%s", (doc_id, d["job_id"]))
     audit(ctx, "jobs", d["job_id"], f"{'SIGNED ' if d['status'] == 'signed' else ''}{d['kind']} {d['doc_no']} voided: {body.reason.strip()}", None, {"deal_doc_id": doc_id})
     return reply(ctx, {"id": doc_id, "doc_no": d["doc_no"], "status": "void"})
 
@@ -227,6 +230,39 @@ def issue_invoice(job_id: UUID, body: InvoiceIn = InvoiceIn(), ctx: Ctx = Depend
     why = None if delivered else body.override_reason.strip()
     d = _issue(ctx, job_id, "invoice", m, {"deposit_paid": paid, "balance_due": total - paid, "due_on": due, **({"override_reason": why} if why else {})})
     audit(ctx, "jobs", job_id, f"invoice {d['doc_no']} issued, {_rm(total - paid)} due" + (f" (before delivery, override: {why})" if why else ""), None, {"deal_doc_id": d["id"]})
+    return reply(ctx, d, 201)
+
+
+# ---------------------------------------------------------------- credit note
+class CreditIn(BaseModel, extra="forbid"):
+    amount: Decimal = Field(gt=0, lt=Decimal(10) ** 12, decimal_places=2)  # the whole amount credited, SST included
+    reason: str = Field(min_length=3, max_length=200)                       # e.g. "Failed reprint of the bracket"
+
+
+@r.post("/jobs/{job_id}/credit-notes")
+def issue_credit_note(job_id: UUID, body: CreditIn, ctx: Ctx = Depends(write_ctx)):
+    """A credit note against the order's invoice, for a failed reprint or any other agreed reduction (owner). It lowers what the customer owes by
+    the amount, so the balance, the stage and the receivables all follow. It cannot take the order below what has already been paid (a refund is
+    made outside LARIS, which never moves money) and cannot cancel the whole order (void it instead). Void the credit note to withdraw it."""
+    require_owner(ctx)
+    c = ctx.conn
+    j = _job(ctx, job_id, lock=True)
+    inv = c.execute("select id, doc_no from deal_docs where job_id=%s and kind='invoice' and status <> 'void'", (job_id,)).fetchone()
+    if not inv:
+        raise ApiError(409, "no_invoice", "a credit note is made against an invoice; issue the invoice first")
+    total, paid = _freeze_total(ctx, j), _net(c, job_id)[0]
+    if body.amount >= total:
+        raise ApiError(409, "too_big", f"the order is {_rm(total)}; to cancel all of it, void the invoice instead")
+    if total - body.amount < paid:
+        raise ApiError(409, "already_paid", f"{_rm(paid)} has been paid, so at most {_rm(total - paid)} can be credited; any refund is made outside LARIS")
+    reason = body.reason.strip()
+    line = {"no": 1, "description": f"Credit: {reason}", "qty": "1", "uom": "lot", "unit_price": str(body.amount), "discount_pct": None, "tax_rate": None,
+            "is_header": False, "amount": str(body.amount)}
+    m = {"lines": [line], "subtotal": body.amount, "tax_total": None, "total": body.amount}
+    with guarded():
+        d = _issue(ctx, job_id, "credit_note", m, {"invoice_id": str(inv["id"]), "invoice_no": inv["doc_no"], "reason": reason, "total_before": total, "total_after": total - body.amount})
+        c.execute("update jobs set order_total = order_total - %s where id=%s", (body.amount, job_id))
+    audit(ctx, "jobs", job_id, f"credit note {d['doc_no']} of {_rm(body.amount)} against {inv['doc_no']}: {reason}; the order is now {_rm(total - body.amount)}", None, {"deal_doc_id": d["id"]})
     return reply(ctx, d, 201)
 
 
@@ -388,6 +424,7 @@ def chain(job_id: UUID, ctx: Ctx = Depends(read_ctx)):
         "job": {"id": j["id"], "title": j["title"], "quote_id": j["quote_id"], "status": j["status"], "customer": party,
                 "quote_deposit_pct": c.execute("select deposit_pct from documents where id=%s", (j["quote_id"],)).fetchone()["deposit_pct"] if j["quote_id"] else None},
         "total": total, "paid": paid, "balance": total - paid if total is not None else None,
+        "credited": sum((Decimal(d["total"]) for d in live if d["kind"] == "credit_note"), Decimal(0)),  # already taken off `total`
         "deposit": {"pct": pf["extra"]["deposit_pct"], "amount": dep_due, "paid": dep_paid} if pf else None,
         "stage": st, "overdue": tr.overdue_reason("order", st, since, datetime.now(timezone.utc), valid_until=due) if since else None,
         "delivery": {"lines": dl, "complete": bool(dl) and all(x["signed"] >= x["ordered"] for x in dl)},

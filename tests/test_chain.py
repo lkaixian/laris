@@ -45,7 +45,7 @@ def test_state_machines_refuse_illegal_moves_and_gate_owner_moves():
     for kind, flow in chain.FLOW.items():  # every kind starts somewhere that has a way out
         assert chain.START[kind] in flow
     # proforma, delivery order, invoice and receipt are deal_docs (api/chain.py), not chain_docs kinds
-    assert set(chain.KINDS) == set(chain.FLOW) == set(chain.START) == {"cpo", "so", "spo"}
+    assert set(chain.KINDS) == set(chain.FLOW) == set(chain.START) == {"cpo", "so", "spo", "grn"}
     assert not {"pf", "do", "inv", "rcp"} & set(chain.CONVERT["so"]) and chain.CONVERT["cpo"] == {"so"}
 
 
@@ -97,7 +97,7 @@ def test_a_sales_order_is_an_order_and_the_old_money_paths_are_gone(env):
         assert conv(e, so["id"], to).status_code == 422
     assert mk(e, "pf").status_code == 422
     assert e.c.get("/api/chain?kind=inv", headers=e.O).status_code == 422
-    assert e.sql("select count(*) n from chain_docs where kind not in ('cpo','so','spo')")[0]["n"] == 0
+    assert e.sql("select count(*) n from chain_docs where kind not in ('cpo','so','spo','grn')")[0]["n"] == 0
     # cancelling the order is refused once money is recorded on it
     assert e.c.post(f"/api/jobs/{job}/payments", headers=e.O, json={"amount": "10.00", "method": "cash", "paid_on": "2026-01-02", "purpose": "deposit", "idempotency_key": "k" * 12}).status_code == 201
     r = go(e, so["id"], "cancelled", reason="changed mind")

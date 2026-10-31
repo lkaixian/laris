@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import { getLang } from './i18n'
 
-export type DocKind = 'cpo' | 'so' | 'pf' | 'do' | 'inv' | 'rcp' | 'spo'
+export type DocKind = 'cpo' | 'so' | 'pf' | 'do' | 'inv' | 'rcp' | 'spo' | 'grn'
 type L = { en: string; ms: string }
 export interface SectorPack {
   id: string
@@ -97,7 +97,7 @@ export const say = (l: L) => (getLang() === 'ms' ? l.ms : l.en)  // Chinese and 
 
 export const DOC_NAME: Record<DocKind, L> = {
   cpo: { en: 'Customer PO (received)', ms: 'PO Pelanggan (diterima)' }, so: { en: 'Sales Order', ms: 'Pesanan Jualan' }, pf: { en: 'Proforma Invoice', ms: 'Invois Proforma' },
-  do: { en: 'Delivery Order', ms: 'Pesanan Penghantaran' }, inv: { en: 'Invoice', ms: 'Invois' }, rcp: { en: 'Receipt', ms: 'Resit' }, spo: { en: 'Supplier PO (sent)', ms: 'PO Pembekal (dihantar)' },
+  do: { en: 'Delivery Order', ms: 'Pesanan Penghantaran' }, inv: { en: 'Invoice', ms: 'Invois' }, rcp: { en: 'Receipt', ms: 'Resit' }, spo: { en: 'Supplier PO (sent)', ms: 'PO Pembekal (dihantar)' }, grn: { en: 'Goods Received', ms: 'Barang Diterima' },
 }
 export const docName = (p: SectorPack, k: DocKind) => say(p.docNames?.[k] ?? DOC_NAME[k])
 

@@ -158,6 +158,43 @@ def convert(doc_id: UUID, body: Convert, ctx: Ctx = Depends(write_ctx)):
     return reply(ctx, shape(doc), 201)
 
 
+def receiving(ctx: Ctx, spo: dict) -> list[dict]:
+    """What a supplier PO ordered, what the goods-received notes against it add up to, and what is still to come."""
+    notes = ctx.conn.execute("select lines from chain_docs where tenant_id=%s and parent_id=%s and kind='grn' order by created_at, id", (ctx.tenant_id, spo["id"])).fetchall()
+    return chain.receiving(spo["lines"], [n["lines"] for n in notes])
+
+
+class Arrived(BaseModel, extra="forbid"):
+    no: int = Field(ge=1, le=chain.MAX_LINES)  # the supplier PO's line number, from 1
+    qty: Decimal = Field(lt=chain.MAX_QTY)
+
+
+class Receive(BaseModel, extra="forbid"):
+    lines: list[Arrived] = Field(min_length=1, max_length=chain.MAX_LINES)
+    note: str | None = Field(None, max_length=2000)  # e.g. "2 spools damaged, supplier told"
+
+
+@r.post("/chain/{doc_id}/receive")
+def receive(doc_id: UUID, body: Receive, ctx: Ctx = Depends(write_ctx)):
+    """Goods arrived against a sent supplier PO: writes a Goods Received note for what came (a part delivery is fine) and moves the PO to
+    partially received, or to received once every line is complete. Nothing arriving twice is possible: a line cannot receive more than is still due."""
+    require_perm(ctx, "manage_contacts")
+    spo = load(ctx, doc_id, lock=True)
+    if spo["kind"] != "spo":
+        raise ApiError(409, "not_a_supplier_po", "goods are received against a supplier PO")
+    if spo["status"] not in ("sent", "partially_received"):
+        raise ApiError(409, "not_sent", f"this supplier PO is {spo['status']}; goods can be received once it has been sent")
+    left = receiving(ctx, spo)
+    got = chain.receive_lines(spo["lines"], left, [x.model_dump() for x in body.lines])
+    note = make(ctx, "grn", deal_id=spo["deal_id"], parent=spo["id"], job_id=spo["job_id"], party_id=spo["party_id"], lines=got, ref=spo["doc_no"],
+                note=(body.note or "").strip() or None)
+    after = chain.receiving(spo["lines"], [n["lines"] for n in ctx.conn.execute("select lines from chain_docs where tenant_id=%s and parent_id=%s and kind='grn'", (ctx.tenant_id, doc_id)).fetchall()])
+    status = "received" if all(Decimal(x["left"]) == 0 for x in after) else "partially_received"
+    ctx.conn.execute("update chain_docs set status=%s where id=%s", (status, doc_id))
+    audit(ctx, "chain_docs", doc_id, f"{spo['doc_no']}: goods received on {note['doc_no']}, now {status}", {"status": spo["status"]}, {"status": status})
+    return reply(ctx, {"note": shape(note), "status": status, "receiving": after}, 201)
+
+
 class Move(BaseModel, extra="forbid"):
     to: str = Field(max_length=30)
     reason: str | None = Field(None, max_length=300)
@@ -179,7 +216,7 @@ def transition(doc_id: UUID, body: Move, ctx: Ctx = Depends(write_ctx)):
 
 
 @r.get("/chain")
-def listing(kind: Literal["cpo", "so", "spo"] | None = None, status: str | None = Query(None, max_length=30),
+def listing(kind: Literal["cpo", "so", "spo", "grn"] | None = None, status: str | None = Query(None, max_length=30),
             limit: int = Query(100, ge=1, le=500), ctx: Ctx = Depends(read_ctx)):
     rows = ctx.conn.execute(f"""select {COLS}, (select name from parties p where p.id = party_id) as party from chain_docs
                                 where tenant_id=%s and (%s::text is null or kind=%s) and (%s::text is null or status=%s) order by created_at desc, id limit %s""",
@@ -216,7 +253,7 @@ def detail(doc_id: UUID, ctx: Ctx = Depends(read_ctx)):
     d = load(ctx, doc_id)
     trail = ctx.conn.execute(f"select {COLS} from chain_docs where tenant_id=%s and deal_id=%s order by created_at, id", (ctx.tenant_id, d["deal_id"])).fetchall()
     history = ctx.conn.execute("select at, event, actor from audit_log where tenant_id=%s and entity='chain_docs' and entity_id=%s order by at, id", (ctx.tenant_id, doc_id)).fetchall()
-    return reply(ctx, {**shape(d), "trail": [shape(x) for x in trail], "history": history,
+    return reply(ctx, {**shape(d), "trail": [shape(x) for x in trail], "history": history, "receiving": receiving(ctx, d) if d["kind"] == "spo" else None,
                        "party": (ctx.conn.execute("select name from parties where id=%s", (d["party_id"],)).fetchone() or {}).get("name")})
 
 

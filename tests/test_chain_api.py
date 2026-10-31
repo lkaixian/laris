@@ -128,7 +128,7 @@ def test_one_live_proforma_per_order_and_void_frees_it(env):
 
 def test_proforma_needs_a_pct_and_an_amount_and_is_owner_only(env):
     e = env
-    err(proforma(e, hand_job(e)), 422, "deposit_pct_needed")  # a hand-made job has no quote to take a pct from
+    assert proforma(e, hand_job(e, "200.00")).json()["extra"]["deposit_pct"] == "50"  # nothing agreed: 50%, the default
     err(proforma(e, hand_job(e), who=e.S, deposit_pct=10), 403, "owner_only")
     assert proforma(e, hand_job(e), deposit_pct=101).status_code == 422
     err(proforma(e, "00000000-0000-0000-0000-000000000000", deposit_pct=10), 404, "not_found")

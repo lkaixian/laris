@@ -17,6 +17,8 @@ import { licenceOn, issuerOn, useIssuerProbe } from './Licence'
 import { articleForNav } from './help/articles'
 import { startTour } from './Tour'
 import { NAV_HINTS } from './navHints'
+import { groupOf, isOpen, read as readFolds, save as saveFolds } from './navGroups'
+import type { Folds } from './navGroups'
 
 /*
   App shell: grouped sidebar (>= md, collapsible to icons), top bar + slide-over drawer (< md), header with org mark,
@@ -35,6 +37,8 @@ const SH = {
   open: { en: 'Open menu', ms: 'Buka menu', zh: '打开菜单', ta: 'மெனுவைத் திற' },
   menu: { en: 'Menu', ms: 'Menu', zh: '菜单', ta: 'மெனு' },
   close: { en: 'Close menu', ms: 'Tutup menu', zh: '关闭菜单', ta: 'மெனுவை மூடு' },
+  fold: { en: 'Fold {0}', ms: 'Lipat {0}', zh: '收起{0}', ta: '{0} ஐ மூடு' },
+  unfold: { en: 'Show {0}', ms: 'Tunjuk {0}', zh: '展开{0}', ta: '{0} ஐக் காட்டு' },
 } satisfies Record<string, Text>
 export interface NavItem { key: string; label: string; icon: IconName; when?: (me?: Me) => boolean }
 export const NAV: { label: string; items: NavItem[] }[] = [
@@ -89,14 +93,30 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
   const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
   useEffect(() => { if (!tip) return; const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setTip(null) }, away = () => setTip(null); addEventListener('keydown', k); addEventListener('scroll', away, true); return () => { removeEventListener('keydown', k); removeEventListener('scroll', away, true) } }, [tip])
   const hint = tip ? NAV_HINTS[tip.key] : undefined
+  // Folding: a group heading folds and unfolds its items (Suppliers shows Contacts, Ask suppliers, Catalog photos). Arriving on a page opens its group.
+  const [folds, setFolds] = useState<Folds>(readFolds)
+  const flip = (label: string) => setFolds(f => { const n = { ...f, [label]: !isOpen(f, label) }; saveFolds(n); return n })
+  useEffect(() => { const g = groupOf(groups, here); if (g) setFolds(f => (isOpen(f, g) ? f : { ...f, [g]: true })) }, [here])  // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <nav aria-label={tx('nav.main')} className="px-2 pb-2">
       {tip && hint && <div id={`${idp}-tip`} role="tooltip" className="nav-tip" style={{ top: tip.top, left: tip.left }}>{t(hint)}</div>}
       <ul>
         {groups.map(g => (
           <li key={g.label} className={collapsed ? 'mt-2 border-t border-hairline pt-2 first:mt-0 first:border-0 first:pt-0' : ''}>
-            <p id={`${idp}-${g.label}`} className={collapsed ? 'sr-only' : 'sidegroup'}>{txOr(`nav.group.${g.label}`, g.label)}</p>
-            <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
+            {collapsed
+              ? <p id={`${idp}-${g.label}`} className="sr-only">{txOr(`nav.group.${g.label}`, g.label)}</p>
+              : (
+                <button type="button" id={`${idp}-${g.label}`} className="sidegroup flex w-full items-center justify-between gap-2 text-left hover:text-ink" aria-expanded={isOpen(folds, g.label)} aria-controls={`${idp}-${g.label}-items`}
+                  title={t(SH[isOpen(folds, g.label) ? 'fold' : 'unfold']).replace('{0}', txOr(`nav.group.${g.label}`, g.label))} onClick={() => flip(g.label)}>
+                  <span>{txOr(`nav.group.${g.label}`, g.label)}</span>
+                  <span className="flex items-center gap-1">
+                    {!isOpen(folds, g.label) && <span className="rounded-full bg-tint px-1.5 text-[11px] font-semibold text-muted">{g.items.length}</span>}
+                    <Icon name="down" className={`size-4 transition-transform duration-150 motion-reduce:transition-none ${isOpen(folds, g.label) ? '' : '-rotate-90'}`} />
+                  </span>
+                </button>
+              )}
+            <div id={`${idp}-${g.label}-items`} className={`grid transition-[grid-template-rows] duration-150 motion-reduce:transition-none ${collapsed || isOpen(folds, g.label) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`} inert={!collapsed && !isOpen(folds, g.label) ? true : undefined}>
+            <ul aria-labelledby={`${idp}-${g.label}`} className="-m-1 grid min-h-0 gap-0.5 overflow-hidden p-1">
               {g.items.map(i => (
                 <li key={i.key} className="group relative" onMouseEnter={e => show(i.key, e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={e => show(i.key, e.currentTarget)} onBlur={() => setTip(null)}>
                   <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={tip?.key === i.key ? `${idp}-tip` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
@@ -116,6 +136,7 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
                 </li>
               ))}
             </ul>
+            </div>
           </li>
         ))}
       </ul>

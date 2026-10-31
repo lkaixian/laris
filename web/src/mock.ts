@@ -720,7 +720,7 @@ export function mock(method: string, path: string, role: Role, body: any): unkno
     log(who, r.reply_id, `price accepted for ${body.item_key}`)
     return { ok: true }
   }
-  if (p.startsWith('/listings')) { const r = mockListings(method, p, owner, body); if (r !== undefined) return r }
+  if (p.startsWith('/listings') || p.startsWith('/catalog')) { const r = mockListings(method, p, owner, body); if (r !== undefined) return r }
   if (p === '/audit/facets') return { people: [...new Set(audit.map(e => e.actor))].sort(), modules: [...new Set(audit.map(e => e.entity))].sort() }
   if (p === '/audit/days') {
     const n: Record<string, number> = {}

@@ -45,8 +45,14 @@ def store(conn, tenant_id, user_id, d: dict, *, party_id=None, note=None, channe
     lid = conn.execute("""insert into listings(tenant_id,created_by,party_id,note,source_channel,image,image_mime)
                           values (%s,%s,%s,%s,%s,%s,%s) returning id""",
                        (tenant_id, user_id, party_id, note, channel, data, d["mime"])).fetchone()["id"]
+    from .catalog import category_names, keep, pick  # local: catalog imports this module
+    cats = category_names(conn, tenant_id)  # grows as this photo proposes new ones, so "Filament" and "Filaments" in one photo become one
     for n, (it, pic) in enumerate(zip(items, d["pics"])):
-        guess = it.get("category") if categorize != "manual" else None
+        guess = pick(it.get("category"), cats) if categorize != "manual" else None
+        if guess and guess.lower() not in {c.lower() for c in cats}:
+            cats.append(guess)
+        if guess and categorize == "auto":
+            keep(conn, tenant_id, guess)
         conn.execute("""insert into listing_items(listing_id,tenant_id,position,description,labels,sku,sizes,price,currency,bbox,crop,status,reasons,category,category_suggestion)
                         values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'needs_review',%s,%s,%s)""",
                      (lid, tenant_id, n, it["description"], Jsonb(it["labels"]), it["sku"], Jsonb(it["sizes"]), it["price"], it["currency"],
@@ -263,6 +269,9 @@ def edit_item(listing_id: UUID, item_id: UUID, body: ItemPatch, ctx: Ctx = Depen
     if "category" in ch:
         ch["category"] = (ch["category"] or "").strip() or None
         ch["category_suggestion"] = None
+        if ch["category"]:
+            from .catalog import keep  # local: catalog imports this module
+            keep(ctx.conn, ctx.tenant_id, ch["category"][:60])
     if "sizes" in ch:
         ch["sizes"] = [s.strip()[:20] for s in ch["sizes"] or [] if s.strip()]
     c = ctx.conn

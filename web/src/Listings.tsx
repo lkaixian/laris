@@ -4,6 +4,7 @@ import type { Me } from './api'
 import { useFetch, msg, Async, Hint, PageHeader, Status as Chip } from './ui'
 import { ConfirmDialog, MoreMenu } from './kit'
 import { MaskEditor } from './MaskEditor'
+import { CatalogProducts } from './CatalogProducts'
 import { t, useLang, locale } from './i18n'
 import type { Text } from './i18n'
 
@@ -64,7 +65,7 @@ const tierKey = (t: { size: string | null; min_qty: string | number; price: stri
 const transient = (e: unknown) => e instanceof ApiError && (e.status === 502 || e.status === 504 || e.code === 'network' || e.code === 'vision_unavailable')
 
 // Images need the identity headers: fetch as a blob (data URLs in mock mode pass through).
-function Pic({ url, alt, className }: { url: string; alt: string; className?: string }) {
+export function Pic({ url, alt, className }: { url: string; alt: string; className?: string }) {
   useLang()
   const [src, setSrc] = useState('')
   const [bad, setBad] = useState(false)
@@ -538,18 +539,25 @@ export function CatalogView({ me, owner, id }: { me?: Me; owner: boolean; id?: s
   const [up, setUp] = useState<boolean>()
   const [viewing, setViewing] = useState<string>()
   const upOpen = up ?? (list.loading && !list.data ? false : !list.data?.length)  // open until the first photo exists
+  const [tabPick, setTab] = useState<'products' | 'photos'>()
+  const tab = tabPick ?? (id || !list.data?.length ? 'photos' : 'products')  // products first once there are any; a photo link opens its photo
   return (
     <>
       <PageHeader title={t({ en: 'Catalog photos', ms: 'Foto katalog', zh: '目录照片', ta: 'பட்டியல் படங்கள்' })} description={t({ en: 'Photograph shelves of labelled products, then check what LARIS read.', ms: 'Ambil foto rak produk berlabel, kemudian semak apa yang dibaca LARIS.', zh: '拍摄带标签产品的货架，然后核对 LARIS 识别的内容。', ta: 'லேபிளிட்ட பொருட்களின் அடுக்குகளைப் புகைப்படம் எடுங்கள், பின்னர் LARIS படித்ததைச் சரிபார்க்கவும்.' })}
         actions={<button type="button" className={`btn ${upOpen ? '' : 'btn-primary'}`} aria-expanded={upOpen} aria-controls="cat-up" data-guide="cat-upload" onClick={() => setUp(!upOpen)}>{t({ en: 'Upload photo', ms: 'Muat naik foto', zh: '上传照片', ta: 'படத்தைப் பதிவேற்று' })}</button>} />
       {upOpen && <UploadCard owner={owner} suppliers={sup.data ?? []} onDone={lid => { list.reload(); location.hash = `#/catalog/${lid}` }} />}
-      <section aria-labelledby="cat-list" className="mt-8" data-guide="cat-list">
+      <div className="seg mt-6" role="group" aria-label={t({ en: 'Catalog view', ms: 'Paparan katalog', zh: '目录视图', ta: 'பட்டியல் காட்சி' })}>
+        {([['products', { en: 'Products', ms: 'Produk', zh: '商品', ta: 'தயாரிப்புகள்' }], ['photos', { en: 'Photos', ms: 'Foto', zh: '照片', ta: 'படங்கள்' }]] as const).map(([k, label]) => (
+          <button key={k} type="button" aria-pressed={tab === k} className={`seg-btn ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{t(label)}</button>))}
+      </div>
+      {tab === 'products' && <div className="mt-4"><CatalogProducts canEdit={canUpload(me)} /></div>}
+      {tab === 'photos' && <section aria-labelledby="cat-list" className="mt-8" data-guide="cat-list">
         <h2 id="cat-list" className="mb-3 text-md font-semibold">{t({ en: 'Recent photos', ms: 'Foto terkini', zh: '最近的照片', ta: 'சமீபத்திய படங்கள்' })}</h2>
         <Async s={list} rows={5} shape="table" empty={!list.data?.length} emptyText={t({ en: 'No catalog photos yet.', ms: 'Belum ada foto katalog.', zh: '还没有目录照片。', ta: 'இன்னும் பட்டியல் படங்கள் இல்லை.' })} emptyHint={t({ en: 'Photograph a page or shelf of labelled products and LARIS lists each one for you to check.', ms: 'Ambil foto halaman atau rak produk berlabel dan LARIS menyenaraikan setiap satu untuk anda semak.', zh: '拍摄一页或一架带标签的产品，LARIS 会逐一列出供您核对。', ta: 'லேபிளிட்ட பொருட்களின் ஒரு பக்கம் அல்லது அடுக்கைப் புகைப்படம் எடுங்கள்; LARIS ஒவ்வொன்றையும் பட்டியலிடும், நீங்கள் சரிபார்க்கலாம்.' })}
           emptyAction={{ label: t({ en: 'Read your first catalog photo', ms: 'Baca foto katalog pertama anda', zh: '识别您的第一张目录照片', ta: 'உங்கள் முதல் பட்டியல் படத்தைப் படி' }), onClick: () => { setUp(true); requestAnimationFrame(() => { const f = document.getElementById('cat-file'); f?.scrollIntoView({ block: 'center' }); f?.focus() }) } }}>
           <Gallery rows={list.data ?? []} current={id} onView={setViewing} />
         </Async>
-      </section>
+      </section>}
       <PhotoDialog id={viewing} showPrice={canSeePrice(me, owner)} onClose={() => setViewing(undefined)} />
       {id && <DetailView key={id} id={id} showPrice={canSeePrice(me, owner)} suppliers={sup.data ?? []} supErr={sup} onList={list.reload} />}
     </>

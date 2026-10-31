@@ -11,6 +11,7 @@ const item = (i: number, extra: Record<string, unknown> = {}) => ({
   id: `li${i + 1}`, position: i + 1, description: NAMES[i], labels: [['RM 18', 'Size 36-40'], ['黄铜扣 25mm'], ['Beg kanvas', 'Biru laut'], ['Tali pinggang kulit'], [], ['Getah 3mm']][i],
   sku: `SKU-${100 + i}`, sizes: [['36', '37', '38', '39', '40'], ['25mm'], [], ['M', 'L'], [], []][i], price: (12 + i * 3).toFixed(2), currency: 'MYR', bbox: bbox(i),
   status: 'needs_review', reasons: [] as string[], item_key: null, stock_qty: null as string | null,
+  category: ['Footwear', 'Hardware', null, 'Belts', null, null][i] as string | null, category_suggestion: [null, null, 'Bags', null, 'Hair accessories', 'Rubber'][i] as string | null,
   price_tiers: [] as { size: string | null; min_qty: string; price: string }[], crop_url: svg(160, 120, `<rect width="160" height="120" fill="${COLORS[i]}"/><text x="8" y="64" font-size="14" font-family="sans-serif">${NAMES[i]}</text>`), ...extra,
 })
 const make = (id: string, minsAgo: number) => ({
@@ -26,9 +27,53 @@ const shapes = new URLSearchParams(location.search).get('catalog') === 'shapes'
 const listings = [make('lst-1', 90), ...(shapes ? [{ ...make('lst-tall', 30), image_url: tall, note: 'Tall photo' },
   { ...make('lst-many', 60), note: '40 products', items: Array.from({ length: 40 }, (_, i) => ({ ...item(i % 6), id: `lm${i}`, position: i + 1 })) }] : [])]
 
+// The product side (src/api/catalog.py): search, the business's categories, moving products, confirming suggestions.
+const extraCats = new Set<string>()
+const near = (g: string, cats: string[]) => cats.find(c => c.toLowerCase() === g.toLowerCase()) ?? cats.find(c => c.toLowerCase().replace(/s$/, '') === g.toLowerCase().replace(/s$/, ''))
+const allItems = () => listings.flatMap(l => l.items.map((i: any) => ({ ...i, listing_id: l.id }))).filter((i: any) => i.status !== 'discarded')
+const catNames = () => [...new Set([...extraCats, ...allItems().map((i: any) => i.category).filter(Boolean)])].sort()
+function catalogMock(method: string, p: string, body: any): unknown {
+  if (p.startsWith('/catalog/items?') && method === 'GET') {
+    const q = new URLSearchParams(p.split('?')[1])
+    const s = (q.get('q') ?? '').toLowerCase(), cat = q.get('category')
+    return allItems().filter((i: any) => (!s || [i.description, i.sku, i.category, ...(i.labels ?? [])].join(' ').toLowerCase().includes(s))
+      && (!cat || i.category?.toLowerCase() === cat.toLowerCase()) && (q.get('uncategorised') !== 'true' || !i.category) && (q.get('suggested') !== 'true' || (i.category_suggestion && !i.category)))
+  }
+  if (p === '/catalog/categories' && method === 'GET') {
+    const its = allItems()
+    return { categories: catNames().map(name => ({ name, count: its.filter((i: any) => i.category === name).length })), total: its.length, uncategorised: its.filter((i: any) => !i.category).length }
+  }
+  if (p === '/catalog/categories' && method === 'POST') { const n = String(body.name ?? '').trim(); if (!n) throw new ApiError(422, 'bad_name', 'a category needs a name'); extraCats.add(near(n, catNames()) ?? n); return { name: n } }
+  if (p === '/catalog/categories/rename' && method === 'POST') {
+    let moved = 0
+    allItems().forEach((i: any) => { const it = listings.flatMap(l => l.items).find((x: any) => x.id === i.id) as any; if (it.category === body.old) { it.category = body.new; moved++ } })
+    extraCats.delete(body.old); extraCats.add(body.new); return { name: body.new, moved }
+  }
+  if (p === '/catalog/categories/delete' && method === 'POST') {
+    let n = 0
+    listings.flatMap(l => l.items).forEach((it: any) => { if (it.category === body.name) { it.category = null; n++ } })
+    extraCats.delete(body.name); return { uncategorised: n }
+  }
+  if (p === '/catalog/items/move' && method === 'POST') {
+    const cat = String(body.category ?? '').trim() || null
+    const use = cat ? near(cat, catNames()) ?? cat : null
+    if (use) extraCats.add(use)
+    let moved = 0
+    listings.flatMap(l => l.items).forEach((it: any) => { if (body.item_ids.includes(it.id)) { it.category = use; it.category_suggestion = null; moved++ } })
+    return { moved, category: use }
+  }
+  if (p === '/catalog/items/accept-suggestions' && method === 'POST') {
+    let accepted = 0
+    listings.flatMap(l => l.items).forEach((it: any) => { if (body.item_ids.includes(it.id) && it.category_suggestion) { extraCats.add(it.category_suggestion); it.category = it.category_suggestion; it.category_suggestion = null; accepted++ } })
+    return { accepted }
+  }
+  return undefined
+}
+
 // Returns undefined when the path is not a listings route.
 export function mockListings(method: string, p: string, owner: boolean, body: any): unknown {
   let m: RegExpMatchArray | null
+  if (p.startsWith('/catalog')) return catalogMock(method, p, body)
   const view = (l: ReturnType<typeof make>) => ({ ...l, items: l.items.map(i => (owner ? i : { ...i, price: null, currency: null, price_tiers: [] })) })
   const find = (id: string) => { const l = listings.find(x => x.id === id); if (!l) throw new ApiError(404, 'not_found', 'Listing not found.'); return l }
   if (p === '/listings' && method === 'POST') {

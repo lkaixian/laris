@@ -69,7 +69,7 @@ def checkout(body: Checkout, ctx: Ctx = Depends(write_ctx)):
             "customer_email": u["e"], "success_url": f"{b}/#/licence?paid=1", "cancel_url": f"{b}/#/purchase"})
         resp.raise_for_status()
         url = resp.json()["url"]
-    except (httpx.HTTPError, KeyError, ValueError) as e:
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:
         log.warning("stripe checkout failed: %s", type(e).__name__)  # never log the body: it can echo the email
         raise ApiError(502, "payment_unavailable", "The payment page could not be opened. Try again in a minute.")
     audit(ctx, "license_requests", rid, f"licence checkout started: {body.plan}")
@@ -80,7 +80,7 @@ def verify(raw: bytes, header: str, secret: str, now: float | None = None) -> bo
     """Stripe-Signature: t=<unix>,v1=<hex hmac-sha256 of "<t>.<raw body>">[,v1=...]. Constant-time compare, replay window."""
     parts = [p.split("=", 1) for p in header.split(",") if "=" in p]
     t = next((v for k, v in parts if k == "t"), "")
-    if not t.isdigit() or abs((time.time() if now is None else now) - int(t)) > TOLERANCE:
+    if not (t.isascii() and t.isdigit()) or abs((time.time() if now is None else now) - int(t)) > TOLERANCE:
         return False
     want = hmac.new(secret.encode(), t.encode() + b"." + raw, hashlib.sha256).hexdigest()
     return any(hmac.compare_digest(want, v) for k, v in parts if k == "v1")
@@ -99,7 +99,10 @@ def issue_paid(rid: str) -> bool:
         c.execute("""insert into audit_log(tenant_id, actor, entity, entity_id, event, after)
                      select tenant_id, 'system:stripe', 'license_requests', id, 'license issued after payment', %s::jsonb from license_requests where id=%s""",
                   (json.dumps({"license_id": lid, "plan": q["plan"], "seats": q["seats"]}), rid))  # never the token
-    mailer.send(q["email"], *mailer.license_mail(q["plan"], q["seats"], token), category="license")  # best effort; the offer is on the Licence page anyway
+    try:
+        mailer.send(q["email"], *mailer.license_mail(q["plan"], q["seats"], token), category="license")  # best effort; the offer is on the Licence page anyway
+    except Exception as e:  # the licence is already stored: a mail crash must not make Stripe retry
+        log.warning("licence mail failed: %s", type(e).__name__)
     return True
 
 
@@ -114,7 +117,7 @@ async def stripe_webhook(request: Request):
         obj = ev["data"]["object"]
         paid = ev["type"] in ("checkout.session.completed", "checkout.session.async_payment_succeeded") and obj.get("payment_status") == "paid"
         rid = str(UUID(obj.get("client_reference_id") or ""))
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, AttributeError):
         return PlainTextResponse("ok")  # some other event, or not ours: Stripe must not keep retrying it
     if paid and not await run_in_threadpool(issue_paid, rid):
         log.info("stripe: request already issued or unknown")

@@ -91,7 +91,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
     if (!name || !uid) return
     try { if (sessionStorage.getItem('laris.bot.intro') === uid) return; sessionStorage.setItem('laris.bot.intro', uid) } catch { /* private window: it may greet again */ }
     mark('hi-' + page())  // the introduction replaces the page offer on this first page
-    const id = setTimeout(() => { setIntro(true); setHop(n => n + 1); say(t(T.hi).replace('{name}', name), 6000, true) }, 900)
+    const id = setTimeout(() => { setHop(n => n + 1); dispatchEvent(new CustomEvent('laris:hello', { detail: name })) }, 900)
     return () => clearTimeout(id)
   }, [name, uid])  // eslint-disable-line react-hooks/exhaustive-deps
 

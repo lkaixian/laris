@@ -1,5 +1,6 @@
 import { DealsView } from './Deals'
 import { ReportsView } from './Reports'
+import { HelloBanner } from './HelloBanner'
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ReactNode } from 'react'
@@ -607,7 +608,7 @@ function AppShell() {
   return (
     <LicenseProvider value={{ lic, readOnly: !!lic?.enforced && lic.read_only, reload: () => setLicTries(t => t + 1) }}>
     <OrgCtx value={orgName}>
-      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /><HealthBanner owner={owner && !!me} hash={hash} /></>}>
+      <Shell me={me} hash={hash} route={route} dark={dark} setDark={setDark} owner={owner} role={role} onRole={onRole} banner={<><HelloBanner /><OfflineBanner /><LicenceBanner lic={lic} owner={owner} /><HealthBanner owner={owner && !!me} hash={hash} /></>}>
         {meErr ? (
           <div role="alert" className="card border-warn bg-warn-bg text-warn">
             <p>{t(S.noMe)} {meErr}</p>

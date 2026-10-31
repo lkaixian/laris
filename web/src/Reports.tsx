@@ -2,6 +2,7 @@
 // prints cleanly to A4 or saves as PDF, and downloads as CSV. LARIS works out every number from your records with fixed rules.
 // Preview: the numbers here are sample data until the report service is switched on.
 import { useState } from 'react'
+import { MOCK } from './api'
 import { useFetch, Async, PageHeader } from './ui'
 import { t, useLang, getLang, locale } from './i18n'
 import type { Text } from './i18n'
@@ -16,6 +17,7 @@ type Report = { period: string; label: string; from: string; to: string; as_of: 
 const S: Record<string, Text> = {
   title: { en: 'Business report', ms: 'Laporan perniagaan', zh: '业务报告', ta: 'வணிக அறிக்கை' },
   lead: { en: 'Your key figures against your targets, ready to print or save as a PDF.', ms: 'Angka utama anda berbanding sasaran, sedia untuk dicetak atau disimpan sebagai PDF.', zh: '关键数字与目标对照，可直接打印或存为 PDF。', ta: 'உங்கள் முக்கிய எண்கள் இலக்குகளுடன், அச்சிட அல்லது PDF ஆக சேமிக்க தயார்.' },
+  notYet: { en: 'The business report is not available on this server yet. It is still being built; the demo shows it with sample numbers.', ms: 'Laporan perniagaan belum tersedia pada pelayan ini. Ia masih dibina; demo menunjukkannya dengan nombor contoh.', zh: '此服务器上暂未提供业务报告。它仍在开发中；演示版会用示例数据展示。' },
   preview: { en: 'Preview: sample numbers', ms: 'Pratonton: nombor contoh', zh: '预览：示例数据', ta: 'முன்னோட்டம்: மாதிரி எண்கள்' },
   week: { en: 'This week', ms: 'Minggu ini', zh: '本周', ta: 'இந்த வாரம்' }, last_week: { en: 'Last week', ms: 'Minggu lepas', zh: '上周', ta: 'கடந்த வாரம்' }, month: { en: 'This month', ms: 'Bulan ini', zh: '本月', ta: 'இந்த மாதம்' },
   period: { en: 'Period', ms: 'Tempoh', zh: '时间段', ta: 'காலம்' },
@@ -83,8 +85,18 @@ function StatusChip({ s }: { s: Kpi['status'] }) {
   return <span className="rep-st" data-s={s}><i aria-hidden="true">{s === 'on_track' ? '✓' : s === 'monitor' ? '!' : '▲'}</i>{t(S[s])}</span>
 }
 
+// The report service is not built on the server yet (no GET /reports), so a live server would answer 404. Only mock mode has the sample numbers.
 export function ReportsView() {
   useLang()
+  return MOCK ? <ReportsSample /> : (
+    <div className="rep">
+      <PageHeader title={t(S.title)} description={t(S.lead)} />
+      <p role="status" className="card text-muted">{t(S.notYet)}</p>
+    </div>
+  )
+}
+
+function ReportsSample() {
   const [period, setPeriod] = useState('month')
   const s = useFetch<Report>(`/reports?period=${period}&lang=${getLang()}`)
   const d = s.data

@@ -4,6 +4,7 @@ import { Async, PageHeader, msg, useAction, ActionError, useFetch } from './ui'
 import { UsageBars } from './AiActivity'
 import { useToast } from './Toast'
 import { locale, t, useLang } from './i18n'
+import type { Text } from './i18n'
 
 interface Usage { period: string; approved_quotes: number; quotes_sent: number; api_calls: number; free_allowance: number; over_allowance: boolean; note: string }
 interface Key { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; revoked: boolean; mcp_role: string | null }
@@ -119,12 +120,43 @@ function Keys() {
   )
 }
 
+type Step = { h: Text; state: 'live' | 'sim' | 'plan'; p: Text }
+const STATE: Record<Step['state'], Text> = { live: { en: 'Live', ms: 'Aktif', zh: '已上线' }, sim: { en: 'Simulated in the demo', ms: 'Disimulasi dalam demo', zh: '演示中模拟' }, plan: { en: 'Planned', ms: 'Dirancang', zh: '计划中' } }
+const STEPS: Step[] = [
+  { h: { en: '1. Win the work in LARIS', ms: '1. Menangi kerja dalam LARIS', zh: '1. 在 LARIS 赢得订单' }, state: 'live',
+    p: { en: 'A customer asks on Telegram or WhatsApp, rules price the quote from your cost book, and you approve it. No AI sets a price.', ms: 'Pelanggan bertanya di Telegram atau WhatsApp, peraturan menetapkan harga daripada buku kos anda, dan anda meluluskannya. Tiada AI menetapkan harga.', zh: '客户在 Telegram 或 WhatsApp 询价，规则根据您的成本表定价，由您审批。AI 不决定价格。' } },
+  { h: { en: '2. Orbyte modules ask LARIS for prices', ms: '2. Modul Orbyte meminta harga daripada LARIS', zh: '2. Orbyte 模块向 LARIS 查询价格' }, state: 'live',
+    p: { en: 'Orbyte modules, or your own tools, call LARIS with an API key (below) to read the recipe list and get selling prices. Same rules, never costs or margins. LARIS does not call Orbyte on its own.', ms: 'Modul Orbyte, atau alat anda sendiri, memanggil LARIS dengan kunci API (di bawah) untuk membaca senarai resipi dan mendapatkan harga jualan. Peraturan yang sama, tidak pernah kos atau margin. LARIS tidak memanggil Orbyte sendiri.', zh: 'Orbyte 模块或您自己的系统用 API 密钥（见下方）调用 LARIS，读取配方清单并获取销售价格。规则相同，绝不含成本或利润率。LARIS 不会主动调用 Orbyte。' } },
+  { h: { en: '3. Hand over the signed quote', ms: '3. Serahkan sebut harga yang ditandatangani', zh: '3. 移交已签署的报价' }, state: 'sim',
+    p: { en: 'The signed quote and its job card go to Orbyte’s eSign and Work modules instead of being copied into LARIS. LARIS is the step before Orbyte’s Clients and projects.', ms: 'Sebut harga yang ditandatangani dan kad kerjanya dihantar ke modul eSign dan Work Orbyte dan tidak disalin ke dalam LARIS. LARIS ialah langkah sebelum Clients dan projects Orbyte.', zh: '已签署的报价及其工作单交给 Orbyte 的 eSign 和 Work 模块，而不是复制到 LARIS 中。LARIS 是 Orbyte“客户与项目”之前的一步。' } },
+  { h: { en: '4. Supplier price feeds', ms: '4. Suapan harga pembekal', zh: '4. 供应商价格数据源' }, state: 'plan',
+    p: { en: 'Prices arrive through Orbyte Connect so cost items need no photos. No partner has been contacted yet.', ms: 'Harga tiba melalui Orbyte Connect supaya item kos tidak perlukan foto. Belum ada rakan kongsi dihubungi.', zh: '价格通过 Orbyte Connect 送达，成本项无需拍照。尚未联系任何合作方。' } },
+]
+function OrbyteFlow() {
+  useLang()
+  return (
+    <section className="card mb-6" aria-labelledby="orbyte" data-guide="orbyte-how">
+      <h2 id="orbyte" className="text-lg font-semibold">{t({ en: 'How LARIS works with Orbyte', ms: 'Cara LARIS bekerja dengan Orbyte', zh: 'LARIS 如何与 Orbyte 配合' })}</h2>
+      <p className="mt-1 text-sm text-muted">{t({ en: 'LARIS is the step before Orbyte’s Clients and projects: it wins the work, then hands it over. This page is where Orbyte, or any program, connects to LARIS.', ms: 'LARIS ialah langkah sebelum Clients dan projects Orbyte: ia memenangi kerja, kemudian menyerahkannya. Halaman ini ialah tempat Orbyte, atau mana-mana program, bersambung dengan LARIS.', zh: 'LARIS 是 Orbyte“客户与项目”之前的一步：先赢得订单，再移交。Orbyte 或任何程序都在此页与 LARIS 连接。' })}</p>
+      <ol className="mt-3 grid gap-2 md:grid-cols-2">
+        {STEPS.map(x => (
+          <li key={x.h.en} className="rounded-ui bg-tint p-3">
+            <p className="flex flex-wrap items-center gap-2 font-semibold">{t(x.h)} <span className="badge">{t(STATE[x.state])}</span></p>
+            <p className="mt-1 text-sm text-muted">{t(x.p)}</p>
+          </li>))}
+      </ol>
+      <p className="mt-3 text-sm text-muted">{t({ en: 'Honest status: today the connection works one way. What is live is the read-only price API and the AI tool search below. A real Orbyte login and Orbyte API calls are not built yet.', ms: 'Status sebenar: hari ini sambungan berfungsi sehala. Yang aktif ialah API harga baca sahaja dan carian alat AI di bawah. Log masuk Orbyte sebenar dan panggilan API Orbyte belum dibina.', zh: '实际状态：目前连接是单向的。已上线的是下方的只读价格 API 和 AI 工具检索。真实的 Orbyte 登录与 Orbyte API 调用尚未构建。' })}</p>
+    </section>
+  )
+}
+
 export function ApiAccessView() {
   useLang()
   const base = location.origin + '/api/v1'
   return (
     <>
-      <PageHeader title={t({ en: 'API access', ms: 'Akses API', zh: 'API 访问', ta: 'API அணுகல்' })} description={t({ en: 'Let another program, such as your own system, ask LARIS for selling prices.', ms: 'Benarkan program lain, seperti sistem anda sendiri, meminta harga jualan daripada LARIS.', zh: '让其他程序（例如您自己的系统）向 LARIS 查询售价。', ta: 'உங்கள் சொந்த அமைப்பு போன்ற மற்றொரு நிரல் LARIS இடம் விற்பனை விலைகளைக் கேட்க அனுமதிக்கவும்.' })} />
+      <PageHeader title={t({ en: 'Orbyte connections', ms: 'Sambungan Orbyte', zh: 'Orbyte 连接', ta: 'Orbyte இணைப்புகள்' })} description={t({ en: 'How LARIS works with Orbyte, and the keys that let Orbyte modules or another program, such as your own system, ask LARIS for selling prices.', ms: 'Cara LARIS bekerja dengan Orbyte, dan kunci yang membenarkan modul Orbyte atau program lain, seperti sistem anda sendiri, meminta harga jualan daripada LARIS.', zh: 'LARIS 如何与 Orbyte 配合，以及让 Orbyte 模块或其他程序（例如您自己的系统）向 LARIS 查询售价的密钥。', ta: 'LARIS Orbyte உடன் எப்படிச் செயல்படுகிறது, மற்றும் Orbyte தொகுதிகள் அல்லது உங்கள் சொந்த அமைப்பு போன்ற பிற நிரல் LARIS இடம் விற்பனை விலைகளைக் கேட்க உதவும் விசைகள்.' })} />
+      <OrbyteFlow />
       <UsageCard />
       <div className="mb-6" data-guide="api-ai-usage"><UsageBars /></div>
       <Keys />

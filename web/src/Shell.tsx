@@ -59,7 +59,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'catalog', label: 'Catalog photos', icon: 'camera', when: canUpload },
     { key: 'products', label: 'Compare prices', icon: 'pipeline' },
     { key: 'alerts', label: 'Stale costs', icon: 'alerts', badge: 'stale' },
-    { key: 'ask', label: 'Ask suppliers', icon: 'ask' },
+    { key: 'ask', label: 'Request quotes', icon: 'ask' },
     { key: 'buying', label: 'Supplier orders', icon: 'tracker' },
     { key: 'contracts', label: 'Contracts', icon: 'tracker' },
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
@@ -76,7 +76,7 @@ export const NAV: { label: string; items: NavItem[] }[] = [
     { key: 'privacy', label: 'Privacy and data', icon: 'lock' },
   ] },
   { label: 'Platform', items: [
-    { key: 'api-access', label: 'API access', icon: 'plug' },
+    { key: 'api-access', label: 'Orbyte connections', icon: 'plug' },
     { key: 'ai-settings', label: 'AI settings', icon: 'ask' },
     { key: 'templates', label: 'Document templates', icon: 'upload' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
@@ -113,7 +113,7 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
   const show = (key: string, el: HTMLElement) => { if (!collapsed) return; const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
   useEffect(() => { if (!tip) return; const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setTip(null) }, away = () => setTip(null); addEventListener('keydown', k); addEventListener('scroll', away, true); return () => { removeEventListener('keydown', k); removeEventListener('scroll', away, true) } }, [tip])
   const hint = tip ? NAV_HINTS[tip.key] : undefined
-  // Folding: a group heading folds and unfolds its items (Suppliers shows Contacts, Ask suppliers, Catalog photos). Arriving on a page opens its group.
+  // Folding: a group heading folds and unfolds its items (Suppliers shows Contacts, Request quotes, Catalog photos). Arriving on a page opens its group.
   const [folds, setFolds] = useState<Folds>(readFolds)
   const flip = (label: string) => setFolds(f => { const n = { ...f, [label]: !isOpen(f, label) }; saveFolds(n); return n })
   useEffect(() => { const g = groupOf(groups, here); if (g) setFolds(f => (isOpen(f, g) ? f : { ...f, [g]: true })) }, [here])  // eslint-disable-line react-hooks/exhaustive-deps

@@ -174,7 +174,7 @@ const contacts = () => {
     documents: Object.values(docs).filter(d => d.doc.party.id === c.id).length, last_activity: null, value: null }))
 }
 
-// Mock price requests (Ask suppliers). Staff never get the price fields.
+// Mock price requests (Request quotes). Staff never get the price fields.
 const dot = (c: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><rect width="160" height="120" fill="${c}"/><circle cx="80" cy="60" r="34" fill="none" stroke="#e00000" stroke-width="4"/></svg>`)}`
 const rp = (reply_id: string, supplier_id: string, supplier_name: string, text: string, p: Partial<{ unit_price: string; min_qty: string; tiers: { min_qty: string; unit_price: string }[]; status: string }> = {}) =>
   ({ reply_id, send_id: 's' + reply_id, supplier_id, supplier_name, text, unit_price: null as string | null, min_qty: null as string | null, tiers: [] as { min_qty: string; unit_price: string }[], status: 'waiting', ...p })
@@ -209,7 +209,7 @@ const CATALOG = [
   { key: 'edit_supplier_contacts', label: 'Edit supplier contacts', description: 'Change a supplier name or number.', group: 'Contacts', default: false },
   { key: 'manage_contacts', label: 'Manage contacts', description: 'Create and edit contacts.', group: 'Contacts', default: true },
   { key: 'upload_documents', label: 'Upload documents', description: 'Add a supplier file or text, or key a document in.', group: 'Documents', default: true },
-  { key: 'ask_suppliers', label: 'Ask suppliers', description: 'Send a photographed item to suppliers.', group: 'Suppliers', default: true },
+  { key: 'ask_suppliers', label: 'Request quotes', description: 'Send a photographed item to suppliers.', group: 'Suppliers', default: true },
   { key: 'view_replies_prices', label: 'See supplier reply prices', description: 'The words and prices in suppliers replies.', group: 'Suppliers', default: false },
   { key: 'manage_followups', label: 'Send or skip follow-ups', description: 'Act on quotes waiting for a reply.', group: 'Quotes', default: false },
   { key: 'export_data', label: 'Export data', description: 'Download the contact book as CSV.', group: 'Data', default: false },

@@ -101,7 +101,7 @@ const STAFF: Step[] = [
     body: { en: 'Open Documents to review, fix any flagged line, then save it. The document then waits for the owner.',
       ms: 'Buka Documents to review, betulkan baris yang ditanda, kemudian simpan. Dokumen itu kemudian menunggu pemilik.' } },
   { id: 'ask', sel: nav('ask'), need: 'ask_suppliers',
-    title: { en: 'Ask suppliers', ms: 'Tanya pembekal' },
+    title: { en: 'Request quotes', ms: 'Minta sebut harga' },
     body: { en: 'Photograph an item and ask your suppliers for a price in one go.',
       ms: 'Ambil gambar sesuatu item dan tanya harga daripada pembekal anda sekali gus.' } },
   help,

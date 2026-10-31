@@ -100,7 +100,7 @@ export const can = (k: string) => perms.includes(k)
 // The ONE map of permission key -> label (same wording as the server catalog, GET /api/roles). Add a key here when you gate a control on it.
 export const PERM_LABEL: Record<string, string> = {
   view_costs: 'See costs and prices', view_reports: 'See the margin report', edit_supplier_contacts: 'Edit supplier contacts', manage_contacts: 'Manage contacts',
-  upload_documents: 'Upload documents', ask_suppliers: 'Ask suppliers', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
+  upload_documents: 'Upload documents', ask_suppliers: 'Request quotes', view_replies_prices: 'See supplier reply prices', manage_followups: 'Send or skip follow-ups',
   manage_contracts: 'Draft supplier contracts', approve_contracts: 'Approve contracts up to a limit',
   export_data: 'Export data', view_audit: 'See the activity log', decide_quotes: 'Approve, accept, reject or send quotes',
   view_revenue: 'See revenue and profit', record_expenses: 'Record running costs',

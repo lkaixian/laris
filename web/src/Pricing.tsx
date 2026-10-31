@@ -58,7 +58,7 @@ const PLANS: { key: Key; name: string; seats: number; pop?: boolean; pts: Text[]
     { en: 'Catalog photos and price list import', ms: 'Foto katalog dan import senarai harga', zh: '目录照片与价目表导入' }] },
   { key: 'pro', name: 'LARIS Pro', seats: 25, pts: [aiLine('pro'),
     { en: 'Suppliers: directory, price comparison, contracts', ms: 'Pembekal: direktori, perbandingan harga, kontrak', zh: '供应商：名录、比价、合同' },
-    { en: 'API access for your own tools', ms: 'Akses API untuk alat anda sendiri', zh: '为自有系统开放 API' },
+    { en: 'Orbyte connections and API access for your own tools', ms: 'Sambungan Orbyte dan akses API untuk alat anda sendiri', zh: '连接 Orbyte，并为自有系统开放 API' },
     { en: 'Ask LARIS assistant', ms: 'Pembantu Tanya LARIS', zh: '问 LARIS 助手' },
     { en: 'Priority support', ms: 'Sokongan keutamaan', zh: '优先支持' }] },
 ]

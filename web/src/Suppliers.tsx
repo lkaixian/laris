@@ -80,7 +80,7 @@ const T = {
   saveRec: { en: 'Save this advice', ms: 'Simpan nasihat ini', zh: '保存此建议', ta: 'இந்த ஆலோசனையைச் சேமி' },
   toCostBook: { en: 'Use price in cost book', ms: 'Guna harga dalam buku kos', zh: '用于成本册', ta: 'செலவுப் புத்தகத்தில் பயன்படுத்து' },
   askQuotes: { en: 'Request quotes', ms: 'Minta sebut harga', zh: '索取报价', ta: 'விலைப்புள்ளிகள் கேள்' },
-  askHint: { en: 'Opens Ask suppliers with these suppliers in mind. Nothing is sent until you press send there.', ms: 'Buka Tanya pembekal. Tiada apa dihantar sehingga anda tekan hantar di sana.', zh: '打开“询问供应商”。在那里点击发送前不会发出任何内容。', ta: 'சப்ளையர்களிடம் கேள் திறக்கும். அங்கே அனுப்பு அழுத்தும் வரை எதுவும் அனுப்பப்படாது.' },
+  askHint: { en: 'Opens Request quotes with these suppliers in mind. Nothing is sent until you press send there.', ms: 'Buka Minta sebut harga. Tiada apa dihantar sehingga anda tekan hantar di sana.', zh: '打开“索取报价”。在那里点击发送前不会发出任何内容。', ta: 'மேற்கோள் கோருங்கள் திறக்கும். அங்கே அனுப்பு அழுத்தும் வரை எதுவும் அனுப்பப்படாது.' },
   guard: { en: 'This product is under contract with another supplier.', ms: 'Produk ini di bawah kontrak dengan pembekal lain.', zh: '该产品已与其他供应商签订合同。', ta: 'இந்தப் பொருள் வேறு சப்ளையருடன் ஒப்பந்தத்தில் உள்ளது.' },
   guardAsk: { en: 'Give a reason. A manager or the owner must approve this order.', ms: 'Berikan sebab. Pengurus atau pemilik mesti meluluskan pesanan ini.', zh: '请填写原因。需由经理或店主批准此订单。', ta: 'காரணம் தருக. மேலாளர் அல்லது உரிமையாளர் இந்த ஆர்டரை அங்கீகரிக்க வேண்டும்.' },
   reasonLbl: { en: 'Reason', ms: 'Sebab', zh: '原因', ta: 'காரணம்' },

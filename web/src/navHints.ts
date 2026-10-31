@@ -23,7 +23,7 @@ export const NAV_HINTS: Record<string, Text> = {
   roles: h('Choose what each role can see and do.', 'Pilih apa yang boleh dilihat dan dibuat setiap peranan.', '设置每个角色可查看和可操作的内容。', 'ஒவ்வொரு பங்கும் பார்க்க, செய்யக்கூடியதைத் தேர்ந்தெடுங்கள்.'),
   settings: h('Business name, logo, quote defaults and channels.', 'Nama perniagaan, logo, lalai sebut harga dan saluran.', '公司名称、标志、报价默认值和渠道。', 'வணிகப் பெயர், லோகோ, மேற்கோள் இயல்புகள், சேனல்கள்.'),
   privacy: h('Customer data rights, consent and the breach register.', 'Hak data pelanggan, persetujuan dan daftar pelanggaran.', '客户数据权利、同意和泄露登记。', 'வாடிக்கையாளர் தரவு உரிமைகள், ஒப்புதல், மீறல் பதிவு.'),
-  'api-access': h('Keys that let other software read your prices.', 'Kunci untuk perisian lain membaca harga anda.', '允许其他软件读取价格的密钥。', 'பிற மென்பொருள் உங்கள் விலைகளைப் படிக்க உதவும் விசைகள்.'),
+  'api-access': h('How LARIS works with Orbyte, and keys that let Orbyte modules or other software read your prices.', 'Cara LARIS bekerja dengan Orbyte, dan kunci untuk modul Orbyte atau perisian lain membaca harga anda.', 'LARIS 如何与 Orbyte 配合，以及让 Orbyte 模块或其他软件读取价格的密钥。', 'LARIS Orbyte உடன் எப்படிச் செயல்படுகிறது, மற்றும் Orbyte தொகுதிகள் அல்லது பிற மென்பொருள் விலைகளைப் படிக்க உதவும் விசைகள்.'),
   'ai-settings': h('Choose what the AI may read and see its activity.', 'Pilih apa yang AI boleh baca dan lihat aktivitinya.', '选择 AI 可读取的内容并查看其活动。', 'AI எதைப் படிக்கலாம் என்பதைத் தேர்ந்தெடுத்து செயல்பாட்டைப் பாருங்கள்.'),
   status: h('Is everything connected and working?', 'Adakah semuanya bersambung dan berfungsi?', '所有服务是否已连接并正常运行？', 'எல்லாம் இணைந்து வேலை செய்கிறதா?'),
   licence: h('Your plan, seats and expiry.', 'Pelan, tempat duduk dan tarikh tamat anda.', '您的套餐、席位和到期日。', 'உங்கள் திட்டம், இருக்கைகள், காலாவதி.'),

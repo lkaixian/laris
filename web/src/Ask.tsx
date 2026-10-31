@@ -5,7 +5,7 @@ import { t, useLang, locale } from './i18n'
 import type { Text } from './i18n'
 import { rm, useFetch, useAction, ActionError, Async, Hint, PageHeader, TableRegion } from './ui'
 
-// "Ask suppliers": photograph an item, mark it, ask suppliers on WhatsApp how much. Contract: docs/api-contract.md (RFQ).
+// "Request quotes": photograph an item, mark it, ask suppliers on WhatsApp how much. Contract: docs/api-contract.md (RFQ).
 interface Supplier { id: string; name: string; contact: string | null }
 interface Tier { min_qty: string; unit_price: string }
 interface Reply {
@@ -237,7 +237,7 @@ function Replies({ owner, s }: { owner: boolean; s: ReturnType<typeof useFetch<R
     <section data-guide="ask-replies" className="mt-10 border-t border-soft pt-6" aria-labelledby="ask-replies">
       <h2 id="ask-replies" className="mb-2 text-lg font-semibold">{t({ en: 'Replies', ms: 'Balasan', zh: '回复', ta: 'பதில்கள்' })}</h2>
       <Async s={s} rows={2} shape="cards" empty={!s.data?.length} emptyText={t({ en: 'No price requests yet.', ms: 'Belum ada permintaan harga.', zh: '还没有询价请求。', ta: 'இன்னும் விலை கோரிக்கைகள் இல்லை.' })} emptyHint={t({ en: 'Photograph an item above and ask your suppliers how much it costs. Their replies are compared here.', ms: 'Ambil foto item di atas dan tanya pembekal berapa harganya. Balasan mereka dibandingkan di sini.', zh: '在上方拍摄物品并询问供应商价格，他们的回复会在这里比较。', ta: 'மேலே ஒரு பொருளைப் புகைப்படம் எடுத்து சப்ளையர்களிடம் விலை கேளுங்கள். அவர்களின் பதில்கள் இங்கே ஒப்பிடப்படும்.' })}
-        emptyAction={{ label: t({ en: 'Ask suppliers for a price', ms: 'Tanya pembekal harga', zh: '向供应商询价', ta: 'சப்ளையர்களிடம் விலை கேள்' }), onClick: () => { const f = document.getElementById('ask-photo'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>
+        emptyAction={{ label: t({ en: 'Request a supplier quote', ms: 'Minta sebut harga pembekal', zh: '向供应商索取报价', ta: 'சப்ளையரிடம் மேற்கோள் கோருங்கள்' }), onClick: () => { const f = document.getElementById('ask-photo'); f?.scrollIntoView({ block: 'center' }); f?.focus() } }}>
         <ul className="grid gap-4">
           {s.data?.map(q => (
             <li key={q.id} className="card min-w-0">
@@ -268,7 +268,7 @@ export function AskView({ owner }: { owner: boolean }) {
   const s = useFetch<Rfq[]>('/rfq')
   return (
     <>
-      <PageHeader title={t({ en: 'Ask suppliers', ms: 'Tanya pembekal', zh: '询问供应商', ta: 'சப்ளையர்களிடம் கேள்' })} description={t({ en: 'Photograph an item, mark it, and ask suppliers on WhatsApp how much it costs. ', ms: 'Ambil foto item, tandakannya dan tanya pembekal di WhatsApp berapa harganya. ', zh: '拍摄物品，标记它，并通过 WhatsApp 询问供应商价格。', ta: 'ஒரு பொருளைப் புகைப்படம் எடுத்து, குறியிட்டு, WhatsApp இல் சப்ளையர்களிடம் விலை கேளுங்கள். ' }) + (owner ? t({ en: 'Their replies are compared below.', ms: 'Balasan mereka dibandingkan di bawah.', zh: '他们的回复在下方比较。', ta: 'அவர்களின் பதில்கள் கீழே ஒப்பிடப்படும்.' }) : t({ en: 'The owner sees the prices; you see who has replied.', ms: 'Pemilik melihat harga; anda melihat siapa yang telah membalas.', zh: '店主可看到价格；您可看到谁已回复。', ta: 'உரிமையாளர் விலைகளைப் பார்ப்பார்; யார் பதிலளித்தார்கள் என்று நீங்கள் பார்க்கலாம்.' }))} />
+      <PageHeader title={t({ en: 'Request quotes', ms: 'Minta sebut harga', zh: '索取报价', ta: 'மேற்கோள் கோருங்கள்' })} description={t({ en: 'Photograph an item, mark it, and ask suppliers on WhatsApp how much it costs. ', ms: 'Ambil foto item, tandakannya dan tanya pembekal di WhatsApp berapa harganya. ', zh: '拍摄物品，标记它，并通过 WhatsApp 询问供应商价格。', ta: 'ஒரு பொருளைப் புகைப்படம் எடுத்து, குறியிட்டு, WhatsApp இல் சப்ளையர்களிடம் விலை கேளுங்கள். ' }) + (owner ? t({ en: 'Their replies are compared below.', ms: 'Balasan mereka dibandingkan di bawah.', zh: '他们的回复在下方比较。', ta: 'அவர்களின் பதில்கள் கீழே ஒப்பிடப்படும்.' }) : t({ en: 'The owner sees the prices; you see who has replied.', ms: 'Pemilik melihat harga; anda melihat siapa yang telah membalas.', zh: '店主可看到价格；您可看到谁已回复。', ta: 'உரிமையாளர் விலைகளைப் பார்ப்பார்; யார் பதிலளித்தார்கள் என்று நீங்கள் பார்க்கலாம்.' }))} />
       <AskForm onSent={s.reload} />
       <Replies owner={owner} s={s} />
     </>

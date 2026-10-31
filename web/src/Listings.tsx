@@ -358,7 +358,7 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
           <MoreMenu label={t({ en: `More for product ${n}`, ms: `Lagi untuk produk ${n}`, zh: `产品 ${n} 的更多操作`, ta: `பொருள் ${n} க்கான மேலும்` })}>
             <button type="button" data-close className="sidelink w-full text-left" onClick={open}>{t({ en: `Edit product ${n}`, ms: `Sunting produk ${n}`, zh: `编辑产品 ${n}`, ta: `பொருள் ${n} ஐத் திருத்து` })}</button>
             <button type="button" data-close className="sidelink w-full text-left" onClick={() => setMasking(true)}>{it.cutout_url ? t({ en: `Edit cut-out of product ${n}`, ms: `Sunting keratan produk ${n}`, zh: `编辑产品 ${n} 的抠图`, ta: `பொருள் ${n} இன் வெட்டுப்படத்தைத் திருத்து` }) : t({ en: `Cut out product ${n}`, ms: `Keratkan produk ${n}`, zh: `抠出产品 ${n}`, ta: `பொருள் ${n} ஐ வெட்டு` })}</button>
-            <button type="button" data-close className="sidelink w-full text-left" aria-expanded={asking} aria-controls={`${id}-ask`} onClick={() => setAsking(!asking)}>{t({ en: `Ask suppliers about product ${n}`, ms: `Tanya pembekal tentang produk ${n}`, zh: `就产品 ${n} 询问供应商`, ta: `பொருள் ${n} பற்றி சப்ளையர்களிடம் கேள்` })}</button>
+            <button type="button" data-close className="sidelink w-full text-left" aria-expanded={asking} aria-controls={`${id}-ask`} onClick={() => setAsking(!asking)}>{t({ en: `Request quotes for product ${n}`, ms: `Minta sebut harga untuk produk ${n}`, zh: `就产品 ${n} 索取报价`, ta: `பொருள் ${n} க்கு மேற்கோள் கோருங்கள்` })}</button>
             {!off && <button type="button" data-close className="sidelink w-full text-left text-warn" aria-disabled={busy || undefined} onClick={() => setConfirmOff(true)}>{t({ en: `Discard product ${n}`, ms: `Buang produk ${n}`, zh: `丢弃产品 ${n}`, ta: `பொருள் ${n} ஐ நிராகரி` })}</button>}
           </MoreMenu>
           {it.status !== 'confirmed' && (
@@ -402,7 +402,7 @@ function ItemCard({ lid, n, it, cats, showPrice, suppliers, supErr, onChanged }:
           <ul className="mt-1 grid gap-1">
             {res.sends.map(s => <li key={s.supplier_id}><span className="font-semibold">{nameOf(s.supplier_id)}</span>: {s.status === 'sent' ? t({ en: 'sent', ms: 'dihantar', zh: '已发送', ta: 'அனுப்பப்பட்டது' }) : <span className="text-warn">{t({ en: 'not sent.', ms: 'tidak dihantar.', zh: '未发送。', ta: 'அனுப்பப்படவில்லை.' })} {s.error ?? t({ en: 'No reason was given.', ms: 'Tiada sebab diberikan.', zh: '未说明原因。', ta: 'காரணம் கொடுக்கப்படவில்லை.' })}</span>}</li>)}
           </ul>
-          <p className="mt-1 text-muted">{t({ en: 'Replies appear under Ask suppliers.', ms: 'Balasan dipaparkan di bawah Tanya pembekal.', zh: '回复会显示在“询问供应商”中。', ta: 'பதில்கள் "சப்ளையர்களிடம் கேள்" இல் தோன்றும்.' })}</p>
+          <p className="mt-1 text-muted">{t({ en: 'Replies appear under Request quotes.', ms: 'Balasan dipaparkan di bawah Minta sebut harga.', zh: '回复会显示在“索取报价”中。', ta: 'பதில்கள் "மேற்கோள் கோருங்கள்" இல் தோன்றும்.' })}</p>
         </div>
       )}
     </li>

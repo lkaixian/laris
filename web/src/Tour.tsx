@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { api, can, canOpen } from './api'
 import type { Me } from './api'
 import { t, useLang } from './i18n'
-import { bot as robot } from './bot'
+import { bot as robot } from './botBus'
 import { FirstRun } from './FirstRun'
 import { applyOnb, buildSteps, firstRunVisible, kindFor, resumable, routeOf } from './tours'
 import type { Onb, OnbPatch, TourKind } from './tours'

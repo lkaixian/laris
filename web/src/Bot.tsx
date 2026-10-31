@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BOT_EVENT } from './bot'
-import type { BotHole, BotMsg } from './bot'
+import { BOT_EVENT } from './botBus'
+import type { BotHole, BotMsg } from './botBus'
 import { hasGuide, startGuide } from './Guide'
 import { t, useLang } from './i18n'
 import type { Text } from './i18n'
@@ -66,6 +66,7 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
       if (m.kind === 'say') { say(m.text, m.ms ?? 3200); return }
       if (m.kind === 'home') { clearTimeout(wait); setSpot(false); setLine(null); fly(null); return }
       // spot: wait a beat so the guide panel has settled in its corner, then stand where neither the part nor the panel is covered
+      setIntro(false); setLine(l => (l?.offer ? null : l))  // a guide has started: drop the offer so it cannot sit on the guide panel
       clearTimeout(wait)
       wait = window.setTimeout(() => {
         const z = size(), h0 = home(), hole = m.hole
@@ -144,9 +145,9 @@ export function Bot({ open, onClick, onWarm, name, uid }: { open: boolean; onCli
           {line.offer && <button type="button" aria-label={t(T.close)} className="bot-x" onClick={() => { clearTimeout(timer.current); setLine(null); setIntro(false) }}><span aria-hidden="true">×</span></button>}
           {intro && <span className="mt-1 block text-muted">{t(T.hiSub)}</span>}
           {line.offer && <span className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary min-h-9 px-3" onClick={() => { setLine(null); setIntro(false); if (intro && !hasGuide(page())) onClick(); else startGuide(page()) }}>{t(intro ? T.tour : T.show)}</button>
-            {intro && <button type="button" className="btn min-h-9 px-3" onClick={() => { setLine(null); setIntro(false); onClick() }}>{t(T.ask)}</button>}
-            <button type="button" className="btn min-h-9 px-3" onClick={() => { setLine(null); setIntro(false) }}>{t(T.no)}</button></span>}
+            <button type="button" className="btn btn-primary min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false); if (intro && !hasGuide(page())) onClick(); else startGuide(page()) }}>{t(intro ? T.tour : T.show)}</button>
+            {intro && <button type="button" className="btn min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false); onClick() }}>{t(T.ask)}</button>}
+            <button type="button" className="btn min-h-(--control-h) px-3" onClick={() => { setLine(null); setIntro(false) }}>{t(T.no)}</button></span>}
         </div>)}
       <button ref={box} type="button" aria-expanded={open} data-open={open} data-guide="ask-laris" className="bot-btn" onPointerEnter={onWarm} onFocus={onWarm} onClick={onClick}>
         <span key={hop} className="bot-hop"><span className="bot-inner"><img src="./brand/laris-bot.png" alt="" draggable={false} width="80" height="100" /></span></span>

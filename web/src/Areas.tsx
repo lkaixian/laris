@@ -7,6 +7,7 @@ import type { IconName } from './icons'
 import { tx } from './strings'
 import { locale, t, useLang } from './i18n'
 import type { Text } from './i18n'
+import type { BentoTile } from './Bento'
 
 const S = {
   open: { en: 'Open', ms: 'Buka', zh: '打开', ta: 'திற' },
@@ -38,6 +39,7 @@ const S = {
 // Home: the four areas of the sidebar (Work, Suppliers, Insight, Audit Log) as a glass bento, each with a small "smart art"
 // picture of how that area works, so a new user sees the whole system at a glance. Every shape is a link to the list it counts.
 // Numbers come from /dashboard (already loaded by Home) and, for the Audit Log tile, /audit/days.
+// Each area is a tile for the bento shell (Bento.tsx); Home decides their order and size, so no column classes here.
 export interface AreaData {
   needs_review: number; open_quotes: number; jobs: { todo: number; doing: number; done: number }
   contacts: { suppliers: number }
@@ -144,15 +146,13 @@ function Timeline() {
   )
 }
 
-export function AreaBento({ d, owner }: { d: AreaData; owner: boolean }) {
-  useLang()
+export function areaTiles(d: AreaData, owner: boolean): BentoTile[] {
   const tr = d.track ?? {}
   const margin = Math.abs(Number(d.stale_margin_lost) || 0)
   const audit = can('view_audit')
-  return (
-    <div className="glass-stage mb-6" data-guide="home-tiles">
-      <div className="bento">
-        <section aria-label={tx('nav.group.Work')} className="glass lg:col-span-7" data-guide="home-work">
+  return [
+    { id: 'work', size: 'L', title: tx('nav.group.Work'), node: (
+      <section aria-label={tx('nav.group.Work')} className="glass" data-guide="home-work">
           <AreaHead icon="pipeline" title={tx('nav.group.Work')} href="#/track" lead={t(S.workLead)} />
           <Chevrons label={t(S.workStages)} steps={[
             { label: t(S.toReview), value: n(d.needs_review), href: '#/tracker/review', warn: true },
@@ -167,8 +167,9 @@ export function AreaBento({ d, owner }: { d: AreaData; owner: boolean }) {
             {n(tr.overdue) > 0 && <a className="chip heat-late" href="#/track?overdue=1">{t({ en: `${tr.overdue} overdue on Schedule`, ms: `${tr.overdue} lewat tempoh di Jadual`, zh: `日程中 ${tr.overdue} 项逾期`, ta: `அட்டவணையில் ${tr.overdue} காலம் கடந்தவை` })}</a>}
           </p>}
         </section>
-
-        <section aria-label={tx('nav.group.Suppliers')} className="glass lg:col-span-5">
+    ) },
+    { id: 'suppliers', size: 'M', title: tx('nav.group.Suppliers'), node: (
+      <section aria-label={tx('nav.group.Suppliers')} className="glass">
           <AreaHead icon="contacts" title={tx('nav.group.Suppliers')} href="#/contacts" lead={t(S.supLead)} />
           <Cycle label={t(S.supLoop)} centre={<><b className="block text-2xl tabular-nums leading-none"><CountUp value={n(d.contacts.suppliers)} /></b><span className="text-xs text-muted">{t(S.suppliers)}</span></>} steps={[
             { label: t(S.ask), href: canOpen('ask', owner) ? '#/ask' : '#/contacts' },
@@ -177,8 +178,9 @@ export function AreaBento({ d, owner }: { d: AreaData; owner: boolean }) {
             { label: t(S.costBook), href: '#/catalog' },
           ]} />
         </section>
-
-        <section aria-label={tx('nav.group.Insight')} className={`glass ${audit ? 'lg:col-span-5' : 'lg:col-span-12'}`}>
+    ) },
+    { id: 'insight', size: 'M', title: tx('nav.group.Insight'), node: (
+      <section aria-label={tx('nav.group.Insight')} className="glass">
           <AreaHead icon="alerts" title={tx('nav.group.Insight')} href="#/alerts" lead={t(S.insLead)} />
           <Bars label={tx('nav.group.Insight')} rows={[
             ...(owner ? [{ label: t(S.hit), value: n(d.stale_quotes), href: '#/alerts', warn: true }] : []),
@@ -187,14 +189,12 @@ export function AreaBento({ d, owner }: { d: AreaData; owner: boolean }) {
             { label: t(S.dueToday), value: n(d.jobs_due_today), href: '#/jobs?view=agenda' },
           ]} />
         </section>
-
-        {audit && (
-          <section aria-label={tx('nav.group.Audit Log')} className="glass lg:col-span-7">
+    ) },
+    ...(audit ? [{ id: 'audit', size: 'L' as const, title: tx('nav.group.Audit Log'), node: (
+      <section aria-label={tx('nav.group.Audit Log')} className="glass">
             <AreaHead icon="activity" title={tx('nav.group.Audit Log')} href="#/activity" lead={t(S.audLead)} />
             <Timeline />
           </section>
-        )}
-      </div>
-    </div>
-  )
+    ) }] : []),
+  ]
 }

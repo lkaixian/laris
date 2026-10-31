@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { guideFor } from './guides'
 import { t, useLang } from './i18n'
 import { tx } from './strings'
-import { bot } from './bot'
+import { bot } from './botBus'
 
 // The "?" guide: one step at a time, beside the page, pointing at the part of the page each step is about.
 // A step that points at a part of the page blurs and dims the rest (a mask with a hole over that part); a step with nothing

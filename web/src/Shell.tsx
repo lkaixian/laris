@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { MOCK, canOpen, getToken, logout } from './api'
+import { setThemePref } from './skin'
 import { Palette } from './Palette'
 import { LANGS, setLang, t, useLang } from './i18n'
 import type { Text } from './i18n'
 import { tx, txOr } from './strings'
 import { hasGuide, startGuide } from './Guide'
+import { useShowTutorialButton } from './helpPrefs'
 import type { Me, Role } from './api'
 import { canUpload } from './Listings'
 import { Brand, OrgMark, Skeleton, ThemeToggle, focusTop } from './ui'
@@ -82,6 +84,7 @@ const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) ==
 
 function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: ReturnType<typeof visibleNav>; route: string; collapsed?: boolean; idp: string; onNavigate?: (href: string) => void }) {
   const here = PARENT[route] ?? route
+  const help = useShowTutorialButton()   // Settings > Help: off hides the "?" beside menu items (guides and help articles), like the Tutorial button on pages
   // A small pop-up beside the item you point at or tab to. It is fixed to the screen so the scrolling sidebar cannot cut it off.
   const [tip, setTip] = useState<{ key: string; top: number; left: number } | null>(null)
   const show = (key: string, el: HTMLElement) => { const r = el.getBoundingClientRect(); setTip({ key, top: r.top + r.height / 2, left: r.right + 10 }) }
@@ -97,11 +100,11 @@ function NavList({ groups, route, collapsed, idp, onNavigate }: { groups: Return
             <ul aria-labelledby={`${idp}-${g.label}`} className="grid gap-0.5">
               {g.items.map(i => (
                 <li key={i.key} className="group relative" onMouseEnter={e => show(i.key, e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={e => show(i.key, e.currentTarget)} onBlur={() => setTip(null)}>
-                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : hasGuide(i.key) || articleForNav(i.key) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={tip?.key === i.key ? `${idp}-tip` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
+                  <a className={`sidelink ${collapsed ? 'justify-center px-0' : help && (hasGuide(i.key) || articleForNav(i.key)) ? 'pr-10' : ''}`} href={`#/${i.key}`} aria-describedby={tip?.key === i.key ? `${idp}-tip` : undefined} aria-current={here === i.key ? 'page' : undefined} title={collapsed ? txOr(`nav.${i.key}`, i.label) : undefined} onClick={() => onNavigate?.(`#/${i.key}`)}>
                     <Icon name={i.icon} />
                     <span className={collapsed ? 'sr-only' : ''}>{txOr(`nav.${i.key}`, i.label)}</span>
                   </a>
-                  {!collapsed && (hasGuide(i.key) ? (
+                  {!collapsed && help && (hasGuide(i.key) ? (
                     <button type="button" aria-label={tx('guide.open', txOr(`nav.${i.key}`, i.label))} onClick={() => { onNavigate?.(`#/${i.key}`); startGuide(i.key) }}
                       className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-sm font-bold text-muted opacity-0 hover:bg-tint hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                       <span aria-hidden="true">?</span>
@@ -239,10 +242,7 @@ export function Shell({ me, hash, route, dark, setDark, owner, role, onRole, ban
   const act = async (a: 'theme' | 'signout' | 'tour') => {
     if (a === 'tour') return startTour()
     if (a === 'signout') { await logout(); toast('You have been signed out.'); return }
-    const next = dark ? 'light' : 'dark'
-    document.documentElement.dataset.theme = next
-    try { localStorage.setItem('theme', next) } catch { /* storage blocked: choice lasts for this visit only */ }
-    setDark(!dark)
+    setDark(setThemePref(dark ? 'light' : 'dark'))
   }
   const mac = /Mac|iPhone|iPad/.test(navigator.platform)
   const picker = !signedIn && <RolePicker role={role} onRole={onRole} />

@@ -188,7 +188,7 @@ function NewDoc({ pack, onDone }: { pack: SectorPack; onDone: () => void }) {
 function Pipeline({ trail, current, pack }: { trail: CDoc[]; current: string; pack: SectorPack }) {
   const steps = ORDER.filter(k => pack.docs.includes(k) || trail.some(d => d.kind === k))
   return (
-    <nav aria-label="Document trail" className="mb-4 overflow-x-auto" data-guide="deals-pipeline">
+    <nav aria-label="Document trail" className="relative mb-4 overflow-x-auto" data-guide="deals-pipeline">
       <ol className="flex min-w-max items-center gap-1">
         {steps.map((k, i) => {
           const docs = trail.filter(d => d.kind === k)

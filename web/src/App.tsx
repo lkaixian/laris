@@ -34,6 +34,9 @@ import { CatalogView } from './Listings'
 import { LANGS, setLang, useLang, t } from './i18n'
 import type { Text } from './i18n'
 import { tx, txOr } from './strings'
+import { setShowTutorialButton, useShowTutorialButton } from './helpPrefs'
+import { liteVisuals, reduceTransparency, setLiteVisuals, setReduceTransparency, setThemePref, themePref } from './skin'
+import type { ThemePref } from './skin'
 const txOrReason = (r: string) => txOr(`why.${r}`, r)
 import { ActivityView } from './Activity'
 import { HelpView } from './Help'
@@ -48,7 +51,6 @@ import { rm, msg, focusTop, useFetch, Async, Skeleton, EmptyState, PageHeader, H
 import type { Heat } from './ui'
 import type { Role, Me, Alert, Followup, MarginReport, Settings, Proposal } from './api'
 
-const pref = (): 'light' | 'dark' | 'system' => { try { const v = localStorage.getItem('theme'); return v === 'light' || v === 'dark' ? v : 'system' } catch { return 'system' } }
 const S = {
   last7: { en: 'Last 7 days', ms: '7 hari lepas', zh: '最近 7 天', ta: 'கடந்த 7 நாட்கள்' },
   noQuotes7: { en: 'No quotes were created in the last 7 days.', ms: 'Tiada sebut harga dibuat dalam 7 hari lepas.', zh: '最近 7 天没有创建报价。', ta: 'கடந்த 7 நாட்களில் எந்த மேற்கோளும் உருவாக்கப்படவில்லை.' },
@@ -65,6 +67,13 @@ const S = {
   light: { en: 'Light', ms: 'Cerah', zh: '浅色', ta: 'ஒளி' },
   system: { en: 'Match my device', ms: 'Ikut peranti saya', zh: '跟随设备', ta: 'என் சாதனத்தைப் பின்பற்று' },
   dark: { en: 'Dark', ms: 'Gelap', zh: '深色', ta: 'இருண்டது' },
+  reduceTransparency: { en: 'Reduce transparency', ms: 'Kurangkan kelutsinaran', zh: '减少透明效果', ta: 'ஒளிஊடுருவலைக் குறைக்கவும்' },
+  reduceTransparencyHint: { en: 'Solid panels instead of frosted glass. Also on when your device asks for less transparency.', ms: 'Panel pepejal, bukan kaca berfros. Turut aktif jika peranti anda meminta kurang kelutsinaran.', zh: '用实色面板代替磨砂玻璃。当设备要求减少透明效果时也会自动启用。', ta: 'பனிக்கண்ணாடிக்குப் பதிலாக திடமான பலகைகள். உங்கள் சாதனம் குறைந்த ஒளிஊடுருவலைக் கேட்டாலும் இது இயங்கும்.' },
+  help: { en: 'Help', ms: 'Bantuan', zh: '帮助', ta: 'உதவி' },
+  showTutorial: { en: 'Show the Tutorial button', ms: 'Tunjukkan butang Tutorial', zh: '显示“教程”按钮', ta: '“பயிற்சி” பொத்தானைக் காட்டு' },
+  showTutorialHint: { en: 'The Tutorial button beside page titles, and the ? beside each menu item. Turn it off if you do not need it; turn it on again here any time.', ms: 'Butang Tutorial di sebelah tajuk halaman, dan tanda ? di sebelah setiap item menu. Matikan jika anda tidak memerlukannya; hidupkan semula di sini pada bila-bila masa.', zh: '页面标题旁的“教程”按钮，以及每个菜单项旁的“?”。不需要时可以关闭，随时可在此重新开启。', ta: 'பக்கத் தலைப்புகளின் அருகிலுள்ள “பயிற்சி” பொத்தானும், ஒவ்வொரு மெனு உருப்படியின் அருகிலுள்ள “?” குறியும். தேவையில்லையெனில் அணைக்கவும்; எப்போது வேண்டுமானாலும் இங்கே மீண்டும் இயக்கலாம்.' },
+  liteVisuals: { en: 'Lite visuals', ms: 'Visual ringan', zh: '精简视觉效果', ta: 'எளிய காட்சிகள்' },
+  liteVisualsHint: { en: 'Stops the moving background and softens the blur. Helps on older phones.', ms: 'Hentikan latar bergerak dan kurangkan kabur. Membantu pada telefon lama.', zh: '停止动态背景并减弱模糊效果，适合较旧的手机。', ta: 'நகரும் பின்னணியை நிறுத்தி மங்கலைக் குறைக்கும். பழைய தொலைபேசிகளுக்கு உதவும்.' },
   remembered: { en: 'Remembered on this device.', ms: 'Diingati pada peranti ini.', zh: '会记住在此设备上。', ta: 'இந்தச் சாதனத்தில் நினைவில் வைக்கப்படும்.' },
   settings: { en: 'Settings', ms: 'Tetapan', zh: '设置', ta: 'அமைப்புகள்' },
   noAccess: { en: 'You do not have access. Only the owner changes settings.', ms: 'Anda tiada akses. Hanya pemilik boleh menukar tetapan.', zh: '您没有权限。只有老板可以更改设置。', ta: 'உங்களுக்கு அணுகல் இல்லை. உரிமையாளர் மட்டுமே அமைப்புகளை மாற்ற முடியும்.' },
@@ -159,8 +168,12 @@ type SettingsTab = typeof SETTINGS_TABS[number]
 // #/settings/<tab> opens that tab (the search palette links there); read from the live hash so a language change, which remounts the page, keeps the tab.
 const tabFromHash = (): SettingsTab => SETTINGS_TABS.find(t => location.hash.split('?')[0].split('/')[2] === t) ?? 'general'
 
-function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => void }) {
+function GeneralTab({ setDark }: { setDark: (d: boolean) => void }) {
   const [lang] = useLang()
+  const [pref, setPref] = useState<ThemePref>(themePref)
+  const [calm, setCalm] = useState(reduceTransparency)
+  const [lite, setLite] = useState(liteVisuals)
+  const showTut = useShowTutorialButton()
   return (
     <div className="grid max-w-xl gap-4">
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3" data-guide="st-general">
@@ -172,18 +185,33 @@ function GeneralTab({ dark, setDark }: { dark: boolean; setDark: (d: boolean) =>
       </fieldset>
       <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
         <legend className="px-1 text-sm font-semibold">{t(S.appearance)}</legend>
-        <div role="group" aria-label={t(S.theme)} data-dark={String(dark)} className="grid grid-cols-3 gap-2 sm:max-w-md">
-          {([[S.light, 'light'], [S.dark, 'dark'], [S.system, 'system']] as const).map(([n, m]) => <button key={m} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={pref() === m}
-            onClick={() => { const eff = m === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : m; document.documentElement.dataset.theme = eff
-              try { if (m === 'system') localStorage.removeItem('theme'); else localStorage.setItem('theme', m) } catch { /* storage blocked: lasts for this visit */ } setDark(eff === 'dark') }}>{t(n)}</button>)}
+        <div role="group" aria-label={t(S.theme)} className="grid grid-cols-3 gap-2 sm:max-w-sm">
+          {([[S.light, 'light'], [S.dark, 'dark'], [S.system, 'system']] as const).map(([n, p]) => <button key={p} type="button" className="btn aria-pressed:bg-tint aria-pressed:font-bold" aria-pressed={pref === p}
+            onClick={() => { setPref(p); setDark(setThemePref(p)) }}>{t(n)}</button>)}
         </div>
+        <label className="mt-1 flex items-start gap-3 py-1 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-(--accent)" checked={calm} onChange={e => { setCalm(e.target.checked); setReduceTransparency(e.target.checked) }} />
+          <span><span className="block font-semibold">{t(S.reduceTransparency)}</span><span className="block text-muted">{t(S.reduceTransparencyHint)}</span></span>
+        </label>
+        <label className="flex items-start gap-3 py-1 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-(--accent)" checked={lite} onChange={e => { setLite(e.target.checked); setLiteVisuals(e.target.checked) }} />
+          <span><span className="block font-semibold">{t(S.liteVisuals)}</span><span className="block text-muted">{t(S.liteVisualsHint)}</span></span>
+        </label>
+        <p className="text-sm text-muted">{t(S.remembered)}</p>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-ui border border-soft p-3">
+        <legend className="px-1 text-sm font-semibold">{t(S.help)}</legend>
+        <label className="flex items-start gap-3 py-1 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-(--accent)" checked={showTut} onChange={e => setShowTutorialButton(e.target.checked)} />
+          <span><span className="block font-semibold">{t(S.showTutorial)}</span><span className="block text-muted">{t(S.showTutorialHint)}</span></span>
+        </label>
         <p className="text-sm text-muted">{t(S.remembered)}</p>
       </fieldset>
     </div>
   )
 }
 
-function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean; setDark: (d: boolean) => void }) {
+function SettingsView({ owner, setDark }: { owner: boolean; setDark: (d: boolean) => void }) {
   useLang()
   const s = useFetch<Settings>('/settings')
   const [f, setF] = useState<Settings>()
@@ -233,7 +261,7 @@ function SettingsView({ owner, dark, setDark }: { owner: boolean; dark: boolean;
       <PageHeader title={t(S.settings)} description={t(S.settingsLead)} />
       <div data-guide="st-tabs"><Tabs label={t(S.tabsLabel)} value={tab} onChange={v => { setTab(v as SettingsTab); history.replaceState(null, '', `#/settings/${v}`) }}
         options={[{ value: 'general', label: t(S.tGeneral) }, { value: 'business', label: t(S.tBusiness) }, { value: 'quotes', label: t(S.tQuotes) }, { value: 'channels', label: t(S.tChannels) }]} /></div>
-      {tab === 'general' && <GeneralTab dark={dark} setDark={setDark} />}
+      {tab === 'general' && <GeneralTab setDark={setDark} />}
       {(tab === 'business' || tab === 'quotes') && <Async s={s} empty={false} rows={4}>
         {f && (
           <form className="grid max-w-xl gap-3" onSubmit={e => { e.preventDefault(); save() }}>
@@ -425,7 +453,7 @@ const PAGES: Record<string, { render: (c: PageCtx) => ReactNode }> = {
   track: { render: () => <TrackView /> },
   jobs: { render: c => <JobsView me={c.me} /> },
   deals: { render: c => <DealsView owner={c.owner} arg={c.arg} /> },
-  settings: { render: c => <SettingsView owner={c.owner} dark={c.dark} setDark={c.setDark} /> },
+  settings: { render: c => <SettingsView owner={c.owner} setDark={c.setDark} /> },
   team: { render: c => <TeamView owner={c.owner} meId={c.me.id} /> },
   privacy: { render: () => <PrivacyView /> },
   'api-access': { render: () => <ApiAccessView /> },
@@ -492,6 +520,7 @@ function AppShell() {
     addEventListener('hashchange', h); return () => removeEventListener('hashchange', h)
   }, [])
   const [dark, setDark] = useState(document.documentElement.dataset.theme === 'dark')
+  useEffect(() => { const h = () => setDark(document.documentElement.dataset.theme === 'dark'); addEventListener('laris:theme', h); return () => removeEventListener('laris:theme', h) }, [])  // the device switched between light and dark
   // The user id comes from GET /api/me (X-Role only). Re-resolved whenever the simulated role changes; nothing renders before it.
   const [me, setMe] = useState<Me>()
   const [meErr, setMeErr] = useState('')

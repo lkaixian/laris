@@ -1,0 +1,138 @@
+/*
+  Glass skin (DECISIONS.md D-01). Loaded after theme.css, so it re-points the same colour tokens at frosted values and the whole app
+  turns to glass without touching a component. Dark glass on brand green #00563f is the hero theme; light glass uses the same hue.
+
+  READABILITY RULES (checked by tests/test_glass_contrast.py, which reads the token blocks below):
+   - Text never sits on a bare translucent fill. --surface is dense enough that every text token passes WCAG AA over the worst
+     backdrop the moving background can produce (all background orbs stacked at peak opacity).
+   - --surface-glass / --glass-fill-strong carry text; --glass-fill (very clear) is for decoration only.
+   - Keep these token blocks to plain hex, rgba() and "R G B" triplets so the test can read them.
+  FALLBACKS: "Reduce transparency" (Settings), the OS setting prefers-reduced-transparency, or a browser without backdrop-filter all swap to
+  --surface-solid and drop the blur. "Lite visuals" stops the background animation and the grain and halves the blur.
+*/
+:root, :root[data-theme="light"] {
+  --glass-bg-deep: #e6f4ee; --glass-bg-brand: #cfeee1;
+  --orb-1: 143 227 196; --orb-1-peak: 0.60;
+  --orb-2: 169 216 245; --orb-2-peak: 0.55;
+  --orb-3: 255 217 138; --orb-3-peak: 0.35;
+  --surface-glass: rgba(255, 255, 255, 0.72); --surface-solid: #f7fcfa;
+  --glass-fill: rgba(255, 255, 255, 0.55); --glass-fill-strong: rgba(255, 255, 255, 0.80);
+  --glass-border: rgba(255, 255, 255, 0.85); --glass-rim: rgba(255, 255, 255, 0.90);
+  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 45%);
+  --shadow-glow: 0 8px 32px rgba(0, 60, 45, 0.14);
+  --ink: #0a2a20; --ink-2: #1c3d30; --muted: #3d5a4d;
+  --accent: #00563f; --accent-hover: #003d2c; --on-accent: #ffffff;
+  --warn: #9a2a1c; --warn-bg: rgba(251, 224, 218, 0.92); --amber: #8a5a00; --info: #0b5a8a;
+  --line: #5f7d70; --hairline: rgba(0, 86, 63, 0.16); --soft: rgba(0, 86, 63, 0.12); --tint: rgba(0, 86, 63, 0.10);
+  --surface-2: rgba(0, 86, 63, 0.06); --skeleton: rgba(0, 86, 63, 0.10);
+  --elev-1: 0 1px 2px rgba(0, 60, 45, 0.06), 0 8px 24px rgba(0, 60, 45, 0.08);
+  --elev-2: 0 2px 4px rgba(0, 60, 45, 0.06), 0 12px 32px rgba(0, 60, 45, 0.12);
+  --elev-3: 0 4px 8px rgba(0, 60, 45, 0.08), 0 20px 48px rgba(0, 60, 45, 0.18);
+  --glass-blur: 22px;
+}
+:root[data-theme="dark"] {
+  --glass-bg-deep: #00281d; --glass-bg-brand: #00563f;
+  --orb-1: 11 143 106; --orb-1-peak: 0.55;
+  --orb-2: 31 209 161; --orb-2-peak: 0.30;
+  --orb-3: 245 185 66; --orb-3-peak: 0.12;
+  --surface-glass: rgba(0, 40, 29, 0.70); --surface-solid: #05342a;
+  --glass-fill: rgba(255, 255, 255, 0.08); --glass-fill-strong: rgba(0, 40, 29, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.18); --glass-rim: rgba(255, 255, 255, 0.22);
+  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%);
+  --shadow-glow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 0 24px rgba(92, 242, 176, 0.18);
+  --ink: #f2fbf7; --ink-2: #dcefe6; --muted: #bfdcd0;
+  --accent: #5cf2b0; --accent-hover: #8af7c8; --on-accent: #00281d;
+  --warn: #ffaba2; --warn-bg: rgba(255, 138, 128, 0.12); --amber: #ffc857; --info: #7fd0ff;
+  --line: #9abbad; --hairline: rgba(255, 255, 255, 0.14); --soft: rgba(255, 255, 255, 0.12); --tint: rgba(92, 242, 176, 0.14);
+  --surface-2: rgba(255, 255, 255, 0.07); --skeleton: rgba(255, 255, 255, 0.10);
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.30), 0 8px 24px rgba(0, 0, 0, 0.30);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.38);
+  --elev-3: 0 4px 8px rgba(0, 0, 0, 0.35), 0 20px 48px rgba(0, 0, 0, 0.50);
+  --glass-blur: 22px;
+}
+/* The tokens the rest of the app already reads. Both themes: surface is the glass fill, the page colour is the deep brand tone. */
+:root[data-theme] { --surface: var(--surface-glass); --bg: var(--glass-bg-deep); --glass-filter: blur(var(--glass-blur)) saturate(140%); }
+
+/* ---- fallbacks: one set of rules, three triggers (user switch, OS setting, no backdrop-filter support). Keep the three in step. ---- */
+:root[data-theme][data-transparency="reduce"] { --surface: var(--surface-solid); --glass-fill-strong: var(--surface-solid); --glass-filter: none; --glass-highlight: none; }
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-theme]:not([data-transparency="full"]) { --surface: var(--surface-solid); --glass-fill-strong: var(--surface-solid); --glass-filter: none; --glass-highlight: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-theme] { --surface: var(--surface-solid); --glass-fill-strong: var(--surface-solid); --glass-filter: none; --glass-highlight: none; }
+}
+:root[data-theme][data-lite] { --glass-blur: 10px; }
+
+/* ---- the moving background: three blurred colour orbs over a brand-green wash, plus a faint grain ---- */
+body { background: var(--glass-bg-deep); }
+body::before {
+  content: ""; position: fixed; inset: -18%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(36% 42% at 18% 22%, rgb(var(--orb-1) / var(--orb-1-peak)), transparent 70%),
+    radial-gradient(32% 38% at 84% 18%, rgb(var(--orb-3) / var(--orb-3-peak)), transparent 70%),
+    radial-gradient(44% 48% at 62% 88%, rgb(var(--orb-2) / var(--orb-2-peak)), transparent 70%),
+    linear-gradient(160deg, var(--glass-bg-brand), var(--glass-bg-deep) 65%);
+  animation: orb-drift 70s ease-in-out infinite alternate;
+  will-change: transform;                      /* the only element given a layer of its own */
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+:root[data-theme="light"] body::after, :root:not([data-theme]) body::after { opacity: 0.035; }
+:root[data-hidden] body::before { animation-play-state: paused; }       /* nothing moves in a background tab */
+:root[data-lite] body::before { animation: none; will-change: auto; }
+:root[data-lite] body::after { display: none; }
+@keyframes orb-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(2.5%, -3%, 0) scale(1.06) rotate(2deg); } }
+
+/* ---- frosted surfaces. Blur applies once: a glass thing inside another glass thing does not blur again (never blur in a blur). ---- */
+.bg-surface, .card, .panel, .toast, .glass, [role="dialog"], [role="menu"], [role="listbox"] {
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
+}
+.bg-surface :is(.bg-surface, .card, .panel, .toast, .glass), .glass :is(.bg-surface, .card, .panel, .toast, .glass), .card :is(.card, .panel, .glass),
+.panel :is(.card, .panel, .glass), [role="dialog"] :is(.bg-surface, .card, .panel, .glass), [role="menu"] :is(.bg-surface, .glass) {
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.card, .panel { background-image: var(--glass-highlight); border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-glow); }
+/* `.glass` is the Home tile class that theme.css already defines (Areas.tsx). It mixes --surface with transparent, which assumed an opaque
+   surface; with the frosted surface that would halve its opacity and break the contrast the tests prove. Use the tested surface as it is. */
+.glass { background-color: var(--surface); background-image: var(--glass-highlight); border-color: var(--glass-border); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-glow); }
+/* Menus, drawers and dialogs sit over busy content: give them a firmer fill than page panels. */
+[role="menu"], [role="listbox"], [role="dialog"] { background-color: var(--surface-solid); }
+header.bg-surface, aside.bg-surface { border-color: var(--glass-border); }
+::selection { background: var(--accent); color: var(--on-accent); }
+
+/* ---- Bento shell (Bento.tsx). 12 columns on a wide screen, 6 on a tablet, 1 on a phone. S and M share a half width on a tablet; L and XL go full width. ---- */
+.bento-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+.bento-shell { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: minmax(8rem, auto); grid-auto-flow: dense; gap: 16px; list-style: none; margin: 0; padding: 0; }
+.bento-cell { grid-column: span 12; position: relative; min-width: 0; }
+.bento-body { height: 100%; box-sizing: border-box; }
+.bento-body > * { height: 100%; box-sizing: border-box; }
+@media (min-width: 640px) { .bento-cell[data-size="S"], .bento-cell[data-size="M"] { grid-column: span 6; } }
+@media (min-width: 1024px) {
+  .bento-cell[data-size="S"] { grid-column: span 3; }
+  .bento-cell[data-size="M"], .bento-cell[data-size="L"] { grid-column: span 6; }
+  .bento-cell[data-size="L"], .bento-cell[data-size="XL"] { grid-row: span 2; }
+}
+/* Tiles rise in once, staggered by their place (--d is set per cell; the first eight only). The tile classes already carry the animation. */
+.bento-cell > .bento-body > .glass, .bento-cell > .bento-body > .tile { animation-delay: var(--d, 0ms); }
+.bento-cell[data-editing] { outline: 2px dashed color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 4px; border-radius: 22px; }
+.bento-cell[data-editing] .bento-body { padding-top: 52px; }
+.bento-cell[data-dragging] { opacity: 0.55; }
+.bento-tools { position: absolute; z-index: 5; inset: 10px 10px auto 10px; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.bento-name { margin-right: auto; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 999px; font-size: 0.8125rem; font-weight: 600;
+  color: var(--ink); background: var(--surface-solid); border: 1px solid var(--glass-border); }
+.bento-tool { display: inline-grid; place-items: center; min-height: var(--control-h); min-width: var(--control-h); padding: 0 8px; border-radius: 10px; cursor: pointer;
+  color: var(--ink); background: var(--surface-solid); border: 1px solid var(--line); transition: background-color 0.15s, border-color 0.15s; }
+.bento-tool:hover { background: var(--tint); border-color: var(--accent); }
+.bento-handle { cursor: grab; touch-action: none; }
+.bento-handle:active { cursor: grabbing; }
+.bento-shell[data-dragging] { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.bento-tray { margin-top: 16px; padding: 14px 16px; border-radius: 18px; background: var(--surface); border: 1px dashed var(--line); }
+
+/* ---- Customer-facing public pages (quote accept, delivery sign: <main data-plain>): plain skin, opaque panels, no moving background, no blur. ---- */
+body:has([data-plain]) { background: var(--surface-solid); }
+body:has([data-plain])::before, body:has([data-plain])::after { display: none; }
+[data-plain] { --surface: var(--surface-solid); --glass-filter: none; --glass-highlight: none; --glass-fill-strong: var(--surface-solid); }
+[data-plain] input[type="checkbox"] { outline: 2px solid var(--line); outline-offset: 1px; }
